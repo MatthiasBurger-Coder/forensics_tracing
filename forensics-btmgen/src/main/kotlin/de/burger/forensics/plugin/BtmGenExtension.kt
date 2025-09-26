@@ -32,12 +32,12 @@ abstract class BtmGenExtension @Inject constructor(
     val maxStringLength: Property<Int> = objects.property(Int::class.java)
 
     init {
-        srcDirs.convention(listOf("src/main/kotlin"))
+        srcDirs.convention(listOf("src/main/java", "src/main/kotlin"))
         pkgPrefix.convention("")
         helperFqn.convention("de.burger.forensics.ForensicsHelper")
         entryExit.convention(true)
         trackedVars.convention(emptyList())
-        includeJava.convention(false)
+        includeJava.convention(true)
         includeTimestamp.convention(false)
         outputDir.convention(layout.buildDirectory.dir("forensics"))
         maxStringLength.convention(0)
