@@ -9,4 +9,9 @@ public interface ConditionStrategy {
     default String kind() {
         return getClass().getSimpleName();
     }
+
+    /** Render the IF expression using helper calls to {@code helperFqcn}. */
+    default String toHelperIf(String helperFqcn, String ruleId) {
+        return helperFqcn + ".ifMatch(\"" + ruleId + "\")";
+    }
 }

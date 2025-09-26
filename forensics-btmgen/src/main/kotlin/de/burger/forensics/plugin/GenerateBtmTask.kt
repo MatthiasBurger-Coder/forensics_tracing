@@ -88,6 +88,9 @@ abstract class GenerateBtmTask : DefaultTask() {
     @get:Input
     abstract val safeMode: Property<Boolean>
 
+    @get:Input
+    abstract val forceHelperForWhitelist: Property<Boolean>
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -618,7 +621,13 @@ abstract class GenerateBtmTask : DefaultTask() {
         rawExpression: String
     ): ConditionStrategy {
         val ruleId = RuleIdUtil.stableRuleId(className, methodName, line, rawExpression)
-        return SafeModeDecorator(base, safeMode.getOrElse(false), SAFE_EVAL_FQCN, ruleId)
+        return SafeModeDecorator(
+            base,
+            safeMode.getOrElse(false),
+            forceHelperForWhitelist.getOrElse(false),
+            SAFE_EVAL_FQCN,
+            ruleId
+        )
     }
 
 
