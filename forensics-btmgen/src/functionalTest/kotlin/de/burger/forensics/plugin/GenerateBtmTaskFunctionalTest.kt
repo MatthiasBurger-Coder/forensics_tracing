@@ -35,6 +35,8 @@ class GenerateBtmTaskFunctionalTest {
         assertTrue(output.contains("if-true"))
         assertTrue(output.contains(":case"))
         assertTrue(output.contains("write-statusFlag"))
+        // ensure subject-less when logs a selector-like event
+        assertTrue(output.contains("when { … }"), "subject-less when should emit a selector placeholder")
     }
 
     private fun writeSettings(projectDir: File) {
@@ -87,6 +89,14 @@ class GenerateBtmTaskFunctionalTest {
                     else -> statusFlag = amount > 100 && (subject is String)
                 }
 
+                // subject-less when
+                when {
+                    amount > 5000 -> statusFlag = true
+                    else -> {
+                        // no-op
+                    }
+                }
+
                 if (subject is Number) {
                     statusFlag = subject.toDouble() > 0.0
                 } else if (subject !is String) {
@@ -102,5 +112,17 @@ class GenerateBtmTaskFunctionalTest {
             }
             """.trimIndent()
         )
+    }
+    @Test
+    fun subjectlessWhenPlaceholderIsDistinctive() {
+        val placeholder = "when { … }"
+        // Contains Unicode ellipsis ensuring it cannot be typed accidentally and is visually distinctive
+        assertTrue(placeholder.contains('…'), "placeholder should include a Unicode ellipsis")
+        // Contains spaces and braces so it cannot be a plain Java/Kotlin identifier
+        assertTrue(placeholder.contains(' '))
+        assertTrue(placeholder.contains('{') && placeholder.contains('}'))
+        // Not a valid plain identifier (Java/Kotlin simple name)
+        val simpleIdentifier = Regex("^[A-Za-z_][A-Za-z0-9_]*$")
+        assertTrue(!simpleIdentifier.matches(placeholder), "placeholder must not be a valid simple identifier")
     }
 }

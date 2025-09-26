@@ -322,19 +322,17 @@ abstract class GenerateBtmTask : DefaultTask() {
         val methodName = context.methodName
         val helper = context.helperFqn
         val subject = expression.subjectExpression?.text
-        if (subject != null) {
-            val subjectEscaped = escape(subject)
-            val whenRule = """
-                RULE ${className}.${methodName}:${line}:when
-                CLASS ${className}
-                METHOD ${methodName}(..)
-                HELPER ${helper}
-                AT LINE ${line}
-                DO sw("${className}","${methodName}",${line},"${subjectEscaped}")
-                ENDRULE
-            """.trimIndent()
-            rules += whenRule
-        }
+        val selectorText = subject ?: "when { … }"
+        val whenRule = """
+            RULE ${className}.${methodName}:${line}:when
+            CLASS ${className}
+            METHOD ${methodName}(..)
+            HELPER ${helper}
+            AT LINE ${line}
+            DO sw("${className}","${methodName}",${line},"${escape(selectorText)}")
+            ENDRULE
+        """.trimIndent()
+        rules += whenRule
         expression.entries.forEach { entry ->
             val label = buildWhenLabel(entry)
             val escapedLabel = escape(label)
