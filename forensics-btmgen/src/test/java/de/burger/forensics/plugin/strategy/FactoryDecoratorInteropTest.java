@@ -11,14 +11,14 @@ class FactoryDecoratorInteropTest {
     @Test
     void rawUnsafeExpressionUsesHelperWhenSafeModeEnabled() {
         ConditionStrategy base = factory.from("x != null && x.equals(\"OK\")");
-        ConditionStrategy decorated = new SafeModeDecorator(base, true, HELPER, "id1");
+        ConditionStrategy decorated = new SafeModeDecorator(base, true, false, HELPER, "id1");
         assertThat(decorated.toBytemanIf()).isEqualTo(HELPER + ".ifMatch(\"id1\")");
     }
 
     @Test
     void equalsLiteralRemainsInlineWhenSafeModeEnabled() {
         ConditionStrategy base = factory.from("user.status == \"OK\"");
-        ConditionStrategy decorated = new SafeModeDecorator(base, true, HELPER, "id2");
+        ConditionStrategy decorated = new SafeModeDecorator(base, true, false, HELPER, "id2");
         assertThat(decorated.toBytemanIf()).isEqualTo("user.status == \"OK\"");
     }
 }

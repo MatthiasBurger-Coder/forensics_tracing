@@ -14,4 +14,9 @@ public final class InstanceOfStrategy implements ConditionStrategy {
     public String toBytemanIf() {
         return expr + " instanceof " + fqcn;
     }
+
+    @Override
+    public String toHelperIf(String helperFqcn, String ruleId) {
+        return helperFqcn + ".ifInstanceOf(" + expr + ", \"" + fqcn + "\")";
+    }
 }

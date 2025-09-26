@@ -33,6 +33,7 @@ class BtmGenPlugin : Plugin<Project> {
             task.gzipOutput.set(extension.gzipOutput)
             task.minBranchesPerMethod.set(extension.minBranchesPerMethod)
             task.safeMode.set(extension.safeMode)
+            task.forceHelperForWhitelist.set(extension.forceHelperForWhitelist)
         }
     }
 }

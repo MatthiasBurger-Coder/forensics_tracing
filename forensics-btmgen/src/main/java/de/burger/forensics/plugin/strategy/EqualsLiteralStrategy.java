@@ -14,4 +14,9 @@ public final class EqualsLiteralStrategy implements ConditionStrategy {
     public String toBytemanIf() {
         return leftExpr + " == " + literal;
     }
+
+    @Override
+    public String toHelperIf(String helperFqcn, String ruleId) {
+        return helperFqcn + ".ifEq(" + leftExpr + ", " + literal + ")";
+    }
 }

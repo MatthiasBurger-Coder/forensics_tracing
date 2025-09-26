@@ -21,4 +21,18 @@ public final class BooleanCompositeStrategy implements ConditionStrategy {
             .reduce((a, b) -> "(" + a + ") " + op.name() + " (" + b + ")")
             .orElse("true");
     }
+
+    @Override
+    public String toHelperIf(String helperFqcn, String ruleId) {
+        if (children.isEmpty()) {
+            return "true";
+        }
+        String acc = children.get(0).toHelperIf(helperFqcn, ruleId);
+        for (int i = 1; i < children.size(); i++) {
+            String rhs = children.get(i).toHelperIf(helperFqcn, ruleId);
+            String fun = op == Op.AND ? "and" : "or";
+            acc = helperFqcn + "." + fun + "(" + acc + ", " + rhs + ")";
+        }
+        return acc;
+    }
 }
