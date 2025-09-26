@@ -34,6 +34,7 @@ class BtmGenPlugin : Plugin<Project> {
             task.minBranchesPerMethod.set(extension.minBranchesPerMethod)
             task.safeMode.set(extension.safeMode)
             task.forceHelperForWhitelist.set(extension.forceHelperForWhitelist)
+            task.maxFileBytes.set(extension.maxFileBytes)
         }
     }
 }

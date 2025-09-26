@@ -28,6 +28,7 @@ abstract class BtmGenExtension @Inject constructor(
     val minBranchesPerMethod: Property<Int> = objects.property(Int::class.java)
     val safeMode: Property<Boolean> = objects.property(Boolean::class.java)
     val forceHelperForWhitelist: Property<Boolean> = objects.property(Boolean::class.java)
+    val maxFileBytes: Property<Long> = objects.property(Long::class.java)
     val outputDir: DirectoryProperty = objects.directoryProperty()
     /**
      * Maximum number of characters allowed when embedding source snippets or values into
@@ -60,5 +61,6 @@ abstract class BtmGenExtension @Inject constructor(
         maxStringLength.convention(0)
         safeMode.convention(false)
         forceHelperForWhitelist.convention(false)
+        maxFileBytes.convention(2_000_000L)
     }
 }

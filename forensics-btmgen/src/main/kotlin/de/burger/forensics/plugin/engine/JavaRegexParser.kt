@@ -11,52 +11,47 @@ class JavaRegexParser : JavaScanner {
         maxStringLength: Int
     ): List<String> {
         val rules = mutableListOf<String>()
-        val pkgRegex = Pattern.compile("(?m)^\\s*package\\s+([a-zA-Z0-9_.]+)\\s*;")
-        val pkgMatcher = pkgRegex.matcher(text)
+        val sanitized = prefilterJava(text)
+        val lineIndex = LineIndex(text)
+        val pkgMatcher = PACKAGE_PATTERN.matcher(sanitized)
         val pkg = if (pkgMatcher.find()) pkgMatcher.group(1) else ""
         if (!packagePrefix.isNullOrBlank() && pkg.isNotBlank() && !pkg.startsWith(packagePrefix)) {
             return emptyList()
         }
-        val classRegex = Pattern.compile(
-            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|sealed)\\b|non-sealed)\\s+)*class\\s+([A-Za-z0-9_]+)"
-        )
-        val classMatcher = classRegex.matcher(text)
+        val classMatcher = CLASS_PATTERN.matcher(sanitized)
         while (classMatcher.find()) {
             val className = classMatcher.group(1)
             val fqcn = if (pkg.isBlank()) className else "$pkg.$className"
-            val openIndex = text.indexOf('{', classMatcher.end())
+            val openIndex = sanitized.indexOf('{', classMatcher.end())
             if (openIndex < 0) continue
-            val closeIndex = findMatchingBrace(text, openIndex)
-            val bodyText = text.substring(openIndex + 1, closeIndex)
-            val methodRegex = Pattern.compile(
-                "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|synchronized|native|default)\\b)\\s+)*(?:<[^>]+>\\s*)?[\\w$<>\\[\\],.?\\s]+\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*\\{"
-            )
-            val methodMatcher = methodRegex.matcher(bodyText)
+            val closeIndex = findMatchingBrace(sanitized, openIndex)
+            val bodySanitized = sanitized.substring(openIndex + 1, closeIndex)
+            val methodMatcher = METHOD_PATTERN.matcher(bodySanitized)
             while (methodMatcher.find()) {
                 val methodName = methodMatcher.group(1)
                 val methodStartInClass = openIndex + 1 + methodMatcher.start()
-                val methodOpen = text.indexOf('{', methodStartInClass)
+                val methodOpen = sanitized.indexOf('{', methodStartInClass)
                 if (methodOpen < 0) continue
-                val methodClose = findMatchingBrace(text, methodOpen)
-                val methodBody = text.substring(methodOpen + 1, methodClose)
-                val lineIndex = LineIndex(text)
+                val methodClose = findMatchingBrace(sanitized, methodOpen)
+                val methodBodySanitized = sanitized.substring(methodOpen + 1, methodClose)
+                val methodBodyOriginal = text.substring(methodOpen + 1, methodClose)
                 if (includeEntryExit) {
                     rules += buildEntryRule(helperFqn, fqcn, methodName)
                     rules += buildExitRule(helperFqn, fqcn, methodName)
                 }
-                // if/else
-                val ifRegex = Regex("\\bif\\s*\\((.*?)\\)")
-                ifRegex.findAll(methodBody).forEach { match ->
+                IF_REGEX.findAll(methodBodySanitized).forEach { match ->
                     val offset = methodOpen + 1 + match.range.first
                     val line = lineIndex.lineAt(offset)
-                    val cond = escape(match.groupValues[1], maxStringLength)
+                    val condRange = match.groups[1]?.range ?: return@forEach
+                    val condRaw = methodBodyOriginal.substring(condRange)
+                    val cond = escape(condRaw, maxStringLength)
                     rules += """
                         RULE ${fqcn}.${methodName}:${line}:if-true
                         CLASS $fqcn
                         METHOD ${methodName}(..)
                         HELPER $helperFqn
                         AT LINE $line
-                        IF (${match.groupValues[1]})
+                        IF (${condRaw})
                         DO iff("$fqcn","$methodName",${line},"$cond", true)
                         ENDRULE
                     """.trimIndent()
@@ -66,17 +61,17 @@ class JavaRegexParser : JavaScanner {
                         METHOD ${methodName}(..)
                         HELPER $helperFqn
                         AT LINE $line
-                        IF (!(${match.groupValues[1]}))
+                        IF (!(${condRaw}))
                         DO iff("$fqcn","$methodName",${line},"$cond", false)
                         ENDRULE
                     """.trimIndent()
                 }
-                // switch
-                val switchRegex = Regex("\\bswitch\\s*\\((.*?)\\)")
-                switchRegex.findAll(methodBody).forEach { match ->
+                SWITCH_REGEX.findAll(methodBodySanitized).forEach { match ->
                     val offset = methodOpen + 1 + match.range.first
                     val line = lineIndex.lineAt(offset)
-                    val sel = escape(match.groupValues[1], maxStringLength)
+                    val selectRange = match.groups[1]?.range ?: return@forEach
+                    val selectorRaw = methodBodyOriginal.substring(selectRange)
+                    val sel = escape(selectorRaw, maxStringLength)
                     rules += """
                         RULE ${fqcn}.${methodName}:${line}:when
                         CLASS $fqcn
@@ -87,9 +82,10 @@ class JavaRegexParser : JavaScanner {
                         ENDRULE
                     """.trimIndent()
                 }
-                val caseRegex = Regex("(?m)^[\\t ]*(case\\s+[^:]+|default)\\s*:")
-                caseRegex.findAll(methodBody).forEach { match ->
-                    val label = match.groupValues[1].replace(Regex("\\s+"), " ").trim()
+                CASE_REGEX.findAll(methodBodySanitized).forEach { match ->
+                    val labelRange = match.groups[1]?.range ?: return@forEach
+                    val labelOriginal = methodBodyOriginal.substring(labelRange)
+                    val label = labelOriginal.replace(WHITESPACE_REGEX, " ").trim()
                     val offset = methodOpen + 1 + match.range.first
                     val line = lineIndex.lineAt(offset)
                     val esc = escape(label, maxStringLength)
@@ -177,5 +173,19 @@ class JavaRegexParser : JavaScanner {
             }
             return starts.size
         }
+    }
+
+    private companion object {
+        private val PACKAGE_PATTERN = Pattern.compile("(?m)^\\s*package\\s+([a-zA-Z0-9_.]+)\\s*;")
+        private val CLASS_PATTERN = Pattern.compile(
+            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|sealed)\\b|non-sealed)\\s+)*class\\s+([A-Za-z0-9_]+)"
+        )
+        private val METHOD_PATTERN = Pattern.compile(
+            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|synchronized|native|default)\\b)\\s+)*(?:<[^>]+>\\s*)?[\\w$<>\\[\\],.?\\s]+\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*\\{"
+        )
+        private val IF_REGEX = Regex("\\bif\\s*\\((.*?)\\)")
+        private val SWITCH_REGEX = Regex("\\bswitch\\s*\\((.*?)\\)")
+        private val CASE_REGEX = Regex("(?m)^[\\t ]*(case\\s+[^:]+|default)\\s*:")
+        private val WHITESPACE_REGEX = Regex("\\s+")
     }
 }
