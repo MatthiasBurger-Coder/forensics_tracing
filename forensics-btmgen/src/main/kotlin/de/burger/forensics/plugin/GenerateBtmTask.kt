@@ -1,6 +1,8 @@
 package de.burger.forensics.plugin
 
 import de.burger.forensics.plugin.engine.JavaRegexParser
+import de.burger.forensics.plugin.strategy.DefaultStrategyFactory
+import de.burger.forensics.plugin.strategy.StrategyFactory
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
@@ -27,6 +29,8 @@ import java.util.zip.GZIPOutputStream
 
 @CacheableTask
 abstract class GenerateBtmTask : DefaultTask() {
+
+    private val conditionStrategyFactory: StrategyFactory = DefaultStrategyFactory()
 
     @get:Input
     abstract val srcDirs: ListProperty<String>
@@ -455,13 +459,15 @@ abstract class GenerateBtmTask : DefaultTask() {
         val className = context.className
         val methodName = context.methodName
         val helper = context.helperFqn
+        val strategy = conditionStrategyFactory.from(condition.text)
+        val renderedCondition = strategy.toBytemanIf()
         val trueRule = """
             RULE ${className}.${methodName}:${line}:if-true
             CLASS ${className}
             METHOD ${methodName}(..)
             HELPER ${helper}
             AT LINE ${line}
-            IF (${condition.text})
+            IF (${renderedCondition})
             DO iff("${className}","${methodName}",${line},"${conditionText}", true)
             ENDRULE
         """.trimIndent()
@@ -471,7 +477,7 @@ abstract class GenerateBtmTask : DefaultTask() {
             METHOD ${methodName}(..)
             HELPER ${helper}
             AT LINE ${line}
-            IF (!(${condition.text}))
+            IF (!(${renderedCondition}))
             DO iff("${className}","${methodName}",${line},"${conditionText}", false)
             ENDRULE
         """.trimIndent()
@@ -525,6 +531,8 @@ abstract class GenerateBtmTask : DefaultTask() {
     private fun buildIsRules(context: KotlinFunctionContext, expression: KtIsExpression): List<String> {
         val line = context.lineIndex.lineAt(expression.startOffset)
         val conditionText = expression.text
+        val strategy = conditionStrategyFactory.from(conditionText)
+        val renderedCondition = strategy.toBytemanIf()
         val escaped = escape(conditionText)
         val className = context.className
         val methodName = context.methodName
@@ -535,7 +543,7 @@ abstract class GenerateBtmTask : DefaultTask() {
             METHOD ${methodName}(..)
             HELPER ${helper}
             AT LINE ${line}
-            IF (${conditionText})
+            IF (${renderedCondition})
             DO iff("${className}","${methodName}",${line},"${escaped}", true)
             ENDRULE
         """.trimIndent()
@@ -545,7 +553,7 @@ abstract class GenerateBtmTask : DefaultTask() {
             METHOD ${methodName}(..)
             HELPER ${helper}
             AT LINE ${line}
-            IF (!(${conditionText}))
+            IF (!(${renderedCondition}))
             DO iff("${className}","${methodName}",${line},"${escaped}", false)
             ENDRULE
         """.trimIndent()
