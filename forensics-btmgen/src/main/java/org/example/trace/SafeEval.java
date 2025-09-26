@@ -1,6 +1,8 @@
 package org.example.trace;
 
 import java.math.BigDecimal;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Side-effect free helper used in Byteman IF expressions.
@@ -56,9 +58,44 @@ public final class SafeEval {
         return a || b;
     }
 
-    /** Legacy generic hook: can be kept as trivial true or wired later. */
+    /** Registry entry capable of evaluating the original condition without side effects. */
+    public interface Evaluator {
+        boolean eval();
+    }
+
+    private static final Map<String, Evaluator> REGISTRY = new ConcurrentHashMap<>();
+
+    /** Registers or replaces an evaluator for the given rule id. */
+    public static void register(String ruleId, Evaluator evaluator) {
+        if (ruleId == null || evaluator == null) {
+            return;
+        }
+        REGISTRY.put(ruleId, evaluator);
+    }
+
+    /** Evaluates the registered predicate; returns true if none is installed (fail-open). */
     public static boolean ifMatch(String ruleId) {
-        return true;
+        if (ruleId == null) {
+            return true;
+        }
+        Evaluator evaluator = REGISTRY.get(ruleId);
+        if (evaluator == null) {
+            return true;
+        }
+        return safeEval(evaluator);
+    }
+
+    private static boolean safeEval(Evaluator evaluator) {
+        try {
+            return evaluator.eval();
+        } catch (Throwable t) {
+            return true;
+        }
+    }
+
+    /** Visible for tests to reset state. */
+    static void _clearForTests() {
+        REGISTRY.clear();
     }
 
     private static boolean isNumber(Object value) {
