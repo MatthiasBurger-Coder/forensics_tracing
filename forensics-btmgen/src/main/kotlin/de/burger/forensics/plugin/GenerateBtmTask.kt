@@ -3,6 +3,8 @@ package de.burger.forensics.plugin
 import de.burger.forensics.plugin.engine.JavaRegexParser
 import de.burger.forensics.plugin.engine.shouldSkipLargeFile
 import de.burger.forensics.plugin.io.ShardedWriter
+import de.burger.forensics.plugin.scan.ScanEvent
+import de.burger.forensics.plugin.scan.ScannerFacade
 import de.burger.forensics.plugin.strategy.ConditionStrategy
 import de.burger.forensics.plugin.strategy.DefaultStrategyFactory
 import de.burger.forensics.plugin.strategy.SafeModeDecorator
@@ -10,15 +12,11 @@ import de.burger.forensics.plugin.strategy.StrategyFactory
 import de.burger.forensics.plugin.translate.UnsafeExprTranslator
 import de.burger.forensics.plugin.util.HashUtil
 import de.burger.forensics.plugin.util.RuleIdUtil
-import de.burger.forensics.plugin.scan.ScanEvent
-import de.burger.forensics.plugin.scan.ScannerFacade
-import de.burger.forensics.plugin.globToRegexCached
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
-import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
@@ -581,7 +579,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         val configuration = CompilerConfiguration().apply {
             put(CommonConfigurationKeys.MODULE_NAME, "btmgen")
             put(JVMConfigurationKeys.JDK_HOME, File(System.getProperty("java.home")))
-            put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, SilentMessageCollector)
+            put(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, SilentMessageCollector)
         }
         val environment = KotlinCoreEnvironment.createForProduction(
             disposable,
