@@ -36,6 +36,9 @@ configurations[functionalTest.runtimeOnlyConfigurationName].extendsFrom(configur
 dependencies {
     implementation(kotlin("stdlib"))
     implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.0")
+    testImplementation(platform("org.junit:junit-bom:5.10.2"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.assertj:assertj-core:3.26.3")
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testImplementation(gradleTestKit())
