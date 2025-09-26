@@ -17,19 +17,23 @@ class JavaRegexParser : JavaScanner {
         if (!packagePrefix.isNullOrBlank() && pkg.isNotBlank() && !pkg.startsWith(packagePrefix)) {
             return emptyList()
         }
-        val classRegex = Pattern.compile("(?m)^\\s*(public|protected|private)?\\s*(final|abstract|static)?\\s*class\\s+([A-Za-z0-9_]+)")
+        val classRegex = Pattern.compile(
+            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|sealed)\\b|non-sealed)\\s+)*class\\s+([A-Za-z0-9_]+)"
+        )
         val classMatcher = classRegex.matcher(text)
         while (classMatcher.find()) {
-            val className = classMatcher.group(3)
+            val className = classMatcher.group(1)
             val fqcn = if (pkg.isBlank()) className else "$pkg.$className"
             val openIndex = text.indexOf('{', classMatcher.end())
             if (openIndex < 0) continue
             val closeIndex = findMatchingBrace(text, openIndex)
             val bodyText = text.substring(openIndex + 1, closeIndex)
-            val methodRegex = Pattern.compile("(?m)^\\s*(public|protected|private)?\\s*(static\\s+)?[\\w<>\\[\\]]+\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*\\{")
+            val methodRegex = Pattern.compile(
+                "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|synchronized|native|default)\\b)\\s+)*(?:<[^>]+>\\s*)?[\\w$<>\\[\\],.?\\s]+\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*\\{"
+            )
             val methodMatcher = methodRegex.matcher(bodyText)
             while (methodMatcher.find()) {
-                val methodName = methodMatcher.group(3)
+                val methodName = methodMatcher.group(1)
                 val methodStartInClass = openIndex + 1 + methodMatcher.start()
                 val methodOpen = text.indexOf('{', methodStartInClass)
                 if (methodOpen < 0) continue
