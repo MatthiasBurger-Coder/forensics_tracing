@@ -1,12 +1,14 @@
 package de.burger.forensics.plugin
 
 import de.burger.forensics.plugin.engine.JavaRegexParser
+import de.burger.forensics.plugin.engine.shouldSkipLargeFile
 import de.burger.forensics.plugin.strategy.ConditionStrategy
 import de.burger.forensics.plugin.strategy.DefaultStrategyFactory
 import de.burger.forensics.plugin.strategy.SafeModeDecorator
 import de.burger.forensics.plugin.strategy.StrategyFactory
 import de.burger.forensics.plugin.translate.UnsafeExprTranslator
 import de.burger.forensics.plugin.util.RuleIdUtil
+import de.burger.forensics.plugin.globToRegexCached
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
@@ -63,6 +65,9 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     @get:Input
     abstract val maxStringLength: Property<Int>
+
+    @get:Input
+    abstract val maxFileBytes: Property<Long>
 
     // New DSL inputs
     @get:Input
@@ -124,40 +129,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         return result.sortedBy { it.absolutePath }
     }
 
-    private fun globMatch(path: String, pattern: String): Boolean {
-        // Convert simple glob (**/*.*) to regex
-        val regex = globToRegex(pattern)
-        return Regex(regex).matches(path)
-    }
-
-    private fun globToRegex(glob: String): String {
-        val sb = StringBuilder("^")
-        var i = 0
-        while (i < glob.length) {
-            val c = glob[i]
-            when (c) {
-                '*' -> {
-                    if (i + 1 < glob.length && glob[i + 1] == '*') {
-                        sb.append(".*")
-                        i++
-                    } else {
-                        sb.append("[^/]*")
-                    }
-                }
-                '?' -> sb.append(".")
-                '.', '(', ')', '+', '|', '^', '$', '@', '%' -> sb.append("\\").append(c)
-                '{' -> sb.append('(')
-                '}' -> sb.append(')')
-                ',' -> sb.append('|')
-                '[' -> sb.append('[')
-                ']' -> sb.append(']')
-                else -> sb.append(c)
-            }
-            i++
-        }
-        sb.append("$")
-        return sb.toString()
-    }
+    private fun globMatch(path: String, pattern: String): Boolean = globToRegexCached(pattern).matches(path)
 
     private fun extractClassName(rule: String): String? {
         val m = Regex("(?m)^\\s*CLASS\\s+([\\w.$]+)").find(rule)
@@ -260,6 +232,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         val tracked = trackedVars.orNull?.toSet() ?: emptySet()
         val includeEntryExit = entryExit.getOrElse(true)
         val maxLen = maxStringLength.getOrElse(0)
+        val limit = maxFileBytes.getOrElse(2_000_000L)
 
         val rules = mutableListOf<String>()
         val ktFiles = kotlinSourceFiles
@@ -268,6 +241,7 @@ abstract class GenerateBtmTask : DefaultTask() {
             try {
                 val psiFactory = KtPsiFactory(envHolder.environment.project, false)
                 ktFiles.forEach { file ->
+                    if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
                     val text = file.readText()
                     val ktFile = psiFactory.createFile(file.name, text)
                     val fileRules = processKotlinFile(ktFile, text, helper, legacyPrefix, tracked, includeEntryExit)
@@ -284,12 +258,14 @@ abstract class GenerateBtmTask : DefaultTask() {
             val par = parallelism.getOrElse(1)
             if (par > 1) {
                 javaSourceFiles.parallelStream().forEachOrdered { file ->
+                    if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEachOrdered
                     val text = file.readText()
                     val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
                     synchronized(rules) { rules += fileRules }
                 }
             } else {
                 javaSourceFiles.forEach { file ->
+                    if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
                     val text = file.readText()
                     val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
                     rules += fileRules
