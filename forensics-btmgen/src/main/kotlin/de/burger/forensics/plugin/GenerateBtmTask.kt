@@ -264,11 +264,18 @@ abstract class GenerateBtmTask : DefaultTask() {
             val scanner = JavaRegexParser()
             // Simple parallelism for Java files only
             val par = parallelism.getOrElse(1)
-            val stream = if (par > 1) javaSourceFiles.parallelStream() else javaSourceFiles.stream()
-            stream.forEach { file ->
-                val text = file.readText()
-                val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
-                synchronized(rules) { rules += fileRules }
+            if (par > 1) {
+                javaSourceFiles.parallelStream().forEachOrdered { file ->
+                    val text = file.readText()
+                    val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
+                    synchronized(rules) { rules += fileRules }
+                }
+            } else {
+                javaSourceFiles.forEach { file ->
+                    val text = file.readText()
+                    val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
+                    rules += fileRules
+                }
             }
         }
 

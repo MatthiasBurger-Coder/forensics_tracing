@@ -38,6 +38,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.0")
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testImplementation(gradleTestKit())
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
     add("functionalTestImplementation", "org.junit.jupiter:junit-jupiter-api:5.10.2")
     add("functionalTestImplementation", gradleTestKit())
