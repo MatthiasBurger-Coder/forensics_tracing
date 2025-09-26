@@ -1,8 +1,11 @@
 package de.burger.forensics.plugin
 
 import de.burger.forensics.plugin.engine.JavaRegexParser
+import de.burger.forensics.plugin.strategy.ConditionStrategy
 import de.burger.forensics.plugin.strategy.DefaultStrategyFactory
+import de.burger.forensics.plugin.strategy.SafeModeDecorator
 import de.burger.forensics.plugin.strategy.StrategyFactory
+import de.burger.forensics.plugin.util.RuleIdUtil
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
@@ -31,6 +34,10 @@ import java.util.zip.GZIPOutputStream
 abstract class GenerateBtmTask : DefaultTask() {
 
     private val conditionStrategyFactory: StrategyFactory = DefaultStrategyFactory()
+
+    private companion object {
+        const val SAFE_EVAL_FQCN: String = "org.example.trace.SafeEval"
+    }
 
     @get:Input
     abstract val srcDirs: ListProperty<String>
@@ -77,6 +84,9 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     @get:Input
     abstract val minBranchesPerMethod: Property<Int>
+
+    @get:Input
+    abstract val safeMode: Property<Boolean>
 
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -459,8 +469,15 @@ abstract class GenerateBtmTask : DefaultTask() {
         val className = context.className
         val methodName = context.methodName
         val helper = context.helperFqn
-        val strategy = conditionStrategyFactory.from(condition.text)
-        val renderedCondition = strategy.toBytemanIf()
+        val baseStrategy = conditionStrategyFactory.from(condition.text)
+        val decoratedStrategy = decorateCondition(
+            baseStrategy,
+            className,
+            methodName,
+            line,
+            condition.text
+        )
+        val renderedCondition = decoratedStrategy.toBytemanIf()
         val trueRule = """
             RULE ${className}.${methodName}:${line}:if-true
             CLASS ${className}
@@ -531,12 +548,19 @@ abstract class GenerateBtmTask : DefaultTask() {
     private fun buildIsRules(context: KotlinFunctionContext, expression: KtIsExpression): List<String> {
         val line = context.lineIndex.lineAt(expression.startOffset)
         val conditionText = expression.text
-        val strategy = conditionStrategyFactory.from(conditionText)
-        val renderedCondition = strategy.toBytemanIf()
-        val escaped = escape(conditionText)
         val className = context.className
         val methodName = context.methodName
         val helper = context.helperFqn
+        val baseStrategy = conditionStrategyFactory.from(conditionText)
+        val decoratedStrategy = decorateCondition(
+            baseStrategy,
+            className,
+            methodName,
+            line,
+            conditionText
+        )
+        val renderedCondition = decoratedStrategy.toBytemanIf()
+        val escaped = escape(conditionText)
         val trueRule = """
             RULE ${className}.${methodName}:${line}:is-true
             CLASS ${className}
@@ -584,6 +608,17 @@ abstract class GenerateBtmTask : DefaultTask() {
             ENDRULE
         """.trimIndent()
         return listOf(rule)
+    }
+
+    private fun decorateCondition(
+        base: ConditionStrategy,
+        className: String,
+        methodName: String,
+        line: Int,
+        rawExpression: String
+    ): ConditionStrategy {
+        val ruleId = RuleIdUtil.stableRuleId(className, methodName, line, rawExpression)
+        return SafeModeDecorator(base, safeMode.getOrElse(false), SAFE_EVAL_FQCN, ruleId)
     }
 
 

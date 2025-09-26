@@ -32,6 +32,7 @@ class BtmGenPlugin : Plugin<Project> {
             task.shardOutput.set(extension.shardOutput)
             task.gzipOutput.set(extension.gzipOutput)
             task.minBranchesPerMethod.set(extension.minBranchesPerMethod)
+            task.safeMode.set(extension.safeMode)
         }
     }
 }
