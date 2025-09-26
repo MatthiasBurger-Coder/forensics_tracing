@@ -23,8 +23,9 @@ abstract class BtmGenExtension @Inject constructor(
     val include: ListProperty<String> = objects.listProperty(String::class.java)
     val exclude: ListProperty<String> = objects.listProperty(String::class.java)
     val parallelism: Property<Int> = objects.property(Int::class.java)
-    val shardOutput: Property<Int> = objects.property(Int::class.java)
-    val gzipOutput: Property<Boolean> = objects.property(Boolean::class.java)
+    val shardsProperty: Property<Int> = objects.property(Int::class.java)
+    val gzipOutputProperty: Property<Boolean> = objects.property(Boolean::class.java)
+    val filePrefixProperty: Property<String> = objects.property(String::class.java)
     val minBranchesPerMethod: Property<Int> = objects.property(Int::class.java)
     val safeMode: Property<Boolean> = objects.property(Boolean::class.java)
     val forceHelperForWhitelist: Property<Boolean> = objects.property(Boolean::class.java)
@@ -54,8 +55,9 @@ abstract class BtmGenExtension @Inject constructor(
         include.convention(emptyList())
         exclude.convention(emptyList())
         parallelism.convention(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
-        shardOutput.convention(1)
-        gzipOutput.convention(false)
+        shardsProperty.convention(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+        gzipOutputProperty.convention(false)
+        filePrefixProperty.convention("tracing-")
         minBranchesPerMethod.convention(0)
         outputDir.convention(layout.buildDirectory.dir("forensics"))
         maxStringLength.convention(0)
@@ -63,4 +65,22 @@ abstract class BtmGenExtension @Inject constructor(
         forceHelperForWhitelist.convention(false)
         maxFileBytes.convention(2_000_000L)
     }
+
+    var shards: Int
+        get() = shardsProperty.orNull ?: Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        set(value) {
+            shardsProperty.set(value)
+        }
+
+    var gzipOutput: Boolean
+        get() = gzipOutputProperty.orNull ?: false
+        set(value) {
+            gzipOutputProperty.set(value)
+        }
+
+    var filePrefix: String
+        get() = filePrefixProperty.orNull ?: "tracing-"
+        set(value) {
+            filePrefixProperty.set(value)
+        }
 }

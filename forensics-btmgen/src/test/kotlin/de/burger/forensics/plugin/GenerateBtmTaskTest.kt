@@ -52,7 +52,7 @@ class GenerateBtmTaskTest {
         task.includePatterns.set(emptyList())
         task.excludePatterns.set(emptyList())
         task.parallelism.set(4)
-        task.shardOutput.set(1)
+        task.shards.set(1)
         task.gzipOutput.set(false)
         task.minBranchesPerMethod.set(0)
 
@@ -60,7 +60,7 @@ class GenerateBtmTaskTest {
         task.outputDir.set(project.layout.dir(project.provider { outputDir.toFile() }))
 
         task.generate()
-        val outputFile = outputDir.resolve("tracing.btm").toFile()
+        val outputFile = outputDir.resolve("tracing-0001.btm").toFile()
         val firstRun = outputFile.readText()
 
         task.generate()

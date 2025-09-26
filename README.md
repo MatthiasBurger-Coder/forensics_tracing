@@ -27,7 +27,7 @@ forensicsBtmGen {
 }
 ```
 
-Run the generator to produce Byteman rules in `build/forensics/tracing.btm`:
+Run the generator to produce Byteman rules in sharded files such as `build/forensics/tracing-0001.btm`:
 
 ```bash
 ./gradlew generateBtmRules

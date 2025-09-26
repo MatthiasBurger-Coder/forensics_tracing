@@ -14,7 +14,7 @@ class BtmGenPlugin : Plugin<Project> {
 
         project.tasks.register("generateBtmRules", GenerateBtmTask::class.java) { task ->
             task.group = "forensics"
-            task.description = "Generates Byteman tracing rules into build/forensics/tracing.btm"
+            task.description = "Generates Byteman tracing rules into build/forensics/tracing-0001.btm"
             task.srcDirs.set(extension.srcDirs)
             task.packagePrefix.set(extension.pkgPrefix)
             task.helperFqn.set(extension.helperFqn)
@@ -29,8 +29,9 @@ class BtmGenPlugin : Plugin<Project> {
             task.includePatterns.set(extension.include)
             task.excludePatterns.set(extension.exclude)
             task.parallelism.set(extension.parallelism)
-            task.shardOutput.set(extension.shardOutput)
-            task.gzipOutput.set(extension.gzipOutput)
+            task.shards.set(extension.shardsProperty)
+            task.gzipOutput.set(extension.gzipOutputProperty)
+            task.filePrefix.set(extension.filePrefixProperty)
             task.minBranchesPerMethod.set(extension.minBranchesPerMethod)
             task.safeMode.set(extension.safeMode)
             task.forceHelperForWhitelist.set(extension.forceHelperForWhitelist)
