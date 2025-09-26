@@ -2,11 +2,13 @@ package de.burger.forensics.plugin
 
 import de.burger.forensics.plugin.engine.JavaRegexParser
 import de.burger.forensics.plugin.engine.shouldSkipLargeFile
+import de.burger.forensics.plugin.io.ShardedWriter
 import de.burger.forensics.plugin.strategy.ConditionStrategy
 import de.burger.forensics.plugin.strategy.DefaultStrategyFactory
 import de.burger.forensics.plugin.strategy.SafeModeDecorator
 import de.burger.forensics.plugin.strategy.StrategyFactory
 import de.burger.forensics.plugin.translate.UnsafeExprTranslator
+import de.burger.forensics.plugin.util.HashUtil
 import de.burger.forensics.plugin.util.RuleIdUtil
 import de.burger.forensics.plugin.globToRegexCached
 import org.gradle.api.DefaultTask
@@ -31,7 +33,6 @@ import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
-import java.util.zip.GZIPOutputStream
 
 @CacheableTask
 abstract class GenerateBtmTask : DefaultTask() {
@@ -83,10 +84,13 @@ abstract class GenerateBtmTask : DefaultTask() {
     abstract val parallelism: Property<Int>
 
     @get:Input
-    abstract val shardOutput: Property<Int>
+    abstract val shards: Property<Int>
 
     @get:Input
     abstract val gzipOutput: Property<Boolean>
+
+    @get:Input
+    abstract val filePrefix: Property<String>
 
     @get:Input
     abstract val minBranchesPerMethod: Property<Int>
@@ -141,82 +145,6 @@ abstract class GenerateBtmTask : DefaultTask() {
         return m?.let { it.groupValues[1] + "." + it.groupValues[2] }
     }
 
-    private fun filterByPkgPrefixes(rules: List<String>, prefixes: List<String>): List<String> {
-        if (prefixes.isEmpty()) return rules
-        return rules.filter { rule ->
-            val cls = extractClassName(rule)
-            cls != null && prefixes.any { cls.startsWith(it) }
-        }
-    }
-
-    private fun filterByMinBranches(rules: List<String>, minBranches: Int): List<String> {
-        if (minBranches <= 0) return rules
-        val byMethod = rules.groupBy { extractMethodKey(it) }
-        val keepMethods = mutableSetOf<String>()
-        byMethod.forEach { (methodKey, list) ->
-            if (methodKey == null) return@forEach
-            val branchCount = list.count { r ->
-                r.contains(":if-") || r.contains(":is-") || r.contains(":when") || r.contains(":case")
-            }
-            if (branchCount >= minBranches) keepMethods += methodKey
-        }
-        return rules.filter { r ->
-            val key = extractMethodKey(r)
-            key == null || keepMethods.contains(key)
-        }
-    }
-
-    private fun writeSharded(rules: List<String>, header: String, outputDirectory: File) {
-        val shards = shardOutput.getOrElse(1).coerceAtLeast(1)
-        val gzip = gzipOutput.getOrElse(false)
-        if (shards <= 1) {
-            val file = outputDirectory.resolve("tracing.btm" + if (gzip) ".gz" else "")
-            writeFile(file, header, rules, gzip)
-            return
-        }
-        val perShard = ((rules.size + shards - 1) / shards).coerceAtLeast(1)
-        var index = 0
-        for (s in 0 until shards) {
-            val from = s * perShard
-            if (from >= rules.size) break
-            val to = minOf((s + 1) * perShard, rules.size)
-            val part = rules.subList(from, to)
-            val name = "tracing-%04d.btm".format(s + 1) + if (gzip) ".gz" else ""
-            val file = outputDirectory.resolve(name)
-            writeFile(file, header, part, gzip)
-            index += part.size
-        }
-    }
-
-    private fun writeFile(file: File, header: String, rules: List<String>, gzip: Boolean) {
-        if (gzip) {
-            file.outputStream().use { fos ->
-                GZIPOutputStream(fos).bufferedWriter(Charsets.UTF_8).use { w ->
-                    w.append(header)
-                    if (rules.isEmpty()) {
-                        w.append("# No matching sources were found.\n")
-                    } else {
-                        w.append('\n')
-                        w.append(rules.joinToString("\n\n"))
-                        w.append('\n')
-                    }
-                }
-            }
-        } else {
-            val content = buildString {
-                append(header)
-                if (rules.isEmpty()) {
-                    append("# No matching sources were found.\n")
-                } else {
-                    append('\n')
-                    append(rules.joinToString("\n\n"))
-                    append('\n')
-                }
-            }
-            file.writeText(content)
-        }
-    }
-
     @TaskAction
     fun generate() {
         val outputDirectory = outputDir.get().asFile
@@ -234,48 +162,10 @@ abstract class GenerateBtmTask : DefaultTask() {
         val maxLen = maxStringLength.getOrElse(0)
         val limit = maxFileBytes.getOrElse(2_000_000L)
 
-        val rules = mutableListOf<String>()
-        val ktFiles = kotlinSourceFiles
-        if (ktFiles.isNotEmpty()) {
-            val envHolder = createEnvironment()
-            try {
-                val psiFactory = KtPsiFactory(envHolder.environment.project, false)
-                ktFiles.forEach { file ->
-                    if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
-                    val text = file.readText()
-                    val ktFile = psiFactory.createFile(file.name, text)
-                    val fileRules = processKotlinFile(ktFile, text, helper, legacyPrefix, tracked, includeEntryExit)
-                    rules += fileRules
-                }
-            } finally {
-                Disposer.dispose(envHolder.disposable)
-            }
-        }
-
-        if (includeJava.getOrElse(false)) {
-            val scanner = JavaRegexParser()
-            // Simple parallelism for Java files only
-            val par = parallelism.getOrElse(1)
-            if (par > 1) {
-                javaSourceFiles.parallelStream().forEachOrdered { file ->
-                    if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEachOrdered
-                    val text = file.readText()
-                    val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
-                    synchronized(rules) { rules += fileRules }
-                }
-            } else {
-                javaSourceFiles.forEach { file ->
-                    if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
-                    val text = file.readText()
-                    val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
-                    rules += fileRules
-                }
-            }
-        }
-
-        // Post-process: filter by pkg prefixes & minBranches
-        var finalRules = if (allPkgPrefixes.isNotEmpty()) filterByPkgPrefixes(rules, allPkgPrefixes) else rules
-        finalRules = filterByMinBranches(finalRules, minBranchesPerMethod.getOrElse(0))
+        val shardCount = shards.getOrElse(Runtime.getRuntime().availableProcessors()).coerceAtLeast(1)
+        val gzip = gzipOutput.getOrElse(false)
+        val prefix = filePrefix.getOrElse("tracing-").ifBlank { "tracing-" }
+        val minBranches = minBranchesPerMethod.getOrElse(0)
 
         val header = buildString {
             if (includeTimestamp.getOrElse(false)) {
@@ -300,7 +190,100 @@ abstract class GenerateBtmTask : DefaultTask() {
             }
         }
 
-        writeSharded(finalRules, header, outputDirectory)
+        ShardedWriter(outputDirectory, shardCount, gzip, prefix).use { writer ->
+            writer.writeHeader(header)
+
+            val ktFiles = kotlinSourceFiles
+            if (ktFiles.isNotEmpty()) {
+                val envHolder = createEnvironment()
+                try {
+                    val psiFactory = KtPsiFactory(envHolder.environment.project, false)
+                    ktFiles.forEach { file ->
+                        if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
+                        val text = file.readText()
+                        val ktFile = psiFactory.createFile(file.name, text)
+                        val fileRules = processKotlinFile(ktFile, text, helper, legacyPrefix, tracked, includeEntryExit)
+                        dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
+                    }
+                } finally {
+                    Disposer.dispose(envHolder.disposable)
+                }
+            }
+
+            if (includeJava.getOrElse(false)) {
+                val scanner = JavaRegexParser()
+                val par = parallelism.getOrElse(1)
+                if (par > 1) {
+                    javaSourceFiles.parallelStream().forEachOrdered { file ->
+                        if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEachOrdered
+                        val text = file.readText()
+                        val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
+                        dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
+                    }
+                } else {
+                    javaSourceFiles.forEach { file ->
+                        if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
+                        val text = file.readText()
+                        val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
+                        dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun dispatchRules(
+        rules: List<String>,
+        prefixes: List<String>,
+        minBranches: Int,
+        shardCount: Int,
+        writer: ShardedWriter
+    ) {
+        if (rules.isEmpty()) return
+        if (minBranches <= 0) {
+            rules.forEach { rule ->
+                if (passesPrefixFilter(rule, prefixes)) {
+                    val shardKey = computeShardKey(rule)
+                    val shard = HashUtil.stableShard(shardKey, shardCount)
+                    writer.append(shard, rule)
+                }
+            }
+            return
+        }
+
+        val grouped = rules.groupBy { extractMethodKey(it) }
+        grouped.forEach { (methodKey, methodRules) ->
+            if (methodKey == null || hasRequiredBranches(methodRules, minBranches)) {
+                val first = methodRules.firstOrNull() ?: return@forEach
+                if (!passesPrefixFilter(first, prefixes)) return@forEach
+                methodRules.forEach { rule ->
+                    val shardKey = computeShardKey(rule)
+                    val shard = HashUtil.stableShard(shardKey, shardCount)
+                    writer.append(shard, rule)
+                }
+            }
+        }
+    }
+
+    private fun passesPrefixFilter(rule: String, prefixes: List<String>): Boolean {
+        if (prefixes.isEmpty()) return true
+        val cls = extractClassName(rule) ?: return false
+        return prefixes.any { cls.startsWith(it) }
+    }
+
+    private fun hasRequiredBranches(rules: List<String>, minBranches: Int): Boolean {
+        if (minBranches <= 0) return true
+        val branchCount = rules.count { rule ->
+            rule.contains(":if-") || rule.contains(":is-") || rule.contains(":when") || rule.contains(":case")
+        }
+        return branchCount >= minBranches
+    }
+
+    private fun computeShardKey(rule: String): String {
+        val className = extractClassName(rule) ?: ""
+        val method = Regex("(?m)^\\s*METHOD\\s+([A-Za-z0-9_]+)\\(").find(rule)?.groupValues?.getOrNull(1) ?: ""
+        val line = Regex("(?m)^\\s*AT\\s+LINE\\s+(\\d+)").find(rule)?.groupValues?.getOrNull(1) ?: "0"
+        return "$className#$method:$line"
     }
 
     private fun createEnvironment(): EnvironmentHolder {

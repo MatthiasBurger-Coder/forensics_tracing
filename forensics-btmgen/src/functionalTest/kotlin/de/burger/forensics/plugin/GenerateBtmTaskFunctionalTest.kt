@@ -26,10 +26,13 @@ class GenerateBtmTaskFunctionalTest {
         val task = result.task(":generateBtmRules")
         assertEquals(TaskOutcome.SUCCESS, task?.outcome, "generateBtmRules should succeed")
 
-        val outputFile = File(projectDir, "build/forensics/tracing.btm")
-        assertTrue(outputFile.exists(), "Byteman output should be generated")
+        val outputDir = File(projectDir, "build/forensics")
+        val outputFiles = outputDir.listFiles { _, name ->
+            name.startsWith("tracing-") && name.endsWith(".btm")
+        }?.sortedBy { it.name }
+        assertTrue(!outputFiles.isNullOrEmpty(), "Byteman output should be generated")
 
-        val output = outputFile.readText()
+        val output = outputFiles!!.joinToString("\n") { it.readText() }
         assertTrue(output.contains("enter@de.burger.forensics.sample.SampleFlowKt.decisionFlow"))
         assertTrue(output.contains("METHOD decisionFlow(..)"), "METHOD should include (..) to indicate any parameters")
         assertTrue(output.contains("if-true"))
