@@ -26,6 +26,7 @@ abstract class BtmGenExtension @Inject constructor(
     val shardOutput: Property<Int> = objects.property(Int::class.java)
     val gzipOutput: Property<Boolean> = objects.property(Boolean::class.java)
     val minBranchesPerMethod: Property<Int> = objects.property(Int::class.java)
+    val safeMode: Property<Boolean> = objects.property(Boolean::class.java)
     val outputDir: DirectoryProperty = objects.directoryProperty()
     /**
      * Maximum number of characters allowed when embedding source snippets or values into
@@ -56,5 +57,6 @@ abstract class BtmGenExtension @Inject constructor(
         minBranchesPerMethod.convention(0)
         outputDir.convention(layout.buildDirectory.dir("forensics"))
         maxStringLength.convention(0)
+        safeMode.convention(false)
     }
 }
