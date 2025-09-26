@@ -31,6 +31,7 @@ class GenerateBtmTaskFunctionalTest {
 
         val output = outputFile.readText()
         assertTrue(output.contains("enter@de.burger.forensics.sample.SampleFlowKt.decisionFlow"))
+        assertTrue(output.contains("METHOD decisionFlow(..)"), "METHOD should include (..) to indicate any parameters")
         assertTrue(output.contains("if-true"))
         assertTrue(output.contains(":case"))
         assertTrue(output.contains("write-statusFlag"))

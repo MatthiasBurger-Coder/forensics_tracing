@@ -170,13 +170,20 @@ abstract class GenerateBtmTask : DefaultTask() {
         includeEntryExit: Boolean
     ): List<String> {
         val lineIndex = LineIndex(text)
+        // Fast path: if a package prefix is configured and the file's package doesn't match it,
+        // we can skip traversing the PSI entirely for this file.
+        val filePackage = ktFile.packageFqName.takeIf { !it.isRoot }?.asString().orEmpty()
+        if (prefix != null && filePackage.isNotEmpty() && !filePackage.startsWith(prefix)) {
+            return emptyList()
+        }
         val functions = mutableListOf<KtNamedFunction>()
         ktFile.accept(object : KtTreeVisitorVoid() {
             override fun visitNamedFunction(function: KtNamedFunction) {
                 if (!function.isLocalFunction()) {
                     functions += function
                 }
-                super.visitNamedFunction(function)
+                // Do not descend into function bodies here to avoid redundant traversal.
+                // We'll traverse the body once in collectRulesForFunction.
             }
         })
         return functions.flatMap { function ->
@@ -260,10 +267,9 @@ abstract class GenerateBtmTask : DefaultTask() {
         """
         RULE enter@${className}.${methodName}
         CLASS ${className}
-        METHOD ${methodName}
+        METHOD ${methodName}(..)
         HELPER ${helper}
         AT ENTRY
-        IF true
         DO enter("${className}","${methodName}", ${'$'}LINE)
         ENDRULE
         """.trimIndent()
@@ -272,10 +278,9 @@ abstract class GenerateBtmTask : DefaultTask() {
         """
         RULE exit@${className}.${methodName}
         CLASS ${className}
-        METHOD ${methodName}
+        METHOD ${methodName}(..)
         HELPER ${helper}
         AT EXIT
-        IF true
         DO exit("${className}","${methodName}", ${'$'}LINE)
         ENDRULE
         """.trimIndent()
@@ -290,7 +295,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         val trueRule = """
             RULE ${className}.${methodName}:${line}:if-true
             CLASS ${className}
-            METHOD ${methodName}
+            METHOD ${methodName}(..)
             HELPER ${helper}
             AT LINE ${line}
             IF (${condition.text})
@@ -300,7 +305,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         val falseRule = """
             RULE ${className}.${methodName}:${line}:if-false
             CLASS ${className}
-            METHOD ${methodName}
+            METHOD ${methodName}(..)
             HELPER ${helper}
             AT LINE ${line}
             IF (!(${condition.text}))
@@ -322,10 +327,9 @@ abstract class GenerateBtmTask : DefaultTask() {
             val whenRule = """
                 RULE ${className}.${methodName}:${line}:when
                 CLASS ${className}
-                METHOD ${methodName}
+                METHOD ${methodName}(..)
                 HELPER ${helper}
                 AT LINE ${line}
-                IF true
                 DO sw("${className}","${methodName}",${line},"${subjectEscaped}")
                 ENDRULE
             """.trimIndent()
@@ -338,10 +342,9 @@ abstract class GenerateBtmTask : DefaultTask() {
             val caseRule = """
                 RULE ${className}.${methodName}:${caseLine}:case
                 CLASS ${className}
-                METHOD ${methodName}
+                METHOD ${methodName}(..)
                 HELPER ${helper}
                 AT LINE ${caseLine}
-                IF true
                 DO kase("${className}","${methodName}",${caseLine},"${escapedLabel}")
                 ENDRULE
             """.trimIndent()
@@ -368,7 +371,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         val trueRule = """
             RULE ${className}.${methodName}:${line}:is-true
             CLASS ${className}
-            METHOD ${methodName}
+            METHOD ${methodName}(..)
             HELPER ${helper}
             AT LINE ${line}
             IF (${conditionText})
@@ -378,7 +381,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         val falseRule = """
             RULE ${className}.${methodName}:${line}:is-false
             CLASS ${className}
-            METHOD ${methodName}
+            METHOD ${methodName}(..)
             HELPER ${helper}
             AT LINE ${line}
             IF (!(${conditionText}))
@@ -405,10 +408,9 @@ abstract class GenerateBtmTask : DefaultTask() {
         val rule = """
             RULE ${className}.${methodName}:${line}:write-${name}
             CLASS ${className}
-            METHOD ${methodName}
+            METHOD ${methodName}(..)
             HELPER ${helper}
             AFTER WRITE ${'$'}$name
-            IF true
             DO writeVar("${className}","${methodName}",${line},"${escapedVar}", ${'$'}$name)
             ENDRULE
         """.trimIndent()
@@ -454,7 +456,7 @@ abstract class GenerateBtmTask : DefaultTask() {
                 val trueRule = """
                     RULE ${fqcn}.${methodName}:${line}:if-true
                     CLASS ${fqcn}
-                    METHOD ${methodName}
+                    METHOD ${methodName}(..)
                     HELPER ${helper}
                     AT LINE ${line}
                     IF (${condition})
@@ -464,7 +466,7 @@ abstract class GenerateBtmTask : DefaultTask() {
                 val falseRule = """
                     RULE ${fqcn}.${methodName}:${line}:if-false
                     CLASS ${fqcn}
-                    METHOD ${methodName}
+                    METHOD ${methodName}(..)
                     HELPER ${helper}
                     AT LINE ${line}
                     IF (!(${condition}))
@@ -482,10 +484,9 @@ abstract class GenerateBtmTask : DefaultTask() {
                 val switchRule = """
                     RULE ${fqcn}.${methodName}:${line}:when
                     CLASS ${fqcn}
-                    METHOD ${methodName}
+                    METHOD ${methodName}(..)
                     HELPER ${helper}
                     AT LINE ${line}
-                    IF true
                     DO sw("${fqcn}","${methodName}",${line},"${escapedSelector}")
                     ENDRULE
                 """.trimIndent()
@@ -500,10 +501,9 @@ abstract class GenerateBtmTask : DefaultTask() {
                 val caseRule = """
                     RULE ${fqcn}.${methodName}:${line}:case
                     CLASS ${fqcn}
-                    METHOD ${methodName}
+                    METHOD ${methodName}(..)
                     HELPER ${helper}
                     AT LINE ${line}
-                    IF true
                     DO kase("${fqcn}","${methodName}",${line},"${escapedLabel}")
                     ENDRULE
                 """.trimIndent()
