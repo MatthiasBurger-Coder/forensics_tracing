@@ -5,6 +5,7 @@ import de.burger.forensics.plugin.strategy.ConditionStrategy
 import de.burger.forensics.plugin.strategy.DefaultStrategyFactory
 import de.burger.forensics.plugin.strategy.SafeModeDecorator
 import de.burger.forensics.plugin.strategy.StrategyFactory
+import de.burger.forensics.plugin.translate.UnsafeExprTranslator
 import de.burger.forensics.plugin.util.RuleIdUtil
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
@@ -473,35 +474,35 @@ abstract class GenerateBtmTask : DefaultTask() {
         val methodName = context.methodName
         val helper = context.helperFqn
         val baseStrategy = conditionStrategyFactory.from(condition.text)
-        val decoratedStrategy = decorateCondition(
-            baseStrategy,
-            className,
-            methodName,
-            line,
-            condition.text
-        )
+        val ruleId = RuleIdUtil.stableRuleId(className, methodName, line, condition.text)
+        val decoratedStrategy = decorateCondition(baseStrategy, ruleId)
         val renderedCondition = decoratedStrategy.toBytemanIf()
-        val trueRule = """
-            RULE ${className}.${methodName}:${line}:if-true
-            CLASS ${className}
-            METHOD ${methodName}(..)
-            HELPER ${helper}
-            AT LINE ${line}
-            IF (${renderedCondition})
-            DO iff("${className}","${methodName}",${line},"${conditionText}", true)
-            ENDRULE
-        """.trimIndent()
-        val falseRule = """
-            RULE ${className}.${methodName}:${line}:if-false
-            CLASS ${className}
-            METHOD ${methodName}(..)
-            HELPER ${helper}
-            AT LINE ${line}
-            IF (!(${renderedCondition}))
-            DO iff("${className}","${methodName}",${line},"${conditionText}", false)
-            ENDRULE
-        """.trimIndent()
-        return listOf(trueRule, falseRule)
+        val registration = maybeBuildRegistrationBlock(ruleId, condition.text, renderedCondition)
+        val trueLines = mutableListOf(
+            "RULE ${className}.${methodName}:${line}:if-true",
+            "CLASS ${className}",
+            "METHOD ${methodName}(..)",
+            "HELPER ${helper}",
+            "AT LINE ${line}",
+            "IF (${renderedCondition})"
+        )
+        registration?.let { trueLines.addAll(it) }
+        trueLines += "DO iff(\"${className}\",\"${methodName}\",${line},\"${conditionText}\", true)"
+        trueLines += "ENDRULE"
+
+        val falseLines = mutableListOf(
+            "RULE ${className}.${methodName}:${line}:if-false",
+            "CLASS ${className}",
+            "METHOD ${methodName}(..)",
+            "HELPER ${helper}",
+            "AT LINE ${line}",
+            "IF (!(${renderedCondition}))"
+        )
+        registration?.let { falseLines.addAll(it) }
+        falseLines += "DO iff(\"${className}\",\"${methodName}\",${line},\"${conditionText}\", false)"
+        falseLines += "ENDRULE"
+
+        return listOf(trueLines.joinToString("\n"), falseLines.joinToString("\n"))
     }
 
     private fun buildWhenRules(context: KotlinFunctionContext, expression: KtWhenExpression): List<String> {
@@ -555,36 +556,36 @@ abstract class GenerateBtmTask : DefaultTask() {
         val methodName = context.methodName
         val helper = context.helperFqn
         val baseStrategy = conditionStrategyFactory.from(conditionText)
-        val decoratedStrategy = decorateCondition(
-            baseStrategy,
-            className,
-            methodName,
-            line,
-            conditionText
-        )
+        val ruleId = RuleIdUtil.stableRuleId(className, methodName, line, conditionText)
+        val decoratedStrategy = decorateCondition(baseStrategy, ruleId)
         val renderedCondition = decoratedStrategy.toBytemanIf()
         val escaped = escape(conditionText)
-        val trueRule = """
-            RULE ${className}.${methodName}:${line}:is-true
-            CLASS ${className}
-            METHOD ${methodName}(..)
-            HELPER ${helper}
-            AT LINE ${line}
-            IF (${renderedCondition})
-            DO iff("${className}","${methodName}",${line},"${escaped}", true)
-            ENDRULE
-        """.trimIndent()
-        val falseRule = """
-            RULE ${className}.${methodName}:${line}:is-false
-            CLASS ${className}
-            METHOD ${methodName}(..)
-            HELPER ${helper}
-            AT LINE ${line}
-            IF (!(${renderedCondition}))
-            DO iff("${className}","${methodName}",${line},"${escaped}", false)
-            ENDRULE
-        """.trimIndent()
-        return listOf(trueRule, falseRule)
+        val registration = maybeBuildRegistrationBlock(ruleId, conditionText, renderedCondition)
+        val trueLines = mutableListOf(
+            "RULE ${className}.${methodName}:${line}:is-true",
+            "CLASS ${className}",
+            "METHOD ${methodName}(..)",
+            "HELPER ${helper}",
+            "AT LINE ${line}",
+            "IF (${renderedCondition})"
+        )
+        registration?.let { trueLines.addAll(it) }
+        trueLines += "DO iff(\"${className}\",\"${methodName}\",${line},\"${escaped}\", true)"
+        trueLines += "ENDRULE"
+
+        val falseLines = mutableListOf(
+            "RULE ${className}.${methodName}:${line}:is-false",
+            "CLASS ${className}",
+            "METHOD ${methodName}(..)",
+            "HELPER ${helper}",
+            "AT LINE ${line}",
+            "IF (!(${renderedCondition}))"
+        )
+        registration?.let { falseLines.addAll(it) }
+        falseLines += "DO iff(\"${className}\",\"${methodName}\",${line},\"${escaped}\", false)"
+        falseLines += "ENDRULE"
+
+        return listOf(trueLines.joinToString("\n"), falseLines.joinToString("\n"))
     }
 
     private fun buildWriteRule(context: KotlinFunctionContext, expression: KtBinaryExpression): List<String> {
@@ -613,20 +614,33 @@ abstract class GenerateBtmTask : DefaultTask() {
         return listOf(rule)
     }
 
-    private fun decorateCondition(
-        base: ConditionStrategy,
-        className: String,
-        methodName: String,
-        line: Int,
-        rawExpression: String
-    ): ConditionStrategy {
-        val ruleId = RuleIdUtil.stableRuleId(className, methodName, line, rawExpression)
+    private fun decorateCondition(base: ConditionStrategy, ruleId: String): ConditionStrategy {
         return SafeModeDecorator(
             base,
             safeMode.getOrElse(false),
             forceHelperForWhitelist.getOrElse(false),
             SAFE_EVAL_FQCN,
             ruleId
+        )
+    }
+
+    private fun maybeBuildRegistrationBlock(
+        ruleId: String,
+        rawExpression: String,
+        renderedCondition: String
+    ): List<String>? {
+        val expected = "$SAFE_EVAL_FQCN.ifMatch(\"$ruleId\")"
+        if (renderedCondition != expected) {
+            return null
+        }
+        val body = UnsafeExprTranslator.toHelperExpr(rawExpression)
+        val fqcn = SAFE_EVAL_FQCN
+        return listOf(
+            "DO $fqcn.register(\"$ruleId\", new $fqcn.Evaluator() {",
+            "    public boolean eval() {",
+            "        return $body;",
+            "    }",
+            "});"
         )
     }
 
