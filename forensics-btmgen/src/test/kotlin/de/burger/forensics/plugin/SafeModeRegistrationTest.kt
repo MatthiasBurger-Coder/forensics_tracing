@@ -33,7 +33,7 @@ class SafeModeRegistrationTest {
 
         task.generate()
 
-        val content = outputDir.resolve("tracing-0001.btm").toFile().readText()
+        val content = outputDir.resolve("tracing-0001-00001.btm").toFile().readText()
         val match = Regex("""IF \(org\.example\.trace\.SafeEval\.ifMatch\("([^"]+)"\)\)""").find(content)
         assertThat(match).isNotNull
         val ruleId = match!!.groupValues[1]
@@ -67,7 +67,7 @@ class SafeModeRegistrationTest {
 
         task.generate()
 
-        val content = outputDir.resolve("tracing-0001.btm").toFile().readText()
+        val content = outputDir.resolve("tracing-0001-00001.btm").toFile().readText()
         val match = Regex("""DO org\.example\.trace\.SafeEval\.register\("([^"]+)", new org\.example\.trace\.SafeEval\.Evaluator\(\) \{""")
             .find(content)
         assertThat(match).isNotNull

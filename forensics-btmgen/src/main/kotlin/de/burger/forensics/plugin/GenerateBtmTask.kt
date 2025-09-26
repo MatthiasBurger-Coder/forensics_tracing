@@ -93,6 +93,21 @@ abstract class GenerateBtmTask : DefaultTask() {
     abstract val filePrefix: Property<String>
 
     @get:Input
+    abstract val rotateMaxBytesPerFile: Property<Long>
+
+    @get:Input
+    abstract val rotateIntervalSeconds: Property<Long>
+
+    @get:Input
+    abstract val flushThresholdBytes: Property<Int>
+
+    @get:Input
+    abstract val flushIntervalMillis: Property<Long>
+
+    @get:Input
+    abstract val writerThreadSafe: Property<Boolean>
+
+    @get:Input
     abstract val minBranchesPerMethod: Property<Int>
 
     @get:Input
@@ -165,6 +180,11 @@ abstract class GenerateBtmTask : DefaultTask() {
         val shardCount = shards.getOrElse(Runtime.getRuntime().availableProcessors()).coerceAtLeast(1)
         val gzip = gzipOutput.getOrElse(false)
         val prefix = filePrefix.getOrElse("tracing-").ifBlank { "tracing-" }
+        val rotateMaxBytesValue = rotateMaxBytesPerFile.orNull ?: 4L * 1024 * 1024
+        val rotateIntervalSecondsValue = rotateIntervalSeconds.orNull ?: 0L
+        val flushThresholdValue = flushThresholdBytes.orNull ?: 64 * 1024
+        val flushIntervalValue = flushIntervalMillis.orNull ?: 2000L
+        val threadSafeValue = writerThreadSafe.orNull ?: false
         val minBranches = minBranchesPerMethod.getOrElse(0)
 
         val header = buildString {
@@ -190,7 +210,17 @@ abstract class GenerateBtmTask : DefaultTask() {
             }
         }
 
-        ShardedWriter(outputDirectory, shardCount, gzip, prefix).use { writer ->
+        ShardedWriter(
+            outputDirectory,
+            shardCount,
+            gzip,
+            prefix,
+            rotateMaxBytesValue,
+            rotateIntervalSecondsValue,
+            flushThresholdValue,
+            flushIntervalValue,
+            threadSafeValue
+        ).use { writer ->
             writer.writeHeader(header)
 
             val ktFiles = kotlinSourceFiles
