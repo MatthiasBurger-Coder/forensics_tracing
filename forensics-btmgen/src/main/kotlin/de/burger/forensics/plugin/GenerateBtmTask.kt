@@ -48,6 +48,9 @@ abstract class GenerateBtmTask : DefaultTask() {
     @get:Input
     abstract val includeTimestamp: Property<Boolean>
 
+    @get:Input
+    abstract val maxStringLength: Property<Int>
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -528,11 +531,14 @@ abstract class GenerateBtmTask : DefaultTask() {
     }
 
     private fun escape(value: String): String {
-        return value
+        val limit = maxStringLength.getOrElse(0)
+        val truncated = if (limit > 0 && value.length > limit) value.take(limit) + "…" else value
+        return truncated
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
             .replace("\n", "\\n")
             .replace("\r", "\\r")
+            .replace("\t", "\\t")
     }
 
     private data class KotlinFunctionContext(

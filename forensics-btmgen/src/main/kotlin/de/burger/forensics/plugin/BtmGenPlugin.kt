@@ -23,6 +23,7 @@ class BtmGenPlugin : Plugin<Project> {
             task.includeJava.set(extension.includeJava)
             task.includeTimestamp.set(extension.includeTimestamp)
             task.outputDir.set(extension.outputDir)
+            task.maxStringLength.set(extension.maxStringLength)
         }
     }
 }
