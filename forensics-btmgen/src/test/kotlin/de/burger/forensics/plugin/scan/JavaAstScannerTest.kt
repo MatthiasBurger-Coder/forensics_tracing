@@ -54,10 +54,11 @@ class JavaAstScannerTest {
         }
         assertThat(events).anySatisfy { event ->
             assertThat(event.kind).isEqualTo("switch-case")
-            assertThat(event.conditionText).isEqualTo("1")
+            assertThat(event.conditionText).isEqualTo("case 1")
         }
         assertThat(events).anySatisfy { event ->
             assertThat(event.kind).isEqualTo("return")
+            assertThat(event.conditionText).isNull()
         }
         assertThat(events).anySatisfy { event ->
             assertThat(event.kind).isEqualTo("throw")

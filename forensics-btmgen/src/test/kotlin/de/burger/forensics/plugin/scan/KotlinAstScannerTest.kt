@@ -52,6 +52,7 @@ class KotlinAstScannerTest {
         }
         assertThat(events).anySatisfy { event ->
             assertThat(event.kind).isEqualTo("return")
+            assertThat(event.conditionText).isNull()
         }
         assertThat(events).anySatisfy { event ->
             assertThat(event.kind).isEqualTo("throw")

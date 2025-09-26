@@ -4,11 +4,10 @@ import de.burger.forensics.plugin.scan.ScanEvent
 import de.burger.forensics.plugin.scan.SourceScanner
 import java.nio.file.Files
 import java.nio.file.Path
-import kotlin.io.path.isDirectory
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
-import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
+import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.psi.KtIfExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPsiFactory
@@ -31,6 +30,7 @@ class KotlinAstScanner : SourceScanner {
         Files.walk(root).use { stream ->
             stream.filter { it.toString().endsWith(".kt") }.forEach { path ->
                 val fileText = Files.readString(path)
+                val lineIndex = LineIndex(fileText)
                 val psi = psiFactory.createFile(path.fileName.toString(), fileText)
                 val pkg = psi.packageFqName.asString()
                 if (!include(pkg, includePkgs) || exclude(pkg, excludePkgs)) {
@@ -49,7 +49,7 @@ class KotlinAstScanner : SourceScanner {
                         function.bodyExpression?.accept(object : KtTreeVisitorVoid() {
                             override fun visitIfExpression(expression: KtIfExpression) {
                                 val cond = expression.condition?.text ?: "true"
-                                val line = expression.condition?.node?.psi?.lineNumber() ?: -1
+                                val line = expression.condition?.textRange?.startOffset?.let(lineIndex::lineAt) ?: -1
                                 events += ScanEvent("kotlin", className, methodName, signature, "if-true", line, cond)
                                 if (expression.`else` != null) {
                                     events += ScanEvent("kotlin", className, methodName, signature, "if-false", line, cond)
@@ -58,24 +58,27 @@ class KotlinAstScanner : SourceScanner {
                             }
 
                             override fun visitWhenExpression(expression: KtWhenExpression) {
-                                val line = expression.subjectExpression?.node?.psi?.lineNumber() ?: expression.lineNumber()
+                                val subjectOffset = expression.subjectExpression?.textRange?.startOffset
+                                val line = subjectOffset?.let(lineIndex::lineAt) ?: lineIndex.lineAt(expression.textRange.startOffset)
                                 val subject = expression.subjectExpression?.text ?: "when"
                                 events += ScanEvent("kotlin", className, methodName, signature, "switch", line, subject)
                                 expression.entries.forEach { entry ->
                                     val label = entry.conditions.joinToString("|") { it.text }.ifBlank { "else" }
-                                    val caseLine = entry.lineNumber()
+                                    val caseLine = lineIndex.lineAt(entry.textRange.startOffset)
                                     events += ScanEvent("kotlin", className, methodName, signature, "when-branch", caseLine, label)
                                 }
                                 super.visitWhenExpression(expression)
                             }
 
                             override fun visitReturnExpression(expression: KtReturnExpression) {
-                                events += ScanEvent("kotlin", className, methodName, signature, "return", expression.lineNumber(), expression.returnedExpression?.text)
+                                val line = lineIndex.lineAt(expression.textRange.startOffset)
+                                events += ScanEvent("kotlin", className, methodName, signature, "return", line, null)
                                 super.visitReturnExpression(expression)
                             }
 
                             override fun visitThrowExpression(expression: KtThrowExpression) {
-                                events += ScanEvent("kotlin", className, methodName, signature, "throw", expression.lineNumber(), expression.thrownExpression?.text ?: "throw")
+                                val line = lineIndex.lineAt(expression.textRange.startOffset)
+                                events += ScanEvent("kotlin", className, methodName, signature, "throw", line, expression.thrownExpression?.text ?: "throw")
                                 super.visitThrowExpression(expression)
                             }
                         })
@@ -114,10 +117,31 @@ class KotlinAstScanner : SourceScanner {
         }
     }
 
-    private fun org.jetbrains.kotlin.com.intellij.psi.PsiElement.lineNumber(): Int {
-        val doc = containingFile?.viewProvider?.document ?: return -1
-        return doc.getLineNumber(textRange.startOffset) + 1
-    }
+    private class LineIndex(source: String) {
+        private val starts: IntArray = buildList {
+            add(0)
+            source.forEachIndexed { index, ch ->
+                if (ch == '\n') {
+                    add(index + 1)
+                }
+            }
+        }.toIntArray()
 
-    private fun org.jetbrains.kotlin.psi.KtElement.lineNumber(): Int = node.psi.lineNumber()
+        fun lineAt(offset: Int): Int {
+            if (offset < 0) return -1
+            var low = 0
+            var high = starts.size - 1
+            while (low <= high) {
+                val mid = (low + high) ushr 1
+                val start = starts[mid]
+                val end = if (mid + 1 < starts.size) starts[mid + 1] else Int.MAX_VALUE
+                when {
+                    offset < start -> high = mid - 1
+                    offset >= end -> low = mid + 1
+                    else -> return mid + 1
+                }
+            }
+            return starts.size
+        }
+    }
 }

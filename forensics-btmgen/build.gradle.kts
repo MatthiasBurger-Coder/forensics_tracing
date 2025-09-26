@@ -36,7 +36,7 @@ configurations[functionalTest.runtimeOnlyConfigurationName].extendsFrom(configur
 dependencies {
     implementation(kotlin("stdlib"))
     implementation("com.github.javaparser:javaparser-symbol-solver-core:3.25.9")
-    implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.0")
+    implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.9.24")
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.assertj:assertj-core:3.26.3")

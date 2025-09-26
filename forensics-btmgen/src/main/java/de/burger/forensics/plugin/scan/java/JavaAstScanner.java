@@ -4,9 +4,9 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
@@ -88,13 +88,16 @@ public final class JavaAstScanner implements SourceScanner {
             int line = entry.getBegin().map(p -> p.line).orElse(-1);
             String label = entry.getLabels().isEmpty()
                 ? "default"
-                : entry.getLabels().stream().map(Object::toString).collect(Collectors.joining(" | "));
+                : "case " + entry.getLabels().stream()
+                        .map(Node::toString)
+                        .map(String::trim)
+                        .collect(Collectors.joining(" | "));
             out.add(new ScanEvent("java", fqcn, methodName, signature, "switch-case", line, label));
         });
 
         declaration.findAll(ReturnStmt.class).forEach(stmt -> {
             int line = stmt.getBegin().map(p -> p.line).orElse(-1);
-            out.add(new ScanEvent("java", fqcn, methodName, signature, "return", line, stmt.getExpression().map(Object::toString).orElse(null)));
+            out.add(new ScanEvent("java", fqcn, methodName, signature, "return", line, null));
         });
 
         declaration.findAll(ThrowStmt.class).forEach(stmt -> {
