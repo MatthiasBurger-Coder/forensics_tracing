@@ -41,6 +41,7 @@ class BtmGenPlugin : Plugin<Project> {
             task.safeMode.set(extension.safeMode)
             task.forceHelperForWhitelist.set(extension.forceHelperForWhitelist)
             task.maxFileBytes.set(extension.maxFileBytes)
+            task.useAstScanner.set(extension.useAstScanner)
         }
     }
 }
