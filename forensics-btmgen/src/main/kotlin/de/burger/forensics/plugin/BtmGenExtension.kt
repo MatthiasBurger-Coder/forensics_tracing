@@ -17,6 +17,7 @@ abstract class BtmGenExtension @Inject constructor(
     val entryExit: Property<Boolean> = objects.property(Boolean::class.java)
     val trackedVars: ListProperty<String> = objects.listProperty(String::class.java)
     val includeJava: Property<Boolean> = objects.property(Boolean::class.java)
+    val includeTimestamp: Property<Boolean> = objects.property(Boolean::class.java)
     val outputDir: DirectoryProperty = objects.directoryProperty()
 
     init {
@@ -26,6 +27,7 @@ abstract class BtmGenExtension @Inject constructor(
         entryExit.convention(true)
         trackedVars.convention(emptyList())
         includeJava.convention(false)
+        includeTimestamp.convention(false)
         outputDir.convention(layout.buildDirectory.dir("forensics"))
     }
 }

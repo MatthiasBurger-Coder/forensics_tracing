@@ -21,6 +21,7 @@ class BtmGenPlugin : Plugin<Project> {
             task.entryExit.set(extension.entryExit)
             task.trackedVars.set(extension.trackedVars)
             task.includeJava.set(extension.includeJava)
+            task.includeTimestamp.set(extension.includeTimestamp)
             task.outputDir.set(extension.outputDir)
         }
     }
