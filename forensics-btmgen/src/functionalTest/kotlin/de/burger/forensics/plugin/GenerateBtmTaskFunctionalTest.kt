@@ -2,21 +2,17 @@ package de.burger.forensics.plugin
 
 import org.gradle.testkit.runner.GradleRunner
 import org.gradle.testkit.runner.TaskOutcome
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.io.TempDir
 import java.io.File
-import java.nio.file.Path
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import java.nio.file.Files
 
 class GenerateBtmTaskFunctionalTest {
 
-    @TempDir
-    lateinit var tempDir: Path
-
     @Test
-    fun `generates tracing rules for sample kotlin sources`() {
-        val projectDir = tempDir.toFile()
+    fun generatesTracingRulesForSampleKotlinSources() {
+        val projectDir = Files.createTempDirectory("btmgen-functional-test").toFile().apply { deleteOnExit() }
         writeSettings(projectDir)
         writeBuildScript(projectDir)
         writeSampleSource(projectDir)

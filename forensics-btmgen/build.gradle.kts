@@ -1,12 +1,12 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.9.23"
+    kotlin("jvm") version "2.2.0"
     id("java-gradle-plugin")
-    id("com.gradle.plugin-publish") version "1.2.1"
+    id("com.gradle.plugin-publish") version "1.3.1"
     id("maven-publish")
     id("signing")
-    id("io.github.gradle-nexus.publish-plugin") version "1.3.0"
+    id("io.github.gradle-nexus.publish-plugin") version "2.0.0"
 }
 
 group = "de.burger.forensics"
@@ -35,11 +35,10 @@ configurations[functionalTest.runtimeOnlyConfigurationName].extendsFrom(configur
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.9.23")
+    implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.0")
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
-    add("functionalTestImplementation", kotlin("test"))
     add("functionalTestImplementation", "org.junit.jupiter:junit-jupiter-api:5.10.2")
     add("functionalTestImplementation", gradleTestKit())
     add("functionalTestRuntimeOnly", "org.junit.jupiter:junit-jupiter-engine:5.10.2")
@@ -54,9 +53,8 @@ sourceSets {
 }
 
 tasks.withType<KotlinCompile>().configureEach {
-    kotlinOptions {
-        jvmTarget = "21"
-        freeCompilerArgs = freeCompilerArgs + listOf("-Xjvm-default=all")
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }
 
@@ -68,7 +66,7 @@ gradlePlugin {
     website.set("https://example.com/forensics-btmgen")
     vcsUrl.set("https://github.com/example/forensics-btmgen")
     plugins {
-        create("btmgen") {
+        register("btmgen") {
             id = "de.burger.forensics.btmgen"
             implementationClass = "de.burger.forensics.plugin.BtmGenPlugin"
             displayName = "Forensics Byteman Rule Generator"
