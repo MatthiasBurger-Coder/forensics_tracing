@@ -24,6 +24,14 @@ class BtmGenPlugin : Plugin<Project> {
             task.includeTimestamp.set(extension.includeTimestamp)
             task.outputDir.set(extension.outputDir)
             task.maxStringLength.set(extension.maxStringLength)
+            // New DSL options
+            task.pkgPrefixes.set(extension.pkgPrefixes)
+            task.includePatterns.set(extension.include)
+            task.excludePatterns.set(extension.exclude)
+            task.parallelism.set(extension.parallelism)
+            task.shardOutput.set(extension.shardOutput)
+            task.gzipOutput.set(extension.gzipOutput)
+            task.minBranchesPerMethod.set(extension.minBranchesPerMethod)
         }
     }
 }

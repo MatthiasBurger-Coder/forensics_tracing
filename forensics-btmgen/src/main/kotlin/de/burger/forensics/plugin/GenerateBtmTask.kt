@@ -1,5 +1,6 @@
 package de.burger.forensics.plugin
 
+import de.burger.forensics.plugin.engine.JavaRegexParser
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
@@ -22,7 +23,7 @@ import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
-import java.util.regex.Pattern
+import java.util.zip.GZIPOutputStream
 
 @CacheableTask
 abstract class GenerateBtmTask : DefaultTask() {
@@ -51,6 +52,28 @@ abstract class GenerateBtmTask : DefaultTask() {
     @get:Input
     abstract val maxStringLength: Property<Int>
 
+    // New DSL inputs
+    @get:Input
+    abstract val pkgPrefixes: ListProperty<String>
+
+    @get:Input
+    abstract val includePatterns: ListProperty<String>
+
+    @get:Input
+    abstract val excludePatterns: ListProperty<String>
+
+    @get:Input
+    abstract val parallelism: Property<Int>
+
+    @get:Input
+    abstract val shardOutput: Property<Int>
+
+    @get:Input
+    abstract val gzipOutput: Property<Boolean>
+
+    @get:Input
+    abstract val minBranchesPerMethod: Property<Int>
+
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -66,14 +89,142 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     private fun resolveFiles(withExtension: String): List<File> {
         val directories = srcDirs.orNull?.map { project.file(it) }?.filter { it.exists() } ?: emptyList()
+        val includes = includePatterns.orNull?.takeIf { it.isNotEmpty() }
+        val excludes = excludePatterns.orNull?.takeIf { it.isNotEmpty() } ?: emptyList()
         val result = mutableListOf<File>()
         directories.forEach { dir ->
             Files.walk(dir.toPath()).use { paths ->
                 paths.filter { Files.isRegularFile(it) && it.toString().endsWith(withExtension) }
-                    .forEach { result.add(it.toFile()) }
+                    .forEach { p ->
+                        val rel = dir.toPath().relativize(p).toString().replace('\\', '/')
+                        val incOk = includes?.any { globMatch(rel, it) } ?: true
+                        val excOk = excludes.none { globMatch(rel, it) }
+                        if (incOk && excOk) result.add(p.toFile())
+                    }
             }
         }
         return result.sortedBy { it.absolutePath }
+    }
+
+    private fun globMatch(path: String, pattern: String): Boolean {
+        // Convert simple glob (**/*.*) to regex
+        val regex = globToRegex(pattern)
+        return Regex(regex).matches(path)
+    }
+
+    private fun globToRegex(glob: String): String {
+        val sb = StringBuilder("^")
+        var i = 0
+        while (i < glob.length) {
+            val c = glob[i]
+            when (c) {
+                '*' -> {
+                    if (i + 1 < glob.length && glob[i + 1] == '*') {
+                        sb.append(".*")
+                        i++
+                    } else {
+                        sb.append("[^/]*")
+                    }
+                }
+                '?' -> sb.append(".")
+                '.', '(', ')', '+', '|', '^', '$', '@', '%' -> sb.append("\\").append(c)
+                '{' -> sb.append('(')
+                '}' -> sb.append(')')
+                ',' -> sb.append('|')
+                '[' -> sb.append('[')
+                ']' -> sb.append(']')
+                else -> sb.append(c)
+            }
+            i++
+        }
+        sb.append("$")
+        return sb.toString()
+    }
+
+    private fun extractClassName(rule: String): String? {
+        val m = Regex("(?m)^\\s*CLASS\\s+([\\w.$]+)").find(rule)
+        return m?.groupValues?.getOrNull(1)
+    }
+
+    private fun extractMethodKey(rule: String): String? {
+        val m = Regex("(?m)^\\s*RULE\\s+([\\w.$]+)\\.([A-Za-z0-9_]+):").find(rule)
+        return m?.let { it.groupValues[1] + "." + it.groupValues[2] }
+    }
+
+    private fun filterByPkgPrefixes(rules: List<String>, prefixes: List<String>): List<String> {
+        if (prefixes.isEmpty()) return rules
+        return rules.filter { rule ->
+            val cls = extractClassName(rule)
+            cls != null && prefixes.any { cls.startsWith(it) }
+        }
+    }
+
+    private fun filterByMinBranches(rules: List<String>, minBranches: Int): List<String> {
+        if (minBranches <= 0) return rules
+        val byMethod = rules.groupBy { extractMethodKey(it) }
+        val keepMethods = mutableSetOf<String>()
+        byMethod.forEach { (methodKey, list) ->
+            if (methodKey == null) return@forEach
+            val branchCount = list.count { r ->
+                r.contains(":if-") || r.contains(":is-") || r.contains(":when") || r.contains(":case")
+            }
+            if (branchCount >= minBranches) keepMethods += methodKey
+        }
+        return rules.filter { r ->
+            val key = extractMethodKey(r)
+            key == null || keepMethods.contains(key)
+        }
+    }
+
+    private fun writeSharded(rules: List<String>, header: String, outputDirectory: File) {
+        val shards = shardOutput.getOrElse(1).coerceAtLeast(1)
+        val gzip = gzipOutput.getOrElse(false)
+        if (shards <= 1) {
+            val file = outputDirectory.resolve("tracing.btm" + if (gzip) ".gz" else "")
+            writeFile(file, header, rules, gzip)
+            return
+        }
+        val perShard = ((rules.size + shards - 1) / shards).coerceAtLeast(1)
+        var index = 0
+        for (s in 0 until shards) {
+            val from = s * perShard
+            if (from >= rules.size) break
+            val to = minOf((s + 1) * perShard, rules.size)
+            val part = rules.subList(from, to)
+            val name = "tracing-%04d.btm".format(s + 1) + if (gzip) ".gz" else ""
+            val file = outputDirectory.resolve(name)
+            writeFile(file, header, part, gzip)
+            index += part.size
+        }
+    }
+
+    private fun writeFile(file: File, header: String, rules: List<String>, gzip: Boolean) {
+        if (gzip) {
+            file.outputStream().use { fos ->
+                GZIPOutputStream(fos).bufferedWriter(Charsets.UTF_8).use { w ->
+                    w.append(header)
+                    if (rules.isEmpty()) {
+                        w.append("# No matching sources were found.\n")
+                    } else {
+                        w.append('\n')
+                        w.append(rules.joinToString("\n\n"))
+                        w.append('\n')
+                    }
+                }
+            }
+        } else {
+            val content = buildString {
+                append(header)
+                if (rules.isEmpty()) {
+                    append("# No matching sources were found.\n")
+                } else {
+                    append('\n')
+                    append(rules.joinToString("\n\n"))
+                    append('\n')
+                }
+            }
+            file.writeText(content)
+        }
     }
 
     @TaskAction
@@ -82,11 +233,15 @@ abstract class GenerateBtmTask : DefaultTask() {
         if (!outputDirectory.exists()) {
             outputDirectory.mkdirs()
         }
-        val outputFile = outputDirectory.resolve("tracing.btm")
         val helper = helperFqn.get()
-        val prefix = packagePrefix.orNull?.takeIf { it.isNotBlank() }
+        val legacyPrefix = packagePrefix.orNull?.takeIf { it.isNotBlank() }
+        val allPkgPrefixes = buildList {
+            pkgPrefixes.orNull?.filter { it.isNotBlank() }?.let { addAll(it) }
+            if (legacyPrefix != null) add(legacyPrefix)
+        }
         val tracked = trackedVars.orNull?.toSet() ?: emptySet()
         val includeEntryExit = entryExit.getOrElse(true)
+        val maxLen = maxStringLength.getOrElse(0)
 
         val rules = mutableListOf<String>()
         val ktFiles = kotlinSourceFiles
@@ -97,7 +252,7 @@ abstract class GenerateBtmTask : DefaultTask() {
                 ktFiles.forEach { file ->
                     val text = file.readText()
                     val ktFile = psiFactory.createFile(file.name, text)
-                    val fileRules = processKotlinFile(ktFile, text, helper, prefix, tracked, includeEntryExit)
+                    val fileRules = processKotlinFile(ktFile, text, helper, legacyPrefix, tracked, includeEntryExit)
                     rules += fileRules
                 }
             } finally {
@@ -106,12 +261,20 @@ abstract class GenerateBtmTask : DefaultTask() {
         }
 
         if (includeJava.getOrElse(false)) {
-            javaSourceFiles.forEach { file ->
+            val scanner = JavaRegexParser()
+            // Simple parallelism for Java files only
+            val par = parallelism.getOrElse(1)
+            val stream = if (par > 1) javaSourceFiles.parallelStream() else javaSourceFiles.stream()
+            stream.forEach { file ->
                 val text = file.readText()
-                val fileRules = processJavaFile(text, helper, prefix, includeEntryExit)
-                rules += fileRules
+                val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
+                synchronized(rules) { rules += fileRules }
             }
         }
+
+        // Post-process: filter by pkg prefixes & minBranches
+        var finalRules = if (allPkgPrefixes.isNotEmpty()) filterByPkgPrefixes(rules, allPkgPrefixes) else rules
+        finalRules = filterByMinBranches(finalRules, minBranchesPerMethod.getOrElse(0))
 
         val header = buildString {
             if (includeTimestamp.getOrElse(false)) {
@@ -124,9 +287,9 @@ abstract class GenerateBtmTask : DefaultTask() {
             append("# Helper: ")
             append(helper)
             append('\n')
-            if (prefix != null) {
-                append("# Package prefix filter: ")
-                append(prefix)
+            if (allPkgPrefixes.isNotEmpty()) {
+                append("# Package prefix filters: ")
+                append(allPkgPrefixes.joinToString(", "))
                 append('\n')
             }
             if (tracked.isNotEmpty()) {
@@ -136,17 +299,7 @@ abstract class GenerateBtmTask : DefaultTask() {
             }
         }
 
-        val content = buildString {
-            append(header)
-            if (rules.isEmpty()) {
-                append("# No matching Kotlin sources were found.\n")
-            } else {
-                append('\n')
-                rules.joinTo(this, separator = "\n\n")
-                append('\n')
-            }
-        }
-        outputFile.writeText(content)
+        writeSharded(finalRules, header, outputDirectory)
     }
 
     private fun createEnvironment(): EnvironmentHolder {
@@ -418,117 +571,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         return listOf(rule)
     }
 
-    private fun processJavaFile(
-        text: String,
-        helper: String,
-        prefix: String?,
-        includeEntryExit: Boolean
-    ): List<String> {
-        val lineIndex = LineIndex(text)
-        val packageName = Regex("""package\s+([a-zA-Z0-9_.]+);""").find(text)?.groupValues?.get(1)?.trim()
-        val classMatch = Regex("""class\s+([A-Za-z0-9_]+)""").find(text) ?: return emptyList()
-        val className = classMatch.groupValues[1]
-        val fqcn = if (packageName.isNullOrBlank()) className else "$packageName.$className"
-        if (prefix != null && !fqcn.startsWith(prefix)) {
-            return emptyList()
-        }
-        val rules = mutableListOf<String>()
-        val methodPattern = Pattern.compile(
-            "(?m)^[\\t ]*(?:public|protected|private)?[\\t ]*(?:static|final|synchronized|native|abstract|default|strictfp)?[\\t ]*[\\w<>\\[\\]]+[\\t ]+(\\w+)[\\t ]*\\([^;{]*\\)[\\t ]*\\{"
-        )
-        val matcher = methodPattern.matcher(text)
-        while (matcher.find()) {
-            val methodName = matcher.group(1)
-            val braceIndex = text.indexOf('{', matcher.end() - 1)
-            if (braceIndex == -1) continue
-            val bodyEnd = findMatchingBrace(text, braceIndex)
-            if (includeEntryExit) {
-                rules += buildEntryRule(helper, fqcn, methodName)
-                rules += buildExitRule(helper, fqcn, methodName)
-            }
-            val bodyText = text.substring(braceIndex + 1, bodyEnd)
-            val offsetBase = braceIndex + 1
-            val ifRegex = Regex("""if\s*\(([^)]*)\)""")
-            ifRegex.findAll(bodyText).forEach { match ->
-                val condition = match.groupValues[1]
-                val offset = offsetBase + match.range.first
-                val line = lineIndex.lineAt(offset)
-                val escaped = escape(condition)
-                val trueRule = """
-                    RULE ${fqcn}.${methodName}:${line}:if-true
-                    CLASS ${fqcn}
-                    METHOD ${methodName}(..)
-                    HELPER ${helper}
-                    AT LINE ${line}
-                    IF (${condition})
-                    DO iff("${fqcn}","${methodName}",${line},"${escaped}", true)
-                    ENDRULE
-                """.trimIndent()
-                val falseRule = """
-                    RULE ${fqcn}.${methodName}:${line}:if-false
-                    CLASS ${fqcn}
-                    METHOD ${methodName}(..)
-                    HELPER ${helper}
-                    AT LINE ${line}
-                    IF (!(${condition}))
-                    DO iff("${fqcn}","${methodName}",${line},"${escaped}", false)
-                    ENDRULE
-                """.trimIndent()
-                rules += listOf(trueRule, falseRule)
-            }
-            val switchRegex = Regex("""switch\s*\(([^)]*)\)""")
-            switchRegex.findAll(bodyText).forEach { match ->
-                val selector = match.groupValues[1]
-                val offset = offsetBase + match.range.first
-                val line = lineIndex.lineAt(offset)
-                val escapedSelector = escape(selector)
-                val switchRule = """
-                    RULE ${fqcn}.${methodName}:${line}:when
-                    CLASS ${fqcn}
-                    METHOD ${methodName}(..)
-                    HELPER ${helper}
-                    AT LINE ${line}
-                    DO sw("${fqcn}","${methodName}",${line},"${escapedSelector}")
-                    ENDRULE
-                """.trimIndent()
-                rules += switchRule
-            }
-            val caseRegex = Regex("""(?m)^[\\t ]*(case\s+[^:]+|default)\s*:""")
-            caseRegex.findAll(bodyText).forEach { match ->
-                val label = match.groupValues[1].replace(Regex("\\s+"), " ").trim()
-                val offset = offsetBase + match.range.first
-                val line = lineIndex.lineAt(offset)
-                val escapedLabel = escape(label)
-                val caseRule = """
-                    RULE ${fqcn}.${methodName}:${line}:case
-                    CLASS ${fqcn}
-                    METHOD ${methodName}(..)
-                    HELPER ${helper}
-                    AT LINE ${line}
-                    DO kase("${fqcn}","${methodName}",${line},"${escapedLabel}")
-                    ENDRULE
-                """.trimIndent()
-                rules += caseRule
-            }
-        }
-        return rules
-    }
 
-    private fun findMatchingBrace(text: String, openIndex: Int): Int {
-        var depth = 0
-        for (i in openIndex until text.length) {
-            when (text[i]) {
-                '{' -> depth++
-                '}' -> {
-                    depth--
-                    if (depth == 0) {
-                        return i
-                    }
-                }
-            }
-        }
-        return text.length - 1
-    }
 
     private fun escape(value: String): String {
         val limit = maxStringLength.getOrElse(0)

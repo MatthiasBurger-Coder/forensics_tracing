@@ -12,12 +12,20 @@ abstract class BtmGenExtension @Inject constructor(
     layout: ProjectLayout
 ) {
     val srcDirs: ListProperty<String> = objects.listProperty(String::class.java)
+    // Legacy single prefix kept for backward-compat; if non-empty it will be merged into pkgPrefixes
     val pkgPrefix: Property<String> = objects.property(String::class.java)
+    val pkgPrefixes: ListProperty<String> = objects.listProperty(String::class.java)
     val helperFqn: Property<String> = objects.property(String::class.java)
     val entryExit: Property<Boolean> = objects.property(Boolean::class.java)
     val trackedVars: ListProperty<String> = objects.listProperty(String::class.java)
     val includeJava: Property<Boolean> = objects.property(Boolean::class.java)
     val includeTimestamp: Property<Boolean> = objects.property(Boolean::class.java)
+    val include: ListProperty<String> = objects.listProperty(String::class.java)
+    val exclude: ListProperty<String> = objects.listProperty(String::class.java)
+    val parallelism: Property<Int> = objects.property(Int::class.java)
+    val shardOutput: Property<Int> = objects.property(Int::class.java)
+    val gzipOutput: Property<Boolean> = objects.property(Boolean::class.java)
+    val minBranchesPerMethod: Property<Int> = objects.property(Int::class.java)
     val outputDir: DirectoryProperty = objects.directoryProperty()
     /**
      * Maximum number of characters allowed when embedding source snippets or values into
@@ -34,11 +42,18 @@ abstract class BtmGenExtension @Inject constructor(
     init {
         srcDirs.convention(listOf("src/main/java", "src/main/kotlin"))
         pkgPrefix.convention("")
+        pkgPrefixes.convention(emptyList())
         helperFqn.convention("de.burger.forensics.ForensicsHelper")
         entryExit.convention(true)
         trackedVars.convention(emptyList())
         includeJava.convention(true)
         includeTimestamp.convention(false)
+        include.convention(emptyList())
+        exclude.convention(emptyList())
+        parallelism.convention(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+        shardOutput.convention(1)
+        gzipOutput.convention(false)
+        minBranchesPerMethod.convention(0)
         outputDir.convention(layout.buildDirectory.dir("forensics"))
         maxStringLength.convention(0)
     }
