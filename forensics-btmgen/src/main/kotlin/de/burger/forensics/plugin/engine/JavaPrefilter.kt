@@ -8,17 +8,17 @@ private val stringLiteralRegex = Regex("\"(?:[^\"\\\\]|\\\\.)*\"")
 private val charLiteralRegex = Regex("'(?:[^'\\\\]|\\\\.)*'")
 
 fun prefilterJava(source: String): String {
-    val withoutBlock = blockCommentRegex.replace(source) { match ->
-        blankWithNewlines(match.value)
-    }
-    val withoutLine = lineCommentRegex.replace(withoutBlock) { match ->
-        blankWithNewlines(match.value)
-    }
-    val withoutStrings = stringLiteralRegex.replace(withoutLine) { match ->
+    val withoutStrings = stringLiteralRegex.replace(source) { match ->
         replaceLiteralPreservingLength(match.value, '"')
     }
-    return charLiteralRegex.replace(withoutStrings) { match ->
+    val withoutChars = charLiteralRegex.replace(withoutStrings) { match ->
         replaceLiteralPreservingLength(match.value, '\'')
+    }
+    val withoutBlock = blockCommentRegex.replace(withoutChars) { match ->
+        blankWithNewlines(match.value)
+    }
+    return lineCommentRegex.replace(withoutBlock) { match ->
+        blankWithNewlines(match.value)
     }
 }
 

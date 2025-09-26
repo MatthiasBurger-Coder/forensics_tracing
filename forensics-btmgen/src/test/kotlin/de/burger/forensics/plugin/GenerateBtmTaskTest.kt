@@ -60,7 +60,7 @@ class GenerateBtmTaskTest {
         task.outputDir.set(project.layout.dir(project.provider { outputDir.toFile() }))
 
         task.generate()
-        val outputFile = outputDir.resolve("tracing-0001.btm").toFile()
+        val outputFile = outputDir.resolve("tracing-0001-00001.btm").toFile()
         val firstRun = outputFile.readText()
 
         task.generate()

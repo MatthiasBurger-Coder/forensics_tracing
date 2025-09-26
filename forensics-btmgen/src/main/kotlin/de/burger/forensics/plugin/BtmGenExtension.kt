@@ -26,6 +26,11 @@ abstract class BtmGenExtension @Inject constructor(
     val shardsProperty: Property<Int> = objects.property(Int::class.java)
     val gzipOutputProperty: Property<Boolean> = objects.property(Boolean::class.java)
     val filePrefixProperty: Property<String> = objects.property(String::class.java)
+    val rotateMaxBytesPerFileProperty: Property<Long> = objects.property(Long::class.java)
+    val rotateIntervalSecondsProperty: Property<Long> = objects.property(Long::class.java)
+    val flushThresholdBytesProperty: Property<Int> = objects.property(Int::class.java)
+    val flushIntervalMillisProperty: Property<Long> = objects.property(Long::class.java)
+    val writerThreadSafeProperty: Property<Boolean> = objects.property(Boolean::class.java)
     val minBranchesPerMethod: Property<Int> = objects.property(Int::class.java)
     val safeMode: Property<Boolean> = objects.property(Boolean::class.java)
     val forceHelperForWhitelist: Property<Boolean> = objects.property(Boolean::class.java)
@@ -58,6 +63,11 @@ abstract class BtmGenExtension @Inject constructor(
         shardsProperty.convention(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
         gzipOutputProperty.convention(false)
         filePrefixProperty.convention("tracing-")
+        rotateMaxBytesPerFileProperty.convention(4L * 1024 * 1024)
+        rotateIntervalSecondsProperty.convention(0L)
+        flushThresholdBytesProperty.convention(64 * 1024)
+        flushIntervalMillisProperty.convention(2000L)
+        writerThreadSafeProperty.convention(false)
         minBranchesPerMethod.convention(0)
         outputDir.convention(layout.buildDirectory.dir("forensics"))
         maxStringLength.convention(0)
@@ -82,5 +92,35 @@ abstract class BtmGenExtension @Inject constructor(
         get() = filePrefixProperty.orNull ?: "tracing-"
         set(value) {
             filePrefixProperty.set(value)
+        }
+
+    var rotateMaxBytesPerFile: Long
+        get() = rotateMaxBytesPerFileProperty.orNull ?: 4L * 1024 * 1024
+        set(value) {
+            rotateMaxBytesPerFileProperty.set(value)
+        }
+
+    var rotateIntervalSeconds: Long
+        get() = rotateIntervalSecondsProperty.orNull ?: 0L
+        set(value) {
+            rotateIntervalSecondsProperty.set(value)
+        }
+
+    var flushThresholdBytes: Int
+        get() = flushThresholdBytesProperty.orNull ?: 64 * 1024
+        set(value) {
+            flushThresholdBytesProperty.set(value)
+        }
+
+    var flushIntervalMillis: Long
+        get() = flushIntervalMillisProperty.orNull ?: 2000L
+        set(value) {
+            flushIntervalMillisProperty.set(value)
+        }
+
+    var writerThreadSafe: Boolean
+        get() = writerThreadSafeProperty.orNull ?: false
+        set(value) {
+            writerThreadSafeProperty.set(value)
         }
 }
