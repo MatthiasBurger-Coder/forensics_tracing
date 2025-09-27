@@ -1,5 +1,6 @@
 package de.burger.forensics.plugin
 
+import de.burger.forensics.plugin.engine.JavaPrefilter
 import de.burger.forensics.plugin.engine.JavaRegexParser
 import de.burger.forensics.plugin.engine.SourceFileGuards
 import de.burger.forensics.plugin.io.ShardedWriter
@@ -42,6 +43,14 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     private companion object {
         const val SAFE_EVAL_FQCN: String = "org.example.trace.SafeEval"
+        private val JAVA_PACKAGE_REGEX = Regex("(?m)^\\s*package\\s+([a-zA-Z0-9_.]+)\\s*;")
+        private val JAVA_CLASS_REGEX = Regex(
+            "(?m)^\\s*(?:@[\\w.$]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|sealed)\\b|non-sealed)\\s+)*class\\s+([A-Za-z0-9_]+)"
+        )
+        private val JAVA_METHOD_REGEX = Regex(
+            "(?m)^\\s*(?:@[\\w.$]+(?:\\([^)]*\\))?\\s*)*(?:\\b(?:public|protected|private|abstract|final|static|strictfp|synchronized|native|default)\\b\\s+)*(?:<[^>]+>\\s*)?[\\w$<>\\[\\],.?\\s]+\\s+([A-Za-z0-9_]+)\\s*\\([^)]*\\)\\s*\\{"
+        )
+        private val ENTRY_EXIT_RULE_REGEX = Regex("^RULE\\s+(?:enter|exit)@([\\w.$]+)\\.([A-Za-z0-9_]+)", RegexOption.MULTILINE)
     }
 
     @get:Input
@@ -162,6 +171,55 @@ abstract class GenerateBtmTask : DefaultTask() {
     private fun extractMethodKey(rule: String): String? {
         val m = Regex("(?m)^\\s*RULE\\s+([\\w.$]+)\\.([A-Za-z0-9_]+):").find(rule)
         return m?.let { it.groupValues[1] + "." + it.groupValues[2] }
+    }
+
+    private fun extractEntryExitMethod(rule: String): String? {
+        val m = ENTRY_EXIT_RULE_REGEX.find(rule)
+        return m?.let { "${it.groupValues[1]}.${it.groupValues[2]}" }
+    }
+
+    private fun findMissingJavaMethods(text: String, seenJavaMethods: Set<String>): Set<String> {
+        val sanitized = JavaPrefilter.prefilterJava(text)
+        val pkg = JAVA_PACKAGE_REGEX.find(sanitized)?.groupValues?.getOrNull(1).orEmpty()
+        val missing = mutableSetOf<String>()
+        var searchIndex = 0
+        while (true) {
+            val classMatch = JAVA_CLASS_REGEX.find(sanitized, searchIndex) ?: break
+            val openIndex = sanitized.indexOf('{', classMatch.range.last + 1)
+            if (openIndex < 0) {
+                searchIndex = classMatch.range.last + 1
+                continue
+            }
+            val closeIndex = findMatchingBrace(sanitized, openIndex)
+            val className = classMatch.groupValues[1]
+            val fqcn = if (pkg.isBlank()) className else "$pkg.$className"
+            val body = sanitized.substring(openIndex + 1, closeIndex)
+            JAVA_METHOD_REGEX.findAll(body).forEach { methodMatch ->
+                val methodName = methodMatch.groupValues[1]
+                val methodKey = "${fqcn}.${methodName}"
+                if (methodKey !in seenJavaMethods) {
+                    missing.add(methodKey)
+                }
+            }
+            searchIndex = closeIndex + 1
+        }
+        return missing
+    }
+
+    private fun findMatchingBrace(text: String, openIndex: Int): Int {
+        var depth = 0
+        for (i in openIndex until text.length) {
+            when (text[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) {
+                        return i
+                    }
+                }
+            }
+        }
+        return text.length - 1
     }
 
     @TaskAction
@@ -393,11 +451,23 @@ abstract class GenerateBtmTask : DefaultTask() {
         // Fallback: ensure Java methods always have entry/exit rules even if no AST events were detected
         if (includeJava.getOrElse(false)) {
             val regex = JavaRegexParser()
+            val seenJavaMethods = seenMethods.asSequence()
+                .filter { it.startsWith("java:") }
+                .mapNotNull { key ->
+                    val parts = key.split(':', limit = 4)
+                    if (parts.size == 4) "${parts[1]}.${parts[2]}" else null
+                }
+                .toSet()
             javaSourceFiles.forEach { file ->
                 if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
                 val text = file.readText()
+                val missingMethods = findMissingJavaMethods(text, seenJavaMethods)
+                if (missingMethods.isEmpty()) return@forEach
                 val fileRules = regex.scan(text, helper, legacyPrefix, includeEntryExit, maxStringLength.getOrElse(0))
-                rules += fileRules
+                rules += fileRules.filter { rule ->
+                    val methodKey = extractMethodKey(rule) ?: extractEntryExitMethod(rule)
+                    methodKey == null || methodKey in missingMethods
+                }
             }
         }
 

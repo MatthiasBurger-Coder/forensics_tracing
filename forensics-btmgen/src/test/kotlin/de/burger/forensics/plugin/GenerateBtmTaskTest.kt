@@ -46,6 +46,7 @@ class GenerateBtmTaskTest {
         task.entryExit.set(true)
         task.trackedVars.set(emptyList())
         task.includeJava.set(true)
+        task.useAstScanner.set(true)
         task.includeTimestamp.set(false)
         task.maxStringLength.set(200)
         task.pkgPrefixes.set(emptyList())
@@ -72,6 +73,55 @@ class GenerateBtmTaskTest {
         val betaRuleIndex = firstRun.indexOf("RULE enter@com.example.Beta.fast")
         assertTrue(alphaRuleIndex >= 0 && betaRuleIndex >= 0, "Expected rules for both classes to be present")
         assertTrue(alphaRuleIndex < betaRuleIndex, "Alpha rules should precede Beta rules in deterministic output\n$firstRun")
+    }
+
+    @Test
+    fun `java entry exit rules emitted once with ast scanner`() {
+        val project = ProjectBuilder.builder().build()
+        val task = project.tasks.register("generateBtmOnce", GenerateBtmTask::class.java).get()
+
+        val sourceDir = Files.createTempDirectory("btmgen-java-ast").toFile()
+        val javaSource = """
+            package com.example;
+
+            public class Single {
+                public void demo(int value) {
+                    if (value > 0) {
+                        System.out.println(value);
+                    }
+                }
+            }
+        """.trimIndent()
+        File(sourceDir, "Single.java").writeText(javaSource)
+
+        task.srcDirs.set(listOf(sourceDir.absolutePath))
+        task.packagePrefix.set("com.example")
+        task.helperFqn.set("helper.Helper")
+        task.entryExit.set(true)
+        task.trackedVars.set(emptyList())
+        task.includeJava.set(true)
+        task.includeTimestamp.set(false)
+        task.maxStringLength.set(200)
+        task.pkgPrefixes.set(emptyList())
+        task.includePatterns.set(emptyList())
+        task.excludePatterns.set(emptyList())
+        task.parallelism.set(1)
+        task.shards.set(1)
+        task.gzipOutput.set(false)
+        task.minBranchesPerMethod.set(0)
+
+        val outputDir = Files.createTempDirectory("btm-task-output-single")
+        task.outputDir.set(project.layout.dir(project.provider { outputDir.toFile() }))
+
+        task.generate()
+
+        val outputFile = outputDir.resolve("tracing-0001-00001.btm").toFile()
+        val content = outputFile.readText()
+        val enterCount = Regex("RULE\\s+enter@com\\.example\\.Single\\.demo\\b").findAll(content).count()
+        val exitCount = Regex("RULE\\s+exit@com\\.example\\.Single\\.demo\\b").findAll(content).count()
+
+        assertEquals(1, enterCount, "Entry rule should be emitted exactly once")
+        assertEquals(1, exitCount, "Exit rule should be emitted exactly once")
     }
 }
 
