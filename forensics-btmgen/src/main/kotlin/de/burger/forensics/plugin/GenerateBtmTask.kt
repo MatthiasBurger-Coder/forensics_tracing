@@ -15,7 +15,6 @@ import de.burger.forensics.plugin.util.HashUtil
 import de.burger.forensics.plugin.util.RuleIdUtil
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.file.ProjectLayout
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
@@ -36,15 +35,12 @@ import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
-import javax.inject.Inject
 
 @CacheableTask
 abstract class GenerateBtmTask : DefaultTask() {
 
-    private val conditionStrategyFactory: StrategyFactory = DefaultStrategyFactory()
-
-    @get:Inject
-    protected abstract val layout: ProjectLayout
+    @get:Internal
+    protected val conditionStrategyFactory: StrategyFactory by lazy { DefaultStrategyFactory() }
 
     private companion object {
         const val SAFE_EVAL_FQCN: String = "org.example.trace.SafeEval"
@@ -193,7 +189,7 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     private fun resolvePath(path: String): File {
         val file = File(path)
-        return if (file.isAbsolute) file else layout.projectDirectory.file(path).asFile
+        return if (file.isAbsolute) file else project.layout.projectDirectory.file(path).asFile
     }
 
     private fun extractClassName(rule: String): String? {
@@ -255,12 +251,14 @@ abstract class GenerateBtmTask : DefaultTask() {
         return text.length - 1
     }
 
-    private fun ensureLogFile(): java.io.File? {
+    private fun ensureLogFile(): File? {
         return try {
             if (!logToFile.getOrElse(true)) return null
             val relative = logFilePath.orNull?.takeIf { it.isNotBlank() } ?: "logs/forensics-btmgen.log"
-            val file = java.io.File(layout.projectDirectory.asFile, relative)
-            file.parentFile?.let { if (!it.exists()) it.mkdirs() }
+            val baseDir = project.layout.projectDirectory.asFile
+            val file = File(baseDir, relative)
+            val parent = file.parentFile
+            if (parent != null && !parent.exists()) parent.mkdirs()
             if (!file.exists()) file.createNewFile()
             file
         } catch (_: Throwable) {
@@ -283,10 +281,13 @@ abstract class GenerateBtmTask : DefaultTask() {
     @TaskAction
     fun generate() {
         // Ensure a log file is always present for this task run
+        logger.info("Start generate")
         ensureLogFile()
         if (useAstScanner.getOrElse(true)) {
+            logger.info("Start generateWithAst")
             generateWithAst()
         } else {
+            logger.info("Start generateLegacy")
             generateLegacy()
         }
     }
@@ -383,15 +384,51 @@ abstract class GenerateBtmTask : DefaultTask() {
                     javaSourceFiles.parallelStream().forEachOrdered { file ->
                         if (SourceFileGuards.shouldSkipLargeFile(file, limit, debugSink)) return@forEachOrdered
                         val text = file.readText()
-                        val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
-                        dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
+                        try {
+                            val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
+                            dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
+                        } catch (e: StackOverflowError) {
+                            if (shouldLog(LogLevel.WARN)) {
+                                logger.warn("Skipping Java file due to StackOverflowError during scan: ${file} -> ${e.message}")
+                                fileLog(
+                                    "WARN",
+                                    "Skipping Java file due to StackOverflowError during scan: ${file} -> ${e.message}"
+                                )
+                            }
+                        } catch (t: Throwable) {
+                            if (shouldLog(LogLevel.WARN)) {
+                                logger.warn("Skipping Java file due to unexpected error during scan: ${file} -> ${t.message}")
+                                fileLog(
+                                    "WARN",
+                                    "Skipping Java file due to unexpected error during scan: ${file} -> ${t.message}"
+                                )
+                            }
+                        }
                     }
                 } else {
                     javaSourceFiles.forEach { file ->
                         if (SourceFileGuards.shouldSkipLargeFile(file, limit, debugSink)) return@forEach
                         val text = file.readText()
-                        val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
-                        dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
+                        try {
+                            val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
+                            dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
+                        } catch (e: StackOverflowError) {
+                            if (shouldLog(LogLevel.WARN)) {
+                                logger.warn("Skipping Java file due to StackOverflowError during scan: ${file} -> ${e.message}")
+                                fileLog(
+                                    "WARN",
+                                    "Skipping Java file due to StackOverflowError during scan: ${file} -> ${e.message}"
+                                )
+                            }
+                        } catch (t: Throwable) {
+                            if (shouldLog(LogLevel.WARN)) {
+                                logger.warn("Skipping Java file due to unexpected error during scan: ${file} -> ${t.message}")
+                                fileLog(
+                                    "WARN",
+                                    "Skipping Java file due to unexpected error during scan: ${file} -> ${t.message}"
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -556,10 +593,19 @@ abstract class GenerateBtmTask : DefaultTask() {
                 val text = file.readText()
                 val missingMethods = findMissingJavaMethods(text, seenJavaMethods)
                 if (missingMethods.isEmpty()) return@forEach
-                val fileRules = regex.scan(text, helper, legacyPrefix, includeEntryExit, maxStringLength.getOrElse(0))
-                rules += fileRules.filter { rule ->
-                    val methodKey = extractMethodKey(rule) ?: extractEntryExitMethod(rule)
-                    methodKey == null || methodKey in missingMethods
+                try {
+                    val fileRules =
+                        regex.scan(text, helper, legacyPrefix, includeEntryExit, maxStringLength.getOrElse(0))
+                    rules += fileRules.filter { rule ->
+                        val methodKey = extractMethodKey(rule) ?: extractEntryExitMethod(rule)
+                        methodKey == null || methodKey in missingMethods
+                    }
+                } catch (e: StackOverflowError) {
+                    // English comments only inside code:
+                    // Fail-safe: Regex fallback occasionally hits catastrophic backtracking.
+                    // We log and skip this file to keep the task alive.
+                    logger.error("Regex fallback StackOverflow in file: ${file.absolutePath}. Skipping this file.", e)
+                    fileLog("ERROR", "Regex fallback StackOverflow: ${file.absolutePath}")
                 }
             }
         }

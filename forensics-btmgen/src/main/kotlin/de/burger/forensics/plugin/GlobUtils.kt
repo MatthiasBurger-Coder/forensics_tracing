@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap
 private val globCache = ConcurrentHashMap<String, Regex>()
 private val pathMatcherCache = ConcurrentHashMap<String, PathMatcher>()
 
+// This must be pure; never call globToRegexCached() from here. No caching, no indirect recursion.
 fun globToRegex(glob: String): String {
     val sb = StringBuilder("^")
     var i = 0

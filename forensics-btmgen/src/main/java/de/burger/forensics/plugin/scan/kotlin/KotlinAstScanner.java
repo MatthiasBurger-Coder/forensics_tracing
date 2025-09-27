@@ -5,8 +5,8 @@ import de.burger.forensics.plugin.scan.SourceScanner;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -34,10 +34,24 @@ public final class KotlinAstScanner implements SourceScanner {
     public List<ScanEvent> scan(Path root, List<String> includePkgs, List<String> excludePkgs) {
         var out = new ArrayList<ScanEvent>();
         if (root == null) return out;
-        try (var stream = Files.walk(root)) {
-            for (Path path : stream.filter(p -> p.toString().endsWith(".kt")).toList()) {
-                scanFile(path, includePkgs, excludePkgs, out);
-            }
+        // Walk filesystem with bounded depth and skip directory symlinks to avoid pathological recursion.
+        try {
+            Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), 64, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    if (Files.isSymbolicLink(dir)) return FileVisitResult.SKIP_SUBTREE;
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    String name = file.getFileName().toString();
+                    if (name.endsWith(".kt")) {
+                        scanFile(file, includePkgs, excludePkgs, out);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
         } catch (IOException ignored) {
             // ignore
         }

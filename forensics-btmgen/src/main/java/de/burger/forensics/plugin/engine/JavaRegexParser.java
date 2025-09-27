@@ -12,12 +12,12 @@ public class JavaRegexParser implements JavaScanner {
     private static final Pattern PACKAGE_PATTERN =
             Pattern.compile("(?m)^\\s*package\\s+([a-zA-Z0-9_.]+)\\s*;");
     private static final Pattern CLASS_PATTERN = Pattern.compile(
-            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|sealed)\\b|non-sealed)\\s+)*class\\s+([A-Za-z0-9_]+)");
+            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*+\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|sealed)\\b|non-sealed)\\s+)*class\\s+([A-Za-z0-9_]+)");
     private static final Pattern METHOD_PATTERN = Pattern.compile(
-            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:\\b(?:public|protected|private|abstract|final|static|strictfp|synchronized|native|default)\\b\\s+)*(?:<[^>]+>\\s*)?[\\w$<>\\[\\],.?\\s]+\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*\\{");
-    private static final Pattern IF_PATTERN = Pattern.compile("\\bif\\s*\\((.*?)\\)");
-    private static final Pattern SWITCH_PATTERN = Pattern.compile("\\bswitch\\s*\\((.*?)\\)");
-    private static final Pattern CASE_PATTERN = Pattern.compile("(?m)^[\\t ]*(case\\s+[^:]+|default)\\s*:");
+            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*+\\))?\\s*)*(?:\\b(?:public|protected|private|abstract|final|static|strictfp|synchronized|native|default)\\b\\s+)*(?:<[^>]*+>\\s*)?[\\w$<>\\[\\],.?\\s]+\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*+)\\)\\s*\\{");
+    private static final Pattern IF_PATTERN = Pattern.compile("\\bif\\s*\\(([^)]*+)\\)");
+    private static final Pattern SWITCH_PATTERN = Pattern.compile("\\bswitch\\s*\\(([^)]*+)\\)");
+    private static final Pattern CASE_PATTERN = Pattern.compile("(?m)^[\\t ]*(case\\s+[^:]*+|default)\\s*:");
     private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
 
     @Override

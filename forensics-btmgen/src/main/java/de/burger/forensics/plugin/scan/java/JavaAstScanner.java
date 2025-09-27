@@ -20,9 +20,10 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeS
 import de.burger.forensics.plugin.scan.ScanEvent;
 import de.burger.forensics.plugin.scan.SourceScanner;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -42,19 +43,33 @@ public final class JavaAstScanner implements SourceScanner {
             }
         }
         StaticJavaParser.getParserConfiguration().setSymbolResolver(new JavaSymbolSolver(typeSolver));
-        try (var stream = Files.walk(root)) {
-            for (Path path : stream.filter(p -> p.toString().endsWith(".java")).toList()) {
-                try {
-                    CompilationUnit cu = StaticJavaParser.parse(path);
-                    String pkg = cu.getPackageDeclaration().map(NodeWithName::getNameAsString).orElse("");
-                    if (!include(pkg, includePkgs) || exclude(pkg, excludePkgs)) {
-                        continue;
-                    }
-                    cu.findAll(MethodDeclaration.class).forEach(md -> collectMethodEvents(md, out, pkg));
-                } catch (IOException | RuntimeException ignored) {
-                    // Ignore parsing failures for now.
+
+        // Walk filesystem with bounded depth and skip directory symlinks to avoid pathological recursion.
+        try {
+            Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), 64, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    if (Files.isSymbolicLink(dir)) return FileVisitResult.SKIP_SUBTREE;
+                    return FileVisitResult.CONTINUE;
                 }
-            }
+
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    String name = file.getFileName().toString();
+                    if (!name.endsWith(".java")) return FileVisitResult.CONTINUE;
+                    try {
+                        CompilationUnit cu = StaticJavaParser.parse(file);
+                        String pkg = cu.getPackageDeclaration().map(NodeWithName::getNameAsString).orElse("");
+                        if (!include(pkg, includePkgs) || exclude(pkg, excludePkgs)) {
+                            return FileVisitResult.CONTINUE;
+                        }
+                        cu.findAll(MethodDeclaration.class).forEach(md -> collectMethodEvents(md, out, pkg));
+                    } catch (IOException | RuntimeException ignored) {
+                        // Ignore parsing failures for now.
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
         } catch (IOException ignored) {
             // Ignore traversal failures for now.
         }
@@ -70,12 +85,27 @@ public final class JavaAstScanner implements SourceScanner {
         String methodName = declaration.getNameAsString();
         String signature = declaration.getSignature().asString();
 
-        declaration.findAll(IfStmt.class).forEach(stmt -> {
-            String cond = stmt.getCondition().toString();
-            int line = stmt.getCondition().getBegin().map(p -> p.line).orElse(-1);
-            out.add(new ScanEvent("java", fqcn, methodName, signature, "if-true", line, cond));
-            if (stmt.getElseStmt().isPresent()) {
-                out.add(new ScanEvent("java", fqcn, methodName, signature, "if-false", line, cond));
+        // Walk each if/else-if chain iteratively and emit true/false events.
+        declaration.findAll(IfStmt.class).forEach(i0 -> {
+            IfStmt cur = i0;
+            while (cur != null) {
+                var cond = cur.getCondition();
+                int line = cond.getBegin().map(p -> p.line).orElse(-1);
+                out.add(new ScanEvent("java", fqcn, methodName, signature, "if-true", line, cond.toString()));
+
+                // Emit false-branch only if there is an else branch
+                if (cur.getElseStmt().isPresent()) {
+                    // Keep the original condition text for if-false to match expectations (no textual negation)
+                    out.add(new ScanEvent("java", fqcn, methodName, signature, "if-false", line, cond.toString()));
+                }
+
+                // Walk an else-if chain iteratively (no recursion!)
+                var elseStmt = cur.getElseStmt().orElse(null);
+                if (elseStmt instanceof IfStmt ei) {
+                    cur = ei;      // continue with the next else-if
+                } else {
+                    cur = null;    // end of chain
+                }
             }
         });
 
