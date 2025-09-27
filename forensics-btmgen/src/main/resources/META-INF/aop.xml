@@ -1,0 +1,9 @@
+<!DOCTYPE aspectj PUBLIC "-//AspectJ//DTD//EN" "http://www.eclipse.org/aspectj/dtd/aspectj_1_9_0.dtd">
+<aspectj>
+  <weaver options="-verbose">
+    <include within="de.burger..*"/>
+  </weaver>
+  <aspects>
+    <aspect name="de.burger.forensics.obs.DecisionTraceAspect"/>
+  </aspects>
+</aspectj>

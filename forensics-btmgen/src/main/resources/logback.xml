@@ -1,0 +1,11 @@
+<configuration>
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{ISO8601} %-5level [%X{cid}] %logger - %msg%n</pattern>
+    </encoder>
+  </appender>
+  <logger name="decision-trace" level="INFO"/>
+  <root level="INFO">
+    <appender-ref ref="STDOUT"/>
+  </root>
+</configuration>
