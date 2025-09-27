@@ -15,6 +15,7 @@ import de.burger.forensics.plugin.util.HashUtil
 import de.burger.forensics.plugin.util.RuleIdUtil
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.ProjectLayout
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.*
@@ -35,11 +36,15 @@ import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import javax.inject.Inject
 
 @CacheableTask
 abstract class GenerateBtmTask : DefaultTask() {
 
     private val conditionStrategyFactory: StrategyFactory = DefaultStrategyFactory()
+
+    @get:Inject
+    protected abstract val layout: ProjectLayout
 
     private companion object {
         const val SAFE_EVAL_FQCN: String = "org.example.trace.SafeEval"
@@ -143,7 +148,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         get() = if (includeJava.getOrElse(false)) resolveFiles(withExtension = ".java") else emptyList()
 
     private fun resolveFiles(withExtension: String): List<File> {
-        val directories = srcDirs.orNull?.map { project.file(it) }?.filter { it.exists() } ?: emptyList()
+        val directories = srcDirs.orNull?.map { resolvePath(it) }?.filter { it.exists() } ?: emptyList()
         val includes = includePatterns.orNull?.takeIf { it.isNotEmpty() }
         val excludes = excludePatterns.orNull?.takeIf { it.isNotEmpty() } ?: emptyList()
         val result = mutableListOf<File>()
@@ -162,6 +167,11 @@ abstract class GenerateBtmTask : DefaultTask() {
     }
 
     private fun globMatch(path: String, pattern: String): Boolean = globToRegexCached(pattern).matches(path)
+
+    private fun resolvePath(path: String): File {
+        val file = File(path)
+        return if (file.isAbsolute) file else layout.projectDirectory.file(path).asFile
+    }
 
     private fun extractClassName(rule: String): String? {
         val m = Regex("(?m)^\\s*CLASS\\s+([\\w.$]+)").find(rule)
