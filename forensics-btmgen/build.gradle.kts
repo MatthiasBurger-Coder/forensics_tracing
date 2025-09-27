@@ -34,19 +34,19 @@ configurations[functionalTest.implementationConfigurationName].extendsFrom(confi
 configurations[functionalTest.runtimeOnlyConfigurationName].extendsFrom(configurations["testRuntimeOnly"])
 
 dependencies {
-    implementation(kotlin("stdlib"))
-    implementation("com.github.javaparser:javaparser-symbol-solver-core:3.25.9")
-    implementation("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.2.0")
-    testImplementation(platform("org.junit:junit-bom:5.10.2"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testImplementation("org.assertj:assertj-core:3.26.3")
+    implementation(libs.kotlin.stdlib)
+    implementation(libs.javaparser.symbol.solver.core)
+    implementation(libs.kotlin.compiler.embeddable)
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.assertj.core)
     testImplementation(kotlin("test"))
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testImplementation(libs.junit.jupiter.api)
     testImplementation(gradleTestKit())
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
-    add("functionalTestImplementation", "org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    add("functionalTestImplementation", libs.junit.jupiter.api)
     add("functionalTestImplementation", gradleTestKit())
-    add("functionalTestRuntimeOnly", "org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    add("functionalTestRuntimeOnly", libs.junit.jupiter.engine)
 }
 
 
