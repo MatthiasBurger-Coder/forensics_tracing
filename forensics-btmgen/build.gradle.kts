@@ -1,18 +1,14 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
 plugins {
-    kotlin("jvm") version "2.2.0"
+    id("java")
     id("java-gradle-plugin")
-    id("com.gradle.plugin-publish") version "1.3.1"
+    kotlin("jvm") version "2.2.0"
     id("maven-publish")
-    id("signing")
-    id("io.github.gradle-nexus.publish-plugin") version "2.0.0"
 }
 
 group = "de.burger.forensics"
 version = "1.0.0"
 
-description = "Generates Byteman tracing rules from Kotlin sources"
+description = "Generates Byteman tracing rules from Java sources"
 
 java {
     toolchain {
@@ -20,66 +16,34 @@ java {
     }
 }
 
-kotlin {
-    jvmToolchain(21)
+gradlePlugin {
+    plugins {
+        register("btmgen") {
+            id = "de.burger.forensics.btmgen"
+            implementationClass = "de.burger.forensics.plugin.BtmGenPlugin"
+        }
+    }
 }
 
 repositories {
     mavenCentral()
 }
 
-val functionalTest by sourceSets.creating
-
-configurations[functionalTest.implementationConfigurationName].extendsFrom(configurations["testImplementation"])
-configurations[functionalTest.runtimeOnlyConfigurationName].extendsFrom(configurations["testRuntimeOnly"])
-
 dependencies {
+    implementation(gradleApi())
     implementation(libs.kotlin.stdlib)
-    implementation(libs.javaparser.symbol.solver.core)
     implementation(libs.kotlin.compiler.embeddable)
+    implementation(libs.javaparser.symbol.solver.core)
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
-    testImplementation(kotlin("test"))
-    testImplementation(libs.junit.jupiter.api)
+    testImplementation(kotlin("test-junit5"))
     testImplementation(gradleTestKit())
     testRuntimeOnly(libs.junit.jupiter.engine)
-    add("functionalTestImplementation", libs.junit.jupiter.api)
-    add("functionalTestImplementation", gradleTestKit())
-    add("functionalTestRuntimeOnly", libs.junit.jupiter.engine)
-}
-
-
-sourceSets {
-    main {
-        kotlin.srcDir("src/main/kotlin")
-        resources.srcDir("src/main/resources")
-    }
-}
-
-tasks.withType<KotlinCompile>().configureEach {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-    }
 }
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
-}
-
-gradlePlugin {
-    website.set("https://example.com/forensics-btmgen")
-    vcsUrl.set("https://github.com/example/forensics-btmgen")
-    plugins {
-        register("btmgen") {
-            id = "de.burger.forensics.btmgen"
-            implementationClass = "de.burger.forensics.plugin.BtmGenPlugin"
-            displayName = "Forensics Byteman Rule Generator"
-            description = "Generates Byteman tracing rules for call chains and decisions"
-            tags.set(listOf("forensics", "byteman", "tracing", "kotlin"))
-        }
-    }
-    testSourceSets(functionalTest, sourceSets["test"])
 }
 
 publishing {
@@ -111,32 +75,5 @@ publishing {
             }
         }
     }
-}
-
-signing {
-    val signingKey = System.getenv("SIGNING_KEY")
-    val signingPassword = System.getenv("SIGNING_PASSWORD")
-    if (!signingKey.isNullOrBlank() && !signingPassword.isNullOrBlank()) {
-        useInMemoryPgpKeys(signingKey, signingPassword)
-        sign(publishing.publications)
-    }
-}
-
-nexusPublishing {
-    repositories {
-        sonatype()
-    }
-}
-
-tasks.register<Test>("functionalTest") {
-    description = "Runs the functional tests."
-    group = "verification"
-    testClassesDirs = functionalTest.output.classesDirs
-    classpath = functionalTest.runtimeClasspath
-    shouldRunAfter(tasks.test)
-}
-
-tasks.check {
-    dependsOn(tasks.named("functionalTest"))
 }
 

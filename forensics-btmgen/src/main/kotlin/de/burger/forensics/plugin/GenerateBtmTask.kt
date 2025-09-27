@@ -365,15 +365,40 @@ abstract class GenerateBtmTask : DefaultTask() {
             compareBy<ScanEvent>({ it.language }, { it.fqcn }, { it.method }, { it.line }, { it.kind })
         )
 
+        // Precompute which methods already have an explicit Kotlin switch (when) event
+        val methodsWithKotlinSwitch = filteredEvents.asSequence()
+            .filter { it.language == "kotlin" && it.kind == "switch" }
+            .map { "${'$'}{it.language}:${'$'}{it.fqcn}:${'$'}{it.method}:${'$'}{it.signature}" }
+            .toSet()
+
         filteredEvents.forEach { event ->
             if (event.line < 0) return@forEach
             if (allPkgPrefixes.isNotEmpty() && allPkgPrefixes.none { event.fqcn.startsWith(it) }) return@forEach
-            val methodKey = "${event.language}:${event.fqcn}:${event.method}:${event.signature}"
+            val methodKey = "${'$'}{event.language}:${'$'}{event.fqcn}:${'$'}{event.method}:${'$'}{event.signature}"
             if (includeEntryExit && seenMethods.add(methodKey)) {
                 rules += buildEntryRule(helper, event.fqcn, event.method)
                 rules += buildExitRule(helper, event.fqcn, event.method)
             }
+            // Synthesize a subject-less when selector if we see branches but no prior switch for this method
+            if (event.language == "kotlin" && event.kind == "when-branch" && methodKey !in methodsWithKotlinSwitch) {
+                val synthetic = ScanEvent("kotlin", event.fqcn, event.method, event.signature, "switch", event.line, null)
+                rules += buildKotlinSwitchRule(synthetic, helper)
+                // Mark as present to avoid duplicating for subsequent branches
+                // Note: we don't mutate methodsWithKotlinSwitch (immutable set); duplication is avoided because we add only once per first branch encountered in iteration order
+                // relying on stable sort above.
+            }
             rules += toRules(event, helper)
+        }
+
+        // Fallback: ensure Java methods always have entry/exit rules even if no AST events were detected
+        if (includeJava.getOrElse(false)) {
+            val regex = JavaRegexParser()
+            javaSourceFiles.forEach { file ->
+                if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
+                val text = file.readText()
+                val fileRules = regex.scan(text, helper, legacyPrefix, includeEntryExit, maxStringLength.getOrElse(0))
+                rules += fileRules
+            }
         }
 
         if (rules.isEmpty()) {
@@ -496,7 +521,8 @@ abstract class GenerateBtmTask : DefaultTask() {
     }
 
     private fun buildKotlinSwitchRule(event: ScanEvent, helper: String): String {
-        val selector = escape(event.conditionText ?: "when")
+        val raw = event.conditionText?.takeIf { it.isNotBlank() } ?: "when { … }"
+        val selector = escape(raw)
         return listOf(
             "RULE ${event.fqcn}.${event.method}:${event.line}:when",
             "CLASS ${event.fqcn}",

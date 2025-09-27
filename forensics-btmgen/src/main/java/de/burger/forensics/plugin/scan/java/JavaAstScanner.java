@@ -7,6 +7,7 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.nodeTypes.NodeWithName;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
@@ -40,12 +41,12 @@ public final class JavaAstScanner implements SourceScanner {
                 typeSolver.add(new JavaParserTypeSolver(parent));
             }
         }
-        StaticJavaParser.getConfiguration().setSymbolResolver(new JavaSymbolSolver(typeSolver));
+        StaticJavaParser.getParserConfiguration().setSymbolResolver(new JavaSymbolSolver(typeSolver));
         try (var stream = Files.walk(root)) {
             for (Path path : stream.filter(p -> p.toString().endsWith(".java")).toList()) {
                 try {
                     CompilationUnit cu = StaticJavaParser.parse(path);
-                    String pkg = cu.getPackageDeclaration().map(pd -> pd.getNameAsString()).orElse("");
+                    String pkg = cu.getPackageDeclaration().map(NodeWithName::getNameAsString).orElse("");
                     if (!include(pkg, includePkgs) || exclude(pkg, excludePkgs)) {
                         continue;
                     }
@@ -68,6 +69,9 @@ public final class JavaAstScanner implements SourceScanner {
         String fqcn = pkg.isEmpty() ? typeName : pkg + "." + typeName;
         String methodName = declaration.getNameAsString();
         String signature = declaration.getSignature().asString();
+        // Emit a synthetic method event to ensure entry/exit rules are seeded even if no control-flow events are present
+        int declLine = declaration.getBegin().map(p -> p.line).orElse(-1);
+        out.add(new ScanEvent("java", fqcn, methodName, signature, "method", declLine, null));
 
         declaration.findAll(IfStmt.class).forEach(stmt -> {
             String cond = stmt.getCondition().toString();
@@ -118,12 +122,12 @@ public final class JavaAstScanner implements SourceScanner {
         var parts = new java.util.ArrayList<String>();
         Node current = declaration.getParentNode().orElse(null);
         while (current != null) {
-            if (current instanceof ClassOrInterfaceDeclaration classDecl) {
-                parts.add(0, classDecl.getNameAsString());
-            } else if (current instanceof EnumDeclaration enumDecl) {
-                parts.add(0, enumDecl.getNameAsString());
-            } else if (current instanceof RecordDeclaration recordDecl) {
-                parts.add(0, recordDecl.getNameAsString());
+            switch (current) {
+                case ClassOrInterfaceDeclaration classDecl -> parts.addFirst(classDecl.getNameAsString());
+                case EnumDeclaration enumDecl -> parts.addFirst(enumDecl.getNameAsString());
+                case RecordDeclaration recordDecl -> parts.addFirst(recordDecl.getNameAsString());
+                default -> {
+                }
             }
             current = current.getParentNode().orElse(null);
         }
