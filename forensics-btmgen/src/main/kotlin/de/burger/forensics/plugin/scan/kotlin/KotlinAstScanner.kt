@@ -9,6 +9,8 @@ import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.psi.KtIfExpression
+import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.psi.KtReturnExpression
@@ -60,7 +62,7 @@ class KotlinAstScanner : SourceScanner {
                             override fun visitWhenExpression(expression: KtWhenExpression) {
                                 val subjectOffset = expression.subjectExpression?.textRange?.startOffset
                                 val line = subjectOffset?.let(lineIndex::lineAt) ?: lineIndex.lineAt(expression.textRange.startOffset)
-                                val subject = expression.subjectExpression?.text ?: "when"
+                                val subject = expression.subjectExpression?.text ?: "when { … }"
                                 events += ScanEvent("kotlin", className, methodName, signature, "switch", line, subject)
                                 expression.entries.forEach { entry ->
                                     val label = entry.conditions.joinToString("|") { it.text }.ifBlank { "else" }
@@ -80,6 +82,18 @@ class KotlinAstScanner : SourceScanner {
                                 val line = lineIndex.lineAt(expression.textRange.startOffset)
                                 events += ScanEvent("kotlin", className, methodName, signature, "throw", line, expression.thrownExpression?.text ?: "throw")
                                 super.visitThrowExpression(expression)
+                            }
+
+                            override fun visitBinaryExpression(expression: KtBinaryExpression) {
+                                if (expression.operationToken == KtTokens.EQ) {
+                                    val left = expression.left
+                                    val name = left?.text
+                                    if (!name.isNullOrBlank()) {
+                                        val line = lineIndex.lineAt(expression.textRange.startOffset)
+                                        events += ScanEvent("kotlin", className, methodName, signature, "write", line, name)
+                                    }
+                                }
+                                super.visitBinaryExpression(expression)
                             }
                         })
                         super.visitNamedFunction(function)

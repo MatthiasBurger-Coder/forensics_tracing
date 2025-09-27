@@ -29,11 +29,11 @@ class ParserSmokeTest {
         """.trimIndent()
 
         val rules = parser.scan(
-            text = source,
-            helperFqn = "helper.Fqn",
-            packagePrefix = "smoke",
-            includeEntryExit = false,
-            maxStringLength = 200
+            source,
+            "helper.Fqn",
+            "smoke",
+            false,
+            200
         )
 
         assertThat(rules).anySatisfy { assertThat(it).contains(":if-true").contains("value.equals(\"ok\")") }

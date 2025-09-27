@@ -1,6 +1,6 @@
 package de.burger.forensics.plugin.engine;
 
-import static de.burger.forensics.plugin.engine.JavaPrefilterKt.prefilterJava;
+import static de.burger.forensics.plugin.engine.JavaPrefilter.prefilterJava;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -14,7 +14,7 @@ public class JavaRegexParser implements JavaScanner {
     private static final Pattern CLASS_PATTERN = Pattern.compile(
             "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|sealed)\\b|non-sealed)\\s+)*class\\s+([A-Za-z0-9_]+)");
     private static final Pattern METHOD_PATTERN = Pattern.compile(
-            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|synchronized|native|default)\\b)\\s+)*(?:<[^>]+>\\s*)?[\\w$<>\\[\\],.?\\s]+\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*\\{");
+            "(?m)^\\s*(?:@[\\w$.]+(?:\\([^)]*\\))?\\s*)*(?:\\b(?:public|protected|private|abstract|final|static|strictfp|synchronized|native|default)\\b\\s+)*(?:<[^>]+>\\s*)?[\\w$<>\\[\\],.?\\s]+\\s+([a-zA-Z0-9_]+)\\s*\\(([^)]*)\\)\\s*\\{");
     private static final Pattern IF_PATTERN = Pattern.compile("\\bif\\s*\\((.*?)\\)");
     private static final Pattern SWITCH_PATTERN = Pattern.compile("\\bswitch\\s*\\((.*?)\\)");
     private static final Pattern CASE_PATTERN = Pattern.compile("(?m)^[\\t ]*(case\\s+[^:]+|default)\\s*:");
@@ -153,7 +153,7 @@ public class JavaRegexParser implements JavaScanner {
     private String escape(String value, int limit) {
         String truncated = value;
         if (limit > 0 && value.length() > limit) {
-            truncated = value.substring(0, limit) + "\u2026";
+            truncated = value.substring(0, limit) + "…";
         }
         return truncated
                 .replace("\\", "\\\\")

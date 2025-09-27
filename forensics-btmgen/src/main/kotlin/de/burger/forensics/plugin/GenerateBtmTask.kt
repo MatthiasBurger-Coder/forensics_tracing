@@ -1,7 +1,7 @@
 package de.burger.forensics.plugin
 
 import de.burger.forensics.plugin.engine.JavaRegexParser
-import de.burger.forensics.plugin.engine.shouldSkipLargeFile
+import de.burger.forensics.plugin.engine.SourceFileGuards
 import de.burger.forensics.plugin.io.ShardedWriter
 import de.burger.forensics.plugin.scan.ScanEvent
 import de.burger.forensics.plugin.scan.ScannerFacade
@@ -192,9 +192,9 @@ abstract class GenerateBtmTask : DefaultTask() {
         val shardCount = shards.getOrElse(Runtime.getRuntime().availableProcessors()).coerceAtLeast(1)
         val gzip = gzipOutput.getOrElse(false)
         val prefix = filePrefix.getOrElse("tracing-").ifBlank { "tracing-" }
-        val rotateMaxBytesValue = rotateMaxBytesPerFile.orNull ?: 4L * 1024 * 1024
+        val rotateMaxBytesValue = rotateMaxBytesPerFile.orNull ?: (4L * 1024 * 1024)
         val rotateIntervalSecondsValue = rotateIntervalSeconds.orNull ?: 0L
-        val flushThresholdValue = flushThresholdBytes.orNull ?: 64 * 1024
+        val flushThresholdValue = flushThresholdBytes.orNull ?: (64 * 1024)
         val flushIntervalValue = flushIntervalMillis.orNull ?: 2000L
         val threadSafeValue = writerThreadSafe.orNull ?: false
         val minBranches = minBranchesPerMethod.getOrElse(0)
@@ -241,7 +241,7 @@ abstract class GenerateBtmTask : DefaultTask() {
                 try {
                     val psiFactory = KtPsiFactory(envHolder.environment.project, false)
                     ktFiles.forEach { file ->
-                        if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
+                        if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
                         val text = file.readText()
                         val ktFile = psiFactory.createFile(file.name, text)
                         val fileRules = processKotlinFile(ktFile, text, helper, legacyPrefix, tracked, includeEntryExit)
@@ -257,14 +257,14 @@ abstract class GenerateBtmTask : DefaultTask() {
                 val par = parallelism.getOrElse(1)
                 if (par > 1) {
                     javaSourceFiles.parallelStream().forEachOrdered { file ->
-                        if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEachOrdered
+                        if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEachOrdered
                         val text = file.readText()
                         val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
                         dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
                     }
                 } else {
                     javaSourceFiles.forEach { file ->
-                        if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
+                        if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
                         val text = file.readText()
                         val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
                         dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
@@ -293,9 +293,9 @@ abstract class GenerateBtmTask : DefaultTask() {
         val shardCount = shards.getOrElse(Runtime.getRuntime().availableProcessors()).coerceAtLeast(1)
         val gzip = gzipOutput.getOrElse(false)
         val prefix = filePrefix.getOrElse("tracing-").ifBlank { "tracing-" }
-        val rotateMaxBytesValue = rotateMaxBytesPerFile.orNull ?: 4L * 1024 * 1024
+        val rotateMaxBytesValue = rotateMaxBytesPerFile.orNull ?: (4L * 1024 * 1024)
         val rotateIntervalSecondsValue = rotateIntervalSeconds.orNull ?: 0L
-        val flushThresholdValue = flushThresholdBytes.orNull ?: 64 * 1024
+        val flushThresholdValue = flushThresholdBytes.orNull ?: (64 * 1024)
         val flushIntervalValue = flushIntervalMillis.orNull ?: 2000L
         val threadSafeValue = writerThreadSafe.orNull ?: false
 
@@ -330,14 +330,14 @@ abstract class GenerateBtmTask : DefaultTask() {
 
         val kotlinFiles = kotlinSourceFiles
         kotlinFiles.forEach { file ->
-            if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
+            if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
             events += scanner.scan(file.toPath(), includePkgs, excludePkgs)
         }
 
         if (includeJava.getOrElse(false)) {
             val javaFiles = javaSourceFiles
             javaFiles.forEach { file ->
-                if (shouldSkipLargeFile(file, limit) { msg -> logger.debug(msg) }) return@forEach
+                if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
                 events += scanner.scan(file.toPath(), includePkgs, excludePkgs)
             }
         }
@@ -423,6 +423,7 @@ abstract class GenerateBtmTask : DefaultTask() {
                 "if-false" -> listOf(buildKotlinIfRule(event, helper, false))
                 "switch" -> listOf(buildKotlinSwitchRule(event, helper))
                 "when-branch" -> listOf(buildKotlinCaseRule(event, helper))
+                "write" -> listOf(buildKotlinWriteRule(event, helper))
                 else -> emptyList()
             }
             else -> emptyList()
@@ -516,6 +517,20 @@ abstract class GenerateBtmTask : DefaultTask() {
             "HELPER ${helper}",
             "AT LINE ${event.line}",
             "DO kase(\"${event.fqcn}\",\"${event.method}\",${event.line},\"${label}\")",
+            "ENDRULE"
+        ).joinToString("\n")
+    }
+
+    private fun buildKotlinWriteRule(event: ScanEvent, helper: String): String {
+        val name = event.conditionText ?: return ""
+        val escapedVar = escape(name)
+        return listOf(
+            "RULE ${event.fqcn}.${event.method}:${event.line}:write-${name}",
+            "CLASS ${event.fqcn}",
+            "METHOD ${event.method}(..)",
+            "HELPER ${helper}",
+            "AFTER WRITE ${'$'}$name",
+            "DO writeVar(\"${event.fqcn}\",\"${event.method}\",${event.line},\"${escapedVar}\", ${'$'}$name)",
             "ENDRULE"
         ).joinToString("\n")
     }

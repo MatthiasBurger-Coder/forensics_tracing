@@ -17,7 +17,7 @@ class FileSizeGuardTest {
         file.writeBytes(ByteArray((limit + 10).toInt()) { 'A'.code.toByte() })
 
         val messages = mutableListOf<String>()
-        val skipped = shouldSkipLargeFile(file, limit) { messages += it }
+        val skipped = SourceFileGuards.shouldSkipLargeFile(file, limit) { messages += it }
 
         assertThat(skipped).isTrue()
         assertThat(messages).isNotEmpty()
@@ -31,7 +31,7 @@ class FileSizeGuardTest {
         file.writeBytes(ByteArray(limit.toInt()) { 'B'.code.toByte() })
 
         val messages = mutableListOf<String>()
-        val skipped = shouldSkipLargeFile(file, limit) { messages += it }
+        val skipped = SourceFileGuards.shouldSkipLargeFile(file, limit) { messages += it }
 
         assertThat(skipped).isFalse()
         assertThat(messages).isEmpty()

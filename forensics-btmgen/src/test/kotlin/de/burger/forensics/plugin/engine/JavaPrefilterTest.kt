@@ -18,7 +18,7 @@ class JavaPrefilterTest {
             }
         """.trimIndent()
 
-        val prefiltered = prefilterJava(src)
+        val prefiltered = JavaPrefilter.prefilterJava(src)
 
         assertThat(prefiltered).doesNotContain("line comment")
         assertThat(prefiltered).doesNotContain("block\n                   comment")

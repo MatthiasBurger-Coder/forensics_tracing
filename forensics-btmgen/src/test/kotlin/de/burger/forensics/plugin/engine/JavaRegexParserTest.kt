@@ -24,11 +24,11 @@ class JavaRegexParserTest {
         """.trimIndent()
 
         val rules = parser.scan(
-            text = javaSource,
-            helperFqn = "helper.Fqn",
-            packagePrefix = "com.example",
-            includeEntryExit = true,
-            maxStringLength = 200
+            javaSource,
+            "helper.Fqn",
+            "com.example",
+            true,
+            200
         )
 
         assertTrue(rules.any { it.contains("RULE enter@com.example.SampleService.execute") })
@@ -58,11 +58,11 @@ class JavaRegexParserTest {
         """.trimIndent()
 
         val rules = parser.scan(
-            text = javaSource,
-            helperFqn = "helper.Fqn",
-            packagePrefix = "com.example",
-            includeEntryExit = true,
-            maxStringLength = 200
+            javaSource,
+            "helper.Fqn",
+            "com.example",
+            true,
+            200
         )
 
         assertTrue(rules.any { it.contains("RULE enter@com.example.InnerHelper.process") })
