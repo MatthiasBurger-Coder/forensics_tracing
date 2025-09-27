@@ -12,22 +12,68 @@ This repository hosts the `de.burger.forensics.btmgen` Gradle plugin. The plugin
 
 ## Getting Started
 
+1) Apply the plugin in your build.gradle.kts
+
 ```kotlin
 plugins {
-    id("de.burger.forensics.btmgen") version "1.0.0"
+    id("de.burger.forensics.btmgen") version "1.0.0" // use the latest published version
 }
 
+repositories { mavenCentral() }
+```
+
+2) Optionally configure global defaults via the extension (used for convenience and backwards-compatibility)
+
+```kotlin
 forensicsBtmGen {
+    // Defaults used by your project; task configuration (next step) is what actually runs
     srcDirs.set(listOf("src/main/kotlin"))
-    pkgPrefix.set("de.shop.app")
+    pkgPrefix.set("") // legacy single prefix; prefer pkgPrefixes below
+    pkgPrefixes.set(listOf("de.shop.app"))
+    helperFqn.set("de.burger.forensics.ForensicsHelper")
+    entryExit.set(true)
+    trackedVars.set(listOf("approved", "status"))
+    includeJava.set(false) // set to true to include naive Java parser
+}
+```
+
+3) Register the generator task (the plugin does not auto-register tasks)
+
+```kotlin
+// Creates the task you will run. You can hard-code values here or read from the extension above.
+tasks.register<de.burger.forensics.plugin.GenerateBtmTask>("generateBtmRules") {
+    // Minimal, pragmatic configuration
+    srcDirs.set(listOf("src/main/kotlin"))
+    packagePrefix.set("de.shop.app") // or map from extension: packagePrefix.set(forensicsBtmGen.pkgPrefix)
     helperFqn.set("de.burger.forensics.ForensicsHelper")
     entryExit.set(true)
     trackedVars.set(listOf("approved", "status"))
     includeJava.set(false)
+    // Optional knobs
+    includeTimestamp.set(false)
+    maxStringLength.set(0)
+    pkgPrefixes.set(listOf("de.shop.app")) // preferred over single packagePrefix
+    includePatterns.set(emptyList())
+    excludePatterns.set(emptyList())
+    parallelism.set(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+    shards.set(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+    gzipOutput.set(false)
+    filePrefix.set("tracing-")
+    rotateMaxBytesPerFile.set(4L * 1024 * 1024)
+    rotateIntervalSeconds.set(0)
+    flushThresholdBytes.set(64 * 1024)
+    flushIntervalMillis.set(2000)
+    writerThreadSafe.set(false)
+    minBranchesPerMethod.set(0)
+    safeMode.set(false)
+    forceHelperForWhitelist.set(false)
+    maxFileBytes.set(2_000_000)
+    useAstScanner.set(true)
+    outputDir.set(layout.buildDirectory.dir("forensics"))
 }
 ```
 
-Run the generator to produce Byteman rules in sharded files such as `build/forensics/tracing-0001-00001.btm`:
+4) Run the generator to produce Byteman rules in sharded files such as build/forensics/tracing-0001-00001.btm
 
 ```bash
 ./gradlew generateBtmRules
