@@ -21,13 +21,14 @@ public final class KotlinAstScanner implements SourceScanner {
     private static final Pattern PKG_PATTERN = Pattern.compile("^\\s*package\\s+([a-zA-Z0-9_.]+)");
     private static final Pattern CLASS_PATTERN = Pattern.compile("^\\s*(?:data\\s+)?(?:sealed\\s+)?(?:open\\s+)?(?:internal\\s+|public\\s+|private\\s+|protected\\s+)?(?:class|object)\\s+([A-Za-z_][A-Za-z0-9_]*)");
     private static final Pattern FUN_PATTERN = Pattern.compile("^\\s*(?:suspend\\s+)?(?:inline\\s+)?(?:operator\\s+)?(?:tailrec\\s+)?(?:infix\\s+)?(?:internal\\s+|public\\s+|private\\s+|protected\\s+)?fun\\s+([A-Za-z_][A-Za-z0-9_]*?)\\s*\\((.*?)\\)");
-    private static final Pattern IF_PATTERN = Pattern.compile("\\bif\\s*\\((.*?)\\)");
-    private static final Pattern WHEN_PATTERN = Pattern.compile("\\bwhen\\s*\\((.*?)\\)");
+    private static final Pattern IF_START_PATTERN = Pattern.compile("\\bif\\s*\\(");
+    private static final Pattern WHEN_START_PATTERN = Pattern.compile("\\bwhen\\s*\\(");
     private static final Pattern WHEN_SUBJECTLESS_PATTERN = Pattern.compile("\\bwhen\\s*\\{");
     private static final Pattern WHEN_ENTRY_PATTERN = Pattern.compile("^\\s*(?:else|[^\\r\\n]+?)\\s*->");
     private static final Pattern RETURN_PATTERN = Pattern.compile("(^|\\W)return(\\W|$)");
     private static final Pattern THROW_PATTERN = Pattern.compile("\\bthrow\\s+(.+)");
     private static final Pattern WRITE_PATTERN = Pattern.compile("(?<![<>!=])\\b([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(?![=])");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     @Override
     public List<ScanEvent> scan(Path root, List<String> includePkgs, List<String> excludePkgs) {
@@ -104,7 +105,7 @@ public final class KotlinAstScanner implements SourceScanner {
 
             if (currentFun != null) {
                 // Within a function body: collect events
-                collectLineEvents(line, i + 1, fqcn, currentFun, currentSig, out);
+                collectLineEvents(lines, i, line, fqcn, currentFun, currentSig, out);
                 // Detect function end: when brace drops below starting level
                 if (brace < funBraceLevel || (brace == funBraceLevel && line.contains("}"))) {
                     currentFun = null;
@@ -115,19 +116,27 @@ public final class KotlinAstScanner implements SourceScanner {
         }
     }
 
-    private void collectLineEvents(String line, int lineNo, String fqcn, String methodName, String signature, List<ScanEvent> out) {
+    private void collectLineEvents(List<String> lines, int index, String line, String fqcn, String methodName, String signature, List<ScanEvent> out) {
+        int lineNo = index + 1;
+
         // if (...) -> if-true and if-false (approximate: assume potential else)
-        Matcher mi = IF_PATTERN.matcher(line);
+        Matcher mi = IF_START_PATTERN.matcher(line);
         while (mi.find()) {
-            String cond = mi.group(1).trim();
-            out.add(new ScanEvent("kotlin", fqcn, methodName, signature, "if-true", lineNo, cond));
-            out.add(new ScanEvent("kotlin", fqcn, methodName, signature, "if-false", lineNo, cond));
+            int parenStart = mi.end() - 1;
+            String condition = captureParenthesized(lines, index, line, parenStart);
+            if (condition != null && !condition.isBlank()) {
+                out.add(new ScanEvent("kotlin", fqcn, methodName, signature, "if-true", lineNo, condition));
+                out.add(new ScanEvent("kotlin", fqcn, methodName, signature, "if-false", lineNo, condition));
+            }
         }
         // when(selector)
-        Matcher mw = WHEN_PATTERN.matcher(line);
+        Matcher mw = WHEN_START_PATTERN.matcher(line);
         while (mw.find()) {
-            String subject = mw.group(1).trim();
-            out.add(new ScanEvent("kotlin", fqcn, methodName, signature, "switch", lineNo, subject));
+            int parenStart = mw.end() - 1;
+            String subject = captureParenthesized(lines, index, line, parenStart);
+            if (subject != null && !subject.isBlank()) {
+                out.add(new ScanEvent("kotlin", fqcn, methodName, signature, "switch", lineNo, subject));
+            }
         }
         // subject-less when { ... }
         if (WHEN_SUBJECTLESS_PATTERN.matcher(line).find()) {
@@ -159,6 +168,71 @@ public final class KotlinAstScanner implements SourceScanner {
             String name = mwrt.group(1);
             out.add(new ScanEvent("kotlin", fqcn, methodName, signature, "write", lineNo, name));
         }
+    }
+
+    private String captureParenthesized(List<String> lines, int startLine, String currentLine, int openingIndex) {
+        int depth = 1;
+        StringBuilder buffer = new StringBuilder();
+        int lineIndex = startLine;
+        String line = currentLine;
+        int charIndex = openingIndex + 1;
+        boolean needSpace = false;
+        while (true) {
+            while (charIndex < line.length()) {
+                char ch = line.charAt(charIndex);
+                if (Character.isWhitespace(ch)) {
+                    if (buffer.length() > 0 && !Character.isWhitespace(buffer.charAt(buffer.length() - 1))) {
+                        needSpace = true;
+                    }
+                    charIndex++;
+                    continue;
+                }
+                if (needSpace && requiresSpaceBefore(buffer, ch)) {
+                    buffer.append(' ');
+                }
+                needSpace = false;
+                if (ch == '(') {
+                    depth++;
+                    buffer.append(ch);
+                } else if (ch == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        return normalizeWhitespace(buffer.toString());
+                    }
+                    buffer.append(ch);
+                } else {
+                    buffer.append(ch);
+                }
+                charIndex++;
+            }
+            lineIndex++;
+            if (lineIndex >= lines.size()) {
+                return null;
+            }
+            line = stripLineComments(lines.get(lineIndex));
+            charIndex = 0;
+        }
+    }
+
+    private String normalizeWhitespace(String input) {
+        if (input == null) {
+            return null;
+        }
+        return WHITESPACE.matcher(input).replaceAll(" ").trim();
+    }
+
+    private boolean requiresSpaceBefore(StringBuilder buffer, char ch) {
+        if (buffer.isEmpty()) {
+            return false;
+        }
+        char last = buffer.charAt(buffer.length() - 1);
+        if (last == '(' || last == '[') {
+            return false;
+        }
+        if (Character.isLetterOrDigit(ch) || ch == '_' || ch == '"' || ch == '\'' || ch == '@') {
+            return true;
+        }
+        return !(ch == '.' || ch == ',' || ch == ')' || ch == ']' || ch == ':' || ch == ';');
     }
 
     private static String buildFqcn(String pkg, Deque<String> classStack, String fileTop) {
