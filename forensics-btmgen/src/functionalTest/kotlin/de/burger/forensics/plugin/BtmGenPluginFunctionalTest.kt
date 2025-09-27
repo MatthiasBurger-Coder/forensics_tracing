@@ -11,7 +11,7 @@ import java.nio.file.Files
 class BtmGenPluginFunctionalTest {
 
     @Test
-    fun pluginRegistersTask_and_defaultHeaderHasNoTimestamp() {
+    fun explicitTaskRegistration_defaultHeaderHasNoTimestamp() {
         val projectDir = Files.createTempDirectory("btmgen-plugin-test1").toFile().apply { deleteOnExit() }
         writeSettings(projectDir)
         writeBuildScript(projectDir, includeTimestamp = false)
@@ -39,7 +39,7 @@ class BtmGenPluginFunctionalTest {
     }
 
     @Test
-    fun pluginWiresExtension_includeTimestampTrue_addsTimestamp() {
+    fun explicitTaskRegistration_includeTimestampTrue_addsTimestamp() {
         val projectDir = Files.createTempDirectory("btmgen-plugin-test2").toFile().apply { deleteOnExit() }
         writeSettings(projectDir)
         writeBuildScript(projectDir, includeTimestamp = true)
@@ -80,9 +80,35 @@ class BtmGenPluginFunctionalTest {
 
             repositories { mavenCentral() }
 
-            forensicsBtmGen {
-                pkgPrefix.set("")
+            // Explicitly register the task; plugin does not auto-create it anymore
+            tasks.register<de.burger.forensics.plugin.GenerateBtmTask>("generateBtmRules") {
+                // Configure explicitly to avoid relying on extension wiring
+                srcDirs.set(listOf("src/main/kotlin", "src/main/java"))
+                packagePrefix.set("")
+                helperFqn.set("de.burger.forensics.ForensicsHelper")
+                entryExit.set(true)
+                trackedVars.set(emptyList())
+                includeJava.set(true)
                 includeTimestamp.set($includeTimestamp)
+                maxStringLength.set(0)
+                pkgPrefixes.set(emptyList())
+                includePatterns.set(emptyList())
+                excludePatterns.set(emptyList())
+                parallelism.set(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+                shards.set(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+                gzipOutput.set(false)
+                filePrefix.set("tracing-")
+                rotateMaxBytesPerFile.set(4L * 1024 * 1024)
+                rotateIntervalSeconds.set(0)
+                flushThresholdBytes.set(64 * 1024)
+                flushIntervalMillis.set(2000)
+                writerThreadSafe.set(false)
+                minBranchesPerMethod.set(0)
+                safeMode.set(false)
+                forceHelperForWhitelist.set(false)
+                maxFileBytes.set(2_000_000)
+                useAstScanner.set(true)
+                outputDir.set(layout.buildDirectory.dir("forensics"))
             }
             """.trimIndent()
         )

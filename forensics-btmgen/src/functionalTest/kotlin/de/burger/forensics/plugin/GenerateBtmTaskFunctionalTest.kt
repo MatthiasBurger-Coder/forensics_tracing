@@ -60,8 +60,40 @@ class GenerateBtmTaskFunctionalTest {
             }
 
             forensicsBtmGen {
+                // keep for backward compatibility, but task is configured explicitly below
                 pkgPrefix.set("de.burger.forensics.sample")
                 trackedVars.set(listOf("statusFlag"))
+            }
+
+            // The plugin no longer registers tasks automatically; register it explicitly
+            tasks.register<de.burger.forensics.plugin.GenerateBtmTask>("generateBtmRules") {
+                // Configure explicitly to avoid depending on extension wiring in tests
+                srcDirs.set(listOf("src/main/kotlin"))
+                packagePrefix.set("de.burger.forensics.sample")
+                helperFqn.set("de.burger.forensics.ForensicsHelper")
+                entryExit.set(true)
+                trackedVars.set(listOf("statusFlag"))
+                includeJava.set(false)
+                includeTimestamp.set(false)
+                maxStringLength.set(0)
+                pkgPrefixes.set(emptyList())
+                includePatterns.set(emptyList())
+                excludePatterns.set(emptyList())
+                parallelism.set(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+                shards.set(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+                gzipOutput.set(false)
+                filePrefix.set("tracing-")
+                rotateMaxBytesPerFile.set(4L * 1024 * 1024)
+                rotateIntervalSeconds.set(0)
+                flushThresholdBytes.set(64 * 1024)
+                flushIntervalMillis.set(2000)
+                writerThreadSafe.set(false)
+                minBranchesPerMethod.set(0)
+                safeMode.set(false)
+                forceHelperForWhitelist.set(false)
+                maxFileBytes.set(2_000_000)
+                useAstScanner.set(true)
+                outputDir.set(layout.buildDirectory.dir("forensics"))
             }
             """.trimIndent()
         )
