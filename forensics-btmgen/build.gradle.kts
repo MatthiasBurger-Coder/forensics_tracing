@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("java")
     id("java-gradle-plugin")
@@ -29,6 +31,10 @@ repositories {
     mavenCentral()
 }
 
+configurations {
+    create("ajc")
+}
+
 dependencies {
     implementation(gradleApi())
     implementation(libs.kotlin.stdlib)
@@ -47,6 +53,8 @@ dependencies {
     // AspectJ runtime/weaver
     implementation(libs.aspectj.rt)
     runtimeOnly(libs.aspectj.weaver)
+
+    add("ajc", "org.aspectj:aspectjtools:1.9.21")
 
     // For tests: allow self-attachment to obtain Instrumentation when -javaagent is unavailable
     testImplementation("net.bytebuddy:byte-buddy-agent:1.14.13")
@@ -70,6 +78,21 @@ tasks.withType<Test>().configureEach {
         systemProperty("forensics.btmgen.logToFile", "true")
         systemProperty("forensics.btmgen.logFile", "logs/forensics-btmgen.log")
     }
+}
+
+tasks.register<JavaExec>("ajcWeave") {
+    val outDir = layout.buildDirectory.dir("classes-ajt").get().asFile
+    outputs.dir(outDir)
+    doFirst { outDir.mkdirs() }
+    classpath = files(configurations.getByName("ajc"), sourceSets.main.get().compileClasspath)
+    mainClass.set("org.aspectj.tools.ajc.Main")
+    args = listOf(
+        "-1.8",
+        "-inpath", sourceSets.main.get().output.classesDirs.asPath,
+        "-cp", sourceSets.main.get().compileClasspath.asPath,
+        "-sourceroots", sourceSets.main.get().allSource.srcDirs.joinToString(File.pathSeparator),
+        "-d", outDir.absolutePath
+    )
 }
 
 publishing {
