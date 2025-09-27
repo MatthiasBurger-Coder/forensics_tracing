@@ -426,13 +426,13 @@ abstract class GenerateBtmTask : DefaultTask() {
         // Precompute which methods already have an explicit Kotlin switch (when) event
         val methodsWithKotlinSwitch = filteredEvents.asSequence()
             .filter { it.language == "kotlin" && it.kind == "switch" }
-            .map { "${'$'}{it.language}:${'$'}{it.fqcn}:${'$'}{it.method}:${'$'}{it.signature}" }
+            .map { "${it.language}:${it.fqcn}:${it.method}:${it.signature}" }
             .toSet()
 
         filteredEvents.forEach { event ->
             if (event.line < 0) return@forEach
             if (allPkgPrefixes.isNotEmpty() && allPkgPrefixes.none { event.fqcn.startsWith(it) }) return@forEach
-            val methodKey = "${'$'}{event.language}:${'$'}{event.fqcn}:${'$'}{event.method}:${'$'}{event.signature}"
+            val methodKey = "${event.language}:${event.fqcn}:${event.method}:${event.signature}"
             if (includeEntryExit && seenMethods.add(methodKey)) {
                 rules += buildEntryRule(helper, event.fqcn, event.method)
                 rules += buildExitRule(helper, event.fqcn, event.method)

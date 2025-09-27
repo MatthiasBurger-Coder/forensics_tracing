@@ -69,9 +69,6 @@ public final class JavaAstScanner implements SourceScanner {
         String fqcn = pkg.isEmpty() ? typeName : pkg + "." + typeName;
         String methodName = declaration.getNameAsString();
         String signature = declaration.getSignature().asString();
-        // Emit a synthetic method event to ensure entry/exit rules are seeded even if no control-flow events are present
-        int declLine = declaration.getBegin().map(p -> p.line).orElse(-1);
-        out.add(new ScanEvent("java", fqcn, methodName, signature, "method", declLine, null));
 
         declaration.findAll(IfStmt.class).forEach(stmt -> {
             String cond = stmt.getCondition().toString();
