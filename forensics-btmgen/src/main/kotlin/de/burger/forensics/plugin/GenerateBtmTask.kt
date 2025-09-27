@@ -39,6 +39,44 @@ import java.time.Instant
 @CacheableTask
 abstract class GenerateBtmTask : DefaultTask() {
 
+    init {
+        // Provide conventions so Gradle validation passes even if users don't wire the extension.
+        srcDirs.convention(listOf("src/main/java", "src/main/kotlin"))
+        packagePrefix.convention("")
+        helperFqn.convention("de.burger.forensics.ForensicsHelper")
+        entryExit.convention(true)
+        trackedVars.convention(emptyList())
+        includeJava.convention(true)
+        includeTimestamp.convention(false)
+        maxStringLength.convention(0)
+        maxFileBytes.convention(2_000_000L)
+
+        // New DSL inputs
+        pkgPrefixes.convention(emptyList())
+        includePatterns.convention(emptyList())
+        excludePatterns.convention(emptyList())
+        parallelism.convention(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+        shards.convention(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+        gzipOutput.convention(false)
+        filePrefix.convention("tracing-")
+        rotateMaxBytesPerFile.convention(4L * 1024 * 1024)
+        rotateIntervalSeconds.convention(0L)
+        flushThresholdBytes.convention(64 * 1024)
+        flushIntervalMillis.convention(2000L)
+        writerThreadSafe.convention(false)
+
+        logLevel.convention("ERROR")
+        logToFile.convention(true)
+        logFilePath.convention("logs/forensics-btmgen.log")
+
+        minBranchesPerMethod.convention(0)
+        safeMode.convention(false)
+        forceHelperForWhitelist.convention(false)
+        useAstScanner.convention(true)
+
+        outputDir.convention(project.layout.buildDirectory.dir("forensics"))
+    }
+
     @get:Internal
     protected val conditionStrategyFactory: StrategyFactory by lazy { DefaultStrategyFactory() }
 
