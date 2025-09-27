@@ -48,6 +48,7 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     private companion object {
         const val SAFE_EVAL_FQCN: String = "org.example.trace.SafeEval"
+        const val SUBJECTLESS_WHEN_PLACEHOLDER: String = "when { … }"
         private val JAVA_PACKAGE_REGEX = Regex("(?m)^\\s*package\\s+([a-zA-Z0-9_.]+)\\s*;")
         private val JAVA_CLASS_REGEX = Regex(
             "(?m)^\\s*(?:@[\\w.$]+(?:\\([^)]*\\))?\\s*)*(?:(?:\\b(?:public|protected|private|abstract|final|static|strictfp|sealed)\\b|non-sealed)\\s+)*class\\s+([A-Za-z0-9_]+)"
@@ -58,10 +59,20 @@ abstract class GenerateBtmTask : DefaultTask() {
         private val ENTRY_EXIT_RULE_REGEX = Regex("^RULE\\s+(?:enter|exit)@([\\w.$]+)\\.([A-Za-z0-9_]+)", RegexOption.MULTILINE)
     }
 
+    private enum class LogLevel { TRACE, DEBUG, INFO, WARN, ERROR; companion object {
+        fun parse(s: String?): LogLevel = try { valueOf(s?.trim()?.uppercase() ?: "ERROR") } catch (_: Exception) { ERROR }
+    }}
+
+    private fun shouldLog(level: LogLevel): Boolean {
+        val configured = LogLevel.parse(logLevel.orNull)
+        return level.ordinal >= configured.ordinal
+    }
+
     @get:Input
     abstract val srcDirs: ListProperty<String>
 
     @get:Input
+    @get:Optional
     abstract val packagePrefix: Property<String>
 
     @get:Input
@@ -123,6 +134,10 @@ abstract class GenerateBtmTask : DefaultTask() {
     abstract val writerThreadSafe: Property<Boolean>
 
     @get:Input
+    @get:Optional
+    abstract val logLevel: Property<String>
+
+    @get:Input
     abstract val minBranchesPerMethod: Property<Int>
 
     @get:Input
@@ -166,7 +181,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         return result.sortedBy { it.absolutePath }
     }
 
-    private fun globMatch(path: String, pattern: String): Boolean = globToRegexCached(pattern).matches(path)
+    private fun globMatch(path: String, pattern: String): Boolean = globMatchesPath(path, pattern)
 
     private fun resolvePath(path: String): File {
         val file = File(path)
@@ -243,6 +258,7 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     private fun generateLegacy() {
         val outputDirectory = outputDir.get().asFile
+        val debugSink: (String) -> Unit = if (shouldLog(LogLevel.DEBUG)) ({ m -> logger.debug(m) }) else ({ _ -> })
         if (!outputDirectory.exists()) {
             outputDirectory.mkdirs()
         }
@@ -309,7 +325,7 @@ abstract class GenerateBtmTask : DefaultTask() {
                 try {
                     val psiFactory = KtPsiFactory(envHolder.environment.project, false)
                     ktFiles.forEach { file ->
-                        if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
+                        if (SourceFileGuards.shouldSkipLargeFile(file, limit, debugSink)) return@forEach
                         val text = file.readText()
                         val ktFile = psiFactory.createFile(file.name, text)
                         val fileRules = processKotlinFile(ktFile, text, helper, legacyPrefix, tracked, includeEntryExit)
@@ -325,14 +341,14 @@ abstract class GenerateBtmTask : DefaultTask() {
                 val par = parallelism.getOrElse(1)
                 if (par > 1) {
                     javaSourceFiles.parallelStream().forEachOrdered { file ->
-                        if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEachOrdered
+                        if (SourceFileGuards.shouldSkipLargeFile(file, limit, debugSink)) return@forEachOrdered
                         val text = file.readText()
                         val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
                         dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
                     }
                 } else {
                     javaSourceFiles.forEach { file ->
-                        if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
+                        if (SourceFileGuards.shouldSkipLargeFile(file, limit, debugSink)) return@forEach
                         val text = file.readText()
                         val fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen)
                         dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer)
@@ -344,6 +360,7 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     private fun generateWithAst() {
         val outputDirectory = outputDir.get().asFile
+        val debugSink: (String) -> Unit = if (shouldLog(LogLevel.DEBUG)) ({ m -> logger.debug(m) }) else ({ _ -> })
         if (!outputDirectory.exists()) {
             outputDirectory.mkdirs()
         }
@@ -398,15 +415,27 @@ abstract class GenerateBtmTask : DefaultTask() {
 
         val kotlinFiles = kotlinSourceFiles
         kotlinFiles.forEach { file ->
-            if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
-            events += scanner.scan(file.toPath(), includePkgs, excludePkgs)
+            if (SourceFileGuards.shouldSkipLargeFile(file, limit, debugSink)) return@forEach
+            try {
+                events += scanner.scan(file.toPath(), includePkgs, excludePkgs)
+            } catch (e: StackOverflowError) {
+                if (shouldLog(LogLevel.WARN)) logger.warn("Skipping Kotlin file due to StackOverflowError during scan: ${file} -> ${e.message}")
+            } catch (t: Throwable) {
+                if (shouldLog(LogLevel.WARN)) logger.warn("Skipping Kotlin file due to unexpected error during scan: ${file} -> ${t.message}")
+            }
         }
 
         if (includeJava.getOrElse(false)) {
             val javaFiles = javaSourceFiles
             javaFiles.forEach { file ->
-                if (SourceFileGuards.shouldSkipLargeFile(file, limit) { msg: String -> logger.debug(msg) }) return@forEach
-                events += scanner.scan(file.toPath(), includePkgs, excludePkgs)
+                if (SourceFileGuards.shouldSkipLargeFile(file, limit, debugSink)) return@forEach
+                try {
+                    events += scanner.scan(file.toPath(), includePkgs, excludePkgs)
+                } catch (e: StackOverflowError) {
+                    if (shouldLog(LogLevel.WARN)) logger.warn("Skipping Java file due to StackOverflowError during scan: ${file} -> ${e.message}")
+                } catch (t: Throwable) {
+                    if (shouldLog(LogLevel.WARN)) logger.warn("Skipping Java file due to unexpected error during scan: ${file} -> ${t.message}")
+                }
             }
         }
 
@@ -601,7 +630,7 @@ abstract class GenerateBtmTask : DefaultTask() {
     }
 
     private fun buildKotlinSwitchRule(event: ScanEvent, helper: String): String {
-        val raw = event.conditionText?.takeIf { it.isNotBlank() } ?: "when { … }"
+        val raw = event.conditionText?.takeIf { it.isNotBlank() } ?: SUBJECTLESS_WHEN_PLACEHOLDER
         val selector = escape(raw)
         return listOf(
             "RULE ${event.fqcn}.${event.method}:${event.line}:when",
@@ -880,7 +909,7 @@ abstract class GenerateBtmTask : DefaultTask() {
         val methodName = context.methodName
         val helper = context.helperFqn
         val subject = expression.subjectExpression?.text
-        val selectorText = subject ?: "when { … }"
+        val selectorText = subject ?: SUBJECTLESS_WHEN_PLACEHOLDER
         val whenRule = """
             RULE ${className}.${methodName}:${line}:when
             CLASS ${className}

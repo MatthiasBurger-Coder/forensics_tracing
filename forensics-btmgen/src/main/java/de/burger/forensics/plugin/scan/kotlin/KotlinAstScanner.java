@@ -106,8 +106,10 @@ public final class KotlinAstScanner implements SourceScanner {
             if (currentFun != null) {
                 // Within a function body: collect events
                 collectLineEvents(lines, i, line, fqcn, currentFun, currentSig, out);
-                // Detect function end: when brace drops below starting level
-                if (brace < funBraceLevel || (brace == funBraceLevel && line.contains("}"))) {
+                // Detect function end strictly when brace drops below the starting level.
+                // Using equality here can prematurely end the function when closing inner blocks
+                // that return to the function's starting depth.
+                if (brace < funBraceLevel) {
                     currentFun = null;
                     currentSig = null;
                     funBraceLevel = -1;
@@ -181,7 +183,7 @@ public final class KotlinAstScanner implements SourceScanner {
             while (charIndex < line.length()) {
                 char ch = line.charAt(charIndex);
                 if (Character.isWhitespace(ch)) {
-                    if (buffer.length() > 0 && !Character.isWhitespace(buffer.charAt(buffer.length() - 1))) {
+                    if (!buffer.isEmpty() && !Character.isWhitespace(buffer.charAt(buffer.length() - 1))) {
                         needSpace = true;
                     }
                     charIndex++;

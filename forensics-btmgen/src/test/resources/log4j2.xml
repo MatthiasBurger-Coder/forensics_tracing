@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Log4j2 configuration to "log everything" for tests and local runs.
+  Notes:
+  - This module intentionally does NOT ship a Log4j2 SLF4J binding at runtime to avoid multiple providers under Gradle.
+  - This file is placed under src/test/resources so it helps during tests or when Log4j2 is the active backend.
+  - Pattern includes MDC key `cid` used by MethodLoggingAspect.
+-->
+<Configuration status="WARN" monitorInterval="30">
+    <Properties>
+        <Property name="LOG_DIR">logs</Property>
+        <Property name="LOG_FILE">${LOG_DIR}/forensics-btmgen.log</Property>
+        <Property name="PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %X{cid:-no-cid} %logger{36} - %msg%n%throwable</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${PATTERN}"/>
+        </Console>
+
+        <!-- Rolling file appender: daily rollover, keep compressed archives, and size cap per file -->
+        <RollingFile name="File" fileName="${LOG_FILE}" filePattern="${LOG_DIR}/forensics-btmgen-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="${PATTERN}"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="50 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="30" fileIndex="min"/>
+        </RollingFile>
+
+        <!-- Async wrapper for performance when disruptor is present; falls back to queue otherwise -->
+        <Async name="AsyncConsole">
+            <AppenderRef ref="Console"/>
+        </Async>
+        <Async name="AsyncFile">
+            <AppenderRef ref="File"/>
+        </Async>
+    </Appenders>
+
+    <!-- Log level can be overridden via system property 'forensics.btmgen.logLevel' (default ERROR). -->
+    <Loggers>
+        <!-- Example of project package, level controlled via sysprop -->
+        <Logger name="de.burger" level="${sys:forensics.btmgen.logLevel:-error}" additivity="true"/>
+
+        <!-- Root catches all other loggers -->
+        <Root level="${sys:forensics.btmgen.logLevel:-error}">
+            <AppenderRef ref="AsyncConsole"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Root>
+    </Loggers>
+</Configuration>

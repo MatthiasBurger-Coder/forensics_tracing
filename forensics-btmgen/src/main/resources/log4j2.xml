@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Production Log4j2 configuration to log everything into a file.
+  Notes:
+  - This module does not ship a Log4j2 SLF4J binding to avoid multiple providers under Gradle.
+  - When Log4j2 is present as the active backend, this config will be picked up from the classpath.
+  - Pattern includes MDC key `cid` used by MethodLoggingAspect.
+-->
+<Configuration status="WARN" monitorInterval="30">
+    <Properties>
+        <Property name="LOG_DIR">logs</Property>
+        <Property name="LOG_FILE">${LOG_DIR}/forensics-btmgen.log</Property>
+        <Property name="PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %X{cid:-no-cid} %logger{36} - %msg%n%throwable</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${PATTERN}"/>
+        </Console>
+
+        <!-- Rolling file appender: daily rollover, keep compressed archives, and size cap per file -->
+        <RollingFile name="File" fileName="${LOG_FILE}" filePattern="${LOG_DIR}/forensics-btmgen-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="${PATTERN}"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="50 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="30" fileIndex="min"/>
+        </RollingFile>
+
+        <!-- Async wrappers; if disruptor is on classpath, it will be used automatically -->
+        <Async name="AsyncConsole">
+            <AppenderRef ref="Console"/>
+        </Async>
+        <Async name="AsyncFile">
+            <AppenderRef ref="File"/>
+        </Async>
+    </Appenders>
+
+    <!-- Log level can be overridden via system property 'forensics.btmgen.logLevel' (default ERROR). -->
+    <Loggers>
+        <Logger name="de.burger" level="${sys:forensics.btmgen.logLevel:-error}" additivity="true"/>
+        <Root level="${sys:forensics.btmgen.logLevel:-error}">
+            <AppenderRef ref="AsyncConsole"/>
+            <AppenderRef ref="AsyncFile"/>
+        </Root>
+    </Loggers>
+</Configuration>

@@ -33,6 +33,7 @@ class GenerateBtmTaskFunctionalTest {
         assertTrue(!outputFiles.isNullOrEmpty(), "Byteman output should be generated")
 
         val output = outputFiles!!.joinToString("\n") { it.readText() }
+        println("[DEBUG_LOG] Output:\n" + output)
         assertTrue(output.contains("enter@de.burger.forensics.sample.SampleFlowKt.decisionFlow"))
         assertTrue(output.contains("METHOD decisionFlow(..)"), "METHOD should include (..) to indicate any parameters")
         assertTrue(output.contains("if-true"))

@@ -49,6 +49,13 @@ abstract class BtmGenExtension @Inject constructor(
      */
     val maxStringLength: Property<Int> = objects.property(Int::class.java)
 
+    /**
+     * Controls plugin log level (TRACE, DEBUG, INFO, WARN, ERROR). Default is ERROR.
+     * This affects only logs emitted by this plugin/tasks and, when Log4j2 is active,
+     * also configures the root logger via a system property.
+     */
+    val logLevel: Property<String> = objects.property(String::class.java)
+
     init {
         srcDirs.convention(listOf("src/main/java", "src/main/kotlin"))
         pkgPrefix.convention("")
@@ -76,6 +83,7 @@ abstract class BtmGenExtension @Inject constructor(
         forceHelperForWhitelist.convention(false)
         maxFileBytes.convention(2_000_000L)
         useAstScanner.convention(true)
+        logLevel.convention("ERROR")
     }
 
     var shards: Int

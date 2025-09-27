@@ -5,6 +5,11 @@ kotlin = "2.2.0"
 junit = "5.10.2"
 assertj = "3.26.3"
 javaparser = "3.25.9"
+# Logging/Tracing stacks
+aspectj = "1.9.22.1"
+slf4j = "2.0.16"
+log4j2 = "2.24.1"
+disruptor = "3.4.4"
 
 [plugins]
 # You may switch to these aliases in the plugins { } block if desired
@@ -19,6 +24,23 @@ kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-em
 
 # JavaParser
 javaparser-symbol-solver-core = { module = "com.github.javaparser:javaparser-symbol-solver-core", version.ref = "javaparser" }
+
+# --- aspectj ---
+aspectj-rt     = { module = "org.aspectj:aspectjrt",            version.ref = "aspectj" }
+aspectj-weaver = { module = "org.aspectj:aspectjweaver",        version.ref = "aspectj" }
+
+# --- Logging (module format) ---
+slf4j-api         = { module = "org.slf4j:slf4j-api",                        version.ref = "slf4j" }
+jul-to-slf4j      = { module = "org.slf4j:jul-to-slf4j",                     version.ref = "slf4j" }
+jcl-over-slf4j    = { module = "org.slf4j:jcl-over-slf4j",                   version.ref = "slf4j" }
+log4j-core        = { module = "org.apache.logging.log4j:log4j-core",        version.ref = "log4j2" }
+log4j-core-test   = { module = "org.apache.logging.log4j:log4j-core-test",   version.ref = "log4j2" }
+
+log4j-api         = { module = "org.apache.logging.log4j:log4j-api",         version.ref = "log4j2" }
+log4j-slf4j2-impl = { module = "org.apache.logging.log4j:log4j-slf4j2-impl", version.ref = "log4j2" }
+log4j-12-api      = { module = "org.apache.logging.log4j:log4j-1.2-api",     version.ref = "log4j2" }
+log4j-bom         = { module = "org.apache.logging.log4j:log4j-bom",         version.ref = "log4j2" }
+disruptor         = { module = "com.lmax:disruptor",                         version.ref = "disruptor" }
 
 # JUnit 5 (Jupiter)
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
