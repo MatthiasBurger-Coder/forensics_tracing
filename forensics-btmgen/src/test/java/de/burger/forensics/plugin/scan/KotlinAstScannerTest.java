@@ -36,6 +36,27 @@ public class KotlinAstScannerTest {
                         else -> "other"
                     }
                 }
+
+                fun multiLineIf(x: Int): Int {
+                    if (
+                        x > 0 &&
+                        x < 10
+                    ) {
+                        return x
+                    }
+                    return -1
+                }
+
+                fun multiLineWhen(text: String): String {
+                    return when (
+                        text
+                            .trim()
+                            .lowercase()
+                    ) {
+                        "yes" -> "y"
+                        else -> "n"
+                    }
+                }
             }
             """.stripIndent());
 
@@ -49,6 +70,14 @@ public class KotlinAstScannerTest {
         Assertions.assertThat(events).anySatisfy(e -> {
             Assertions.assertThat(e.kind()).isEqualTo("switch");
             Assertions.assertThat(e.conditionText()).isEqualTo("flag");
+        });
+        Assertions.assertThat(events).anySatisfy(e -> {
+            Assertions.assertThat(e.kind()).isEqualTo("if-true");
+            Assertions.assertThat(e.conditionText()).isEqualTo("x > 0 && x < 10");
+        });
+        Assertions.assertThat(events).anySatisfy(e -> {
+            Assertions.assertThat(e.kind()).isEqualTo("switch");
+            Assertions.assertThat(e.conditionText()).isEqualTo("text.trim().lowercase()");
         });
         Assertions.assertThat(events).anySatisfy(e -> Assertions.assertThat(e.kind()).isEqualTo("when-branch"));
         Assertions.assertThat(events).anySatisfy(e -> {
