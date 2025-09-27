@@ -79,7 +79,7 @@ gradlePlugin {
             tags.set(listOf("forensics", "byteman", "tracing", "kotlin"))
         }
     }
-    testSourceSets(functionalTest)
+    testSourceSets(functionalTest, sourceSets["test"])
 }
 
 publishing {
