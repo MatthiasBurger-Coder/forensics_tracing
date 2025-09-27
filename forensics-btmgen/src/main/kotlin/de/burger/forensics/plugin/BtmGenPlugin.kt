@@ -2,6 +2,7 @@ package de.burger.forensics.plugin
 
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import java.io.File
 
 class BtmGenPlugin : Plugin<Project> {
     override fun apply(project: Project) {
@@ -14,10 +15,23 @@ class BtmGenPlugin : Plugin<Project> {
             project.layout
         )
 
-        // Propagate configured log level to a system property so Log4j2 (if present) can pick it up.
+        // Ensure a default logfile exists so users can immediately find it,
+        // and wire system properties so MethodLoggingAspect (if woven) writes to the same path.
         project.afterEvaluate {
-            val level = ext.logLevel.orNull?.trim()?.uppercase().takeUnless { it.isNullOrBlank() } ?: "ERROR"
-            System.setProperty("forensics.btmgen.logLevel", level)
+            val enableFile = ext.logToFile.orNull ?: true
+            val relativePath = ext.logFilePath.orNull?.takeIf { it.isNotBlank() } ?: "logs/forensics-btmgen.log"
+            if (enableFile) {
+                val file = File(project.projectDir, relativePath)
+                file.parentFile?.let { if (!it.exists()) it.mkdirs() }
+                if (!file.exists()) runCatching { file.createNewFile() }
+            }
+            // Propagate to system properties for the Aspect to pick up regardless of SLF4J backend
+            if (System.getProperty("forensics.btmgen.logToFile") == null) {
+                System.setProperty("forensics.btmgen.logToFile", enableFile.toString())
+            }
+            if (System.getProperty("forensics.btmgen.logFile") == null) {
+                System.setProperty("forensics.btmgen.logFile", File(project.projectDir, relativePath).path)
+            }
         }
     }
 }

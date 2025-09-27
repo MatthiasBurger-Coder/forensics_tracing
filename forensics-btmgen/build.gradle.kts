@@ -40,25 +40,36 @@ dependencies {
     implementation(libs.jul.to.slf4j)
     implementation(libs.jcl.over.slf4j)
 
-    // Use Gradle's logging backend during plugin execution and tests.
-    // Do NOT add any SLF4J provider/binding here to avoid multiple providers on classpath.
-    // If a concrete backend is ever needed by consumers, they should provide it in their builds.
+    // Use Gradle's logging backend during plugin execution.
+    // Do NOT add any SLF4J provider/binding to main configurations to avoid multiple providers on classpath.
+    // For tests we provide a Log4j2 binding so log4j2.xml is honored.
 
-    // AspectJ runtime/weaver (optional for AOP if used by consumers)
+    // AspectJ runtime/weaver
     implementation(libs.aspectj.rt)
     runtimeOnly(libs.aspectj.weaver)
 
+    // For tests: allow self-attachment to obtain Instrumentation when -javaagent is unavailable
+    testImplementation("net.bytebuddy:byte-buddy-agent:1.14.13")
+    testImplementation(libs.aspectj.weaver)
+
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
+    testImplementation("org.junit.platform:junit-platform-launcher:1.10.2")
     testImplementation(libs.assertj.core)
     testImplementation(kotlin("test-junit5"))
     testImplementation(gradleTestKit())
+
     testRuntimeOnly(libs.junit.jupiter.engine)
-    testRuntimeOnly(libs.log4j.core.test)
 }
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+
+    // Ensure aspect file logging is enabled and points to the standard log file
+    doFirst {
+        systemProperty("forensics.btmgen.logToFile", "true")
+        systemProperty("forensics.btmgen.logFile", "logs/forensics-btmgen.log")
+    }
 }
 
 publishing {

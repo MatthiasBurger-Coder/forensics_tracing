@@ -41,6 +41,10 @@ class GenerateBtmTaskFunctionalTest {
         assertTrue(output.contains("write-statusFlag"))
         // ensure subject-less when logs a selector-like event
         assertTrue(output.contains("when { … }"), "subject-less when should emit a selector placeholder")
+
+        // Verify that a logfile is always created by the plugin task
+        val logFile = File(projectDir, "logs/forensics-btmgen.log")
+        assertTrue(logFile.exists() && logFile.isFile, "Expected logfile to be created at logs/forensics-btmgen.log")
     }
 
     private fun writeSettings(projectDir: File) {

@@ -1,0 +1,10 @@
+<aspectj>
+    <weaver options="-verbose">
+        <!-- Limit weaving to our plugin and example trace packages to keep tests fast -->
+        <include within="de.burger.forensics..*"/>
+        <include within="org.example.trace..*"/>
+    </weaver>
+    <aspects>
+        <aspect name="de.burger.it.infrastructure.logging.MethodLoggingAspect"/>
+    </aspects>
+</aspectj>

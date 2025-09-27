@@ -55,6 +55,10 @@ abstract class BtmGenExtension @Inject constructor(
      * also configures the root logger via a system property.
      */
     val logLevel: Property<String> = objects.property(String::class.java)
+    /** Enable mirroring plugin logs to a local file (default: true). */
+    val logToFile: Property<Boolean> = objects.property(Boolean::class.java)
+    /** Path to the log file, relative to the project directory (default: logs/forensics-btmgen.log). */
+    val logFilePath: Property<String> = objects.property(String::class.java)
 
     init {
         srcDirs.convention(listOf("src/main/java", "src/main/kotlin"))
@@ -84,6 +88,8 @@ abstract class BtmGenExtension @Inject constructor(
         maxFileBytes.convention(2_000_000L)
         useAstScanner.convention(true)
         logLevel.convention("ERROR")
+        logToFile.convention(true)
+        logFilePath.convention("logs/forensics-btmgen.log")
     }
 
     var shards: Int

@@ -138,6 +138,14 @@ abstract class GenerateBtmTask : DefaultTask() {
     abstract val logLevel: Property<String>
 
     @get:Input
+    @get:Optional
+    abstract val logToFile: Property<Boolean>
+
+    @get:Input
+    @get:Optional
+    abstract val logFilePath: Property<String>
+
+    @get:Input
     abstract val minBranchesPerMethod: Property<Int>
 
     @get:Input
@@ -247,8 +255,35 @@ abstract class GenerateBtmTask : DefaultTask() {
         return text.length - 1
     }
 
+    private fun ensureLogFile(): java.io.File? {
+        return try {
+            if (!logToFile.getOrElse(true)) return null
+            val relative = logFilePath.orNull?.takeIf { it.isNotBlank() } ?: "logs/forensics-btmgen.log"
+            val file = java.io.File(layout.projectDirectory.asFile, relative)
+            file.parentFile?.let { if (!it.exists()) it.mkdirs() }
+            if (!file.exists()) file.createNewFile()
+            file
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun fileLog(level: String, message: String) {
+        if (!logToFile.getOrElse(true)) return
+        val file = ensureLogFile() ?: return
+        try {
+            val ts = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+                .format(java.time.LocalDateTime.now())
+            file.appendText("$ts [$level] ${message}\n")
+        } catch (_: Throwable) {
+            // ignore file logging failures
+        }
+    }
+
     @TaskAction
     fun generate() {
+        // Ensure a log file is always present for this task run
+        ensureLogFile()
         if (useAstScanner.getOrElse(true)) {
             generateWithAst()
         } else {
@@ -258,7 +293,12 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     private fun generateLegacy() {
         val outputDirectory = outputDir.get().asFile
-        val debugSink: (String) -> Unit = if (shouldLog(LogLevel.DEBUG)) ({ m -> logger.debug(m) }) else ({ _ -> })
+        val debugSink: (String) -> Unit = if (shouldLog(LogLevel.DEBUG)) ({ m ->
+            run {
+                logger.debug(m)
+                fileLog("DEBUG", m)
+            }
+        }) else ({ _ -> })
         if (!outputDirectory.exists()) {
             outputDirectory.mkdirs()
         }
@@ -360,7 +400,12 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     private fun generateWithAst() {
         val outputDirectory = outputDir.get().asFile
-        val debugSink: (String) -> Unit = if (shouldLog(LogLevel.DEBUG)) ({ m -> logger.debug(m) }) else ({ _ -> })
+        val debugSink: (String) -> Unit = if (shouldLog(LogLevel.DEBUG)) ({ m ->
+            run {
+                logger.debug(m)
+                fileLog("DEBUG", m)
+            }
+        }) else ({ _ -> })
         if (!outputDirectory.exists()) {
             outputDirectory.mkdirs()
         }
@@ -419,9 +464,12 @@ abstract class GenerateBtmTask : DefaultTask() {
             try {
                 events += scanner.scan(file.toPath(), includePkgs, excludePkgs)
             } catch (e: StackOverflowError) {
-                if (shouldLog(LogLevel.WARN)) logger.warn("Skipping Kotlin file due to StackOverflowError during scan: ${file} -> ${e.message}")
+                if (shouldLog(LogLevel.WARN)) { logger.warn("Skipping Kotlin file due to StackOverflowError during scan: ${file} -> ${e.message}"); fileLog("WARN", "Skipping Kotlin file due to StackOverflowError during scan: ${file} -> ${e.message}") }
             } catch (t: Throwable) {
-                if (shouldLog(LogLevel.WARN)) logger.warn("Skipping Kotlin file due to unexpected error during scan: ${file} -> ${t.message}")
+                if (shouldLog(LogLevel.WARN)) {
+                    logger.warn("Skipping Kotlin file due to unexpected error during scan: ${file} -> ${t.message}")
+                    fileLog("WARN", "Skipping Kotlin file due to unexpected error during scan: ${file} -> ${t.message}")
+                }
             }
         }
 
@@ -432,9 +480,15 @@ abstract class GenerateBtmTask : DefaultTask() {
                 try {
                     events += scanner.scan(file.toPath(), includePkgs, excludePkgs)
                 } catch (e: StackOverflowError) {
-                    if (shouldLog(LogLevel.WARN)) logger.warn("Skipping Java file due to StackOverflowError during scan: ${file} -> ${e.message}")
+                    if (shouldLog(LogLevel.WARN)) {
+                        logger.warn("Skipping Java file due to StackOverflowError during scan: ${file} -> ${e.message}")
+                        fileLog("WARN", "Skipping Java file due to StackOverflowError during scan: ${file} -> ${e.message}")
+                    }
                 } catch (t: Throwable) {
-                    if (shouldLog(LogLevel.WARN)) logger.warn("Skipping Java file due to unexpected error during scan: ${file} -> ${t.message}")
+                    if (shouldLog(LogLevel.WARN)) {
+                        logger.warn("Skipping Java file due to unexpected error during scan: ${file} -> ${t.message}")
+                        fileLog("WARN", "Skipping Java file due to unexpected error during scan: ${file} -> ${t.message}")
+                    }
                 }
             }
         }

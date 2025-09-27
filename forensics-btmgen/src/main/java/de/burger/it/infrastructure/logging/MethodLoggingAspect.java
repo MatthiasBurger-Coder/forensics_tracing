@@ -24,12 +24,22 @@ import java.util.stream.Collectors;
 @Aspect
 public class MethodLoggingAspect {
 
+    // Provide code-style aspect accessors to satisfy LTW expectations in test runtime
+    private static final MethodLoggingAspect INSTANCE = new MethodLoggingAspect();
+    public static MethodLoggingAspect aspectOf() { return INSTANCE; }
+    public static boolean hasAspect() { return true; }
+
     /**
      * Per-target logger cache to avoid repeated lookups.
      */
     private static final Map<Class<?>, Logger> PER_CLASS_LOGGERS = new ConcurrentHashMap<>();
     private static final ThreadLocal<Long> START_NS = new ThreadLocal<>();
     private static final String CID = "cid";
+
+    // File logging mirror independent of SLF4J provider
+    private static final String LOG_FILE_PROP = "forensics.btmgen.logFile";
+    private static final String LOG_TO_FILE_PROP = "forensics.btmgen.logToFile";
+    private static final String DEFAULT_LOG_FILE = "logs/forensics-btmgen.log";
 
 
     @Pointcut(
@@ -47,7 +57,9 @@ public class MethodLoggingAspect {
 
         START_NS.set(System.nanoTime());
 
-        loggerFor(jp).info("→ {} {}", shortSig(jp), argsOf(jp));
+        final String msg = String.format("→ %s %s", shortSig(jp), argsOf(jp));
+        loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
+        fileLog("WARN", msg);
     }
 
     @AfterReturning("appOps() && !@annotation(de.burger.it.infrastructure.logging.SuppressLogging)")
@@ -55,7 +67,9 @@ public class MethodLoggingAspect {
         final Long started = START_NS.get();
         final long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - (started != null ? started : System.nanoTime()));
         START_NS.set(0L);
-        loggerFor(jp).info("← {} OK in {} ms", shortSig(jp), elapsedMs);
+        final String msg = String.format("← %s OK in %d ms", shortSig(jp), elapsedMs);
+        loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
+        fileLog("WARN", msg);
     }
 
     @AfterThrowing(pointcut = "appOps() && !@annotation(de.burger.it.infrastructure.logging.SuppressLogging)", throwing = "ex")
@@ -63,7 +77,9 @@ public class MethodLoggingAspect {
         final Long started = START_NS.get();
         final long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - (started != null ? started : System.nanoTime()));
         START_NS.set(0L);
-        loggerFor(jp).error("✖ {} failed in {} ms: {}", shortSig(jp), elapsedMs, ex.getMessage(), ex);
+        final String msg = String.format("✖ %s failed in %d ms: %s", shortSig(jp), elapsedMs, ex.getMessage());
+        loggerFor(jp).error(msg, ex);
+        fileLog("ERROR", msg + " (see stacktrace in console)");
     }
 
     // ---- helpers (no if-statements) ----
@@ -94,5 +110,28 @@ public class MethodLoggingAspect {
 
     private String safeToString(Object o) {
         return java.util.Optional.ofNullable(o).map(Objects::toString).orElse("null");
+    }
+
+    private void fileLog(String level, String message) {
+        try {
+            final String enabledProp = System.getProperty(LOG_TO_FILE_PROP, "true");
+            if (!Boolean.parseBoolean(enabledProp)) return;
+            final String relative = System.getProperty(LOG_FILE_PROP, DEFAULT_LOG_FILE);
+            final java.io.File file = new java.io.File(relative);
+            final java.io.File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) {
+                // noinspection ResultOfMethodCallIgnored
+                parent.mkdirs();
+            }
+            final String ts = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+                    .format(java.time.LocalDateTime.now());
+            final String cid = java.util.Optional.ofNullable(MDC.get(CID)).orElse("-");
+            final String line = ts + " [" + level + "] [cid=" + cid + "] " + message + "\n";
+            try (java.io.FileWriter fw = new java.io.FileWriter(file, true)) {
+                fw.write(line);
+            }
+        } catch (Throwable ignored) {
+            // never fail application due to file logging
+        }
     }
 }
