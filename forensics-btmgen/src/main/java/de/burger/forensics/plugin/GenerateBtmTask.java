@@ -22,24 +22,17 @@ import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.api.tasks.*;
+import org.gradle.api.tasks.Optional;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.nio.file.Files;
-import java.time.Instant;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.nio.file.Files;
+import java.time.Instant;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -79,35 +72,56 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
     // ---- Inputs (mirroring the Kotlin task)
 
-    @Input public abstract ListProperty<String> getSrcDirs();
-    @Input @Optional public abstract Property<String> getPackagePrefix();
-    @Input public abstract Property<String> getHelperFqn();
-    @Input public abstract Property<Boolean> getEntryExit();
-    @Input public abstract ListProperty<String> getTrackedVars();
-    @Input public abstract Property<Boolean> getIncludeJava();
-    @Input public abstract Property<Boolean> getIncludeTimestamp();
-    @Input public abstract Property<Integer> getMaxStringLength();
-    @Input public abstract Property<Long> getMaxFileBytes();
+    @Input
+    public abstract ListProperty<@NotNull String> getSrcDirs();
 
-    @Input public abstract ListProperty<String> getPkgPrefixes();
-    @Input public abstract ListProperty<String> getIncludePatterns();
-    @Input public abstract ListProperty<String> getExcludePatterns();
-    @Input public abstract Property<Integer> getParallelism();
-    @Input public abstract Property<Integer> getShards();
-    @Input public abstract Property<Boolean> getGzipOutput();
-    @Input public abstract Property<String> getFilePrefix();
-    @Input public abstract Property<Long> getRotateMaxBytesPerFile();
-    @Input public abstract Property<Long> getRotateIntervalSeconds();
-    @Input public abstract Property<Integer> getFlushThresholdBytes();
-    @Input public abstract Property<Long> getFlushIntervalMillis();
-    @Input public abstract Property<Boolean> getWriterThreadSafe();
-    @Input @Optional public abstract Property<String> getLogLevel();
-    @Input @Optional public abstract Property<Boolean> getLogToFile();
-    @Input @Optional public abstract Property<String> getLogFilePath();
-    @Input public abstract Property<Integer> getMinBranchesPerMethod();
-    @Input public abstract Property<Boolean> getSafeMode();
-    @Input public abstract Property<Boolean> getForceHelperForWhitelist();
-    @Input public abstract Property<Boolean> getUseAstScanner();
+    @Input
+    @Optional
+    public abstract Property<@NotNull String> getPackagePrefix();
+
+    @Input
+    public abstract Property<@NotNull String> getHelperFqn();
+
+    @Input
+    public abstract Property<@NotNull Boolean> getEntryExit();
+
+    @Input
+    public abstract ListProperty<@NotNull String> getTrackedVars();
+
+    @Input
+    public abstract Property<@NotNull Boolean> getIncludeJava();
+
+    @Input
+    public abstract Property<@NotNull Boolean> getIncludeTimestamp();
+
+    @Input
+    public abstract Property<@NotNull Integer> getMaxStringLength();
+
+    @Input
+    public abstract Property<@NotNull Long> getMaxFileBytes();
+
+    @Input
+    public abstract ListProperty<@NotNull String> getPkgPrefixes();
+
+    @Input
+    public abstract ListProperty<@NotNull String> getIncludePatterns();
+    @Input public abstract ListProperty<@NotNull String> getExcludePatterns();
+    @Input public abstract Property<@NotNull Integer> getParallelism();
+    @Input public abstract Property<@NotNull Integer> getShards();
+    @Input public abstract Property<@NotNull Boolean> getGzipOutput();
+    @Input public abstract Property<@NotNull String> getFilePrefix();
+    @Input public abstract Property<@NotNull Long> getRotateMaxBytesPerFile();
+    @Input public abstract Property<@NotNull Long> getRotateIntervalSeconds();
+    @Input public abstract Property<@NotNull Integer> getFlushThresholdBytes();
+    @Input public abstract Property<@NotNull Long> getFlushIntervalMillis();
+    @Input public abstract Property<@NotNull Boolean> getWriterThreadSafe();
+    @Input @Optional public abstract Property<@NotNull String> getLogLevel();
+    @Input @Optional public abstract Property<@NotNull Boolean> getLogToFile();
+    @Input @Optional public abstract Property<@NotNull String> getLogFilePath();
+    @Input public abstract Property<@NotNull Integer> getMinBranchesPerMethod();
+    @Input public abstract Property<@NotNull Boolean> getSafeMode();
+    @Input public abstract Property<@NotNull Boolean> getForceHelperForWhitelist();
+    @Input public abstract Property<@NotNull Boolean> getUseAstScanner();
 
     @OutputDirectory public abstract DirectoryProperty getOutputDir();
 
@@ -299,7 +313,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
                             .thenComparing(ScanEvent::method)
                             .thenComparingInt(ScanEvent::line)
                             .thenComparing(ScanEvent::kind))
-                    .collect(Collectors.toList());
+                    .toList();
 
             Set<String> seenMethods = new LinkedHashSet<>();
             Set<String> methodsWithKotlinSwitch = filtered.stream()
@@ -373,26 +387,24 @@ public abstract class GenerateBtmTask extends DefaultTask {
     // -------------------------
 
     private List<String> toRules(ScanEvent event, String helper) {
-        switch (event.language()) {
-            case "java":
-                switch (event.kind()) {
-                    case "if-true": return Collections.singletonList(buildJavaIfRule(event, helper, true));
-                    case "if-false": return Collections.singletonList(buildJavaIfRule(event, helper, false));
-                    case "switch":   return Collections.singletonList(buildJavaSwitchRule(event, helper));
-                    case "switch-case": return Collections.singletonList(buildJavaCaseRule(event, helper));
-                    default: return Collections.emptyList();
-                }
-            case "kotlin":
-                switch (event.kind()) {
-                    case "if-true": return Collections.singletonList(buildKotlinIfRule(event, helper, true));
-                    case "if-false": return Collections.singletonList(buildKotlinIfRule(event, helper, false));
-                    case "switch":   return Collections.singletonList(buildKotlinSwitchRule(event, helper));
-                    case "when-branch": return Collections.singletonList(buildKotlinCaseRule(event, helper));
-                    case "write":    return Collections.singletonList(buildKotlinWriteRule(event, helper));
-                    default: return Collections.emptyList();
-                }
-            default: return Collections.emptyList();
-        }
+        return switch (event.language()) {
+            case "java" -> switch (event.kind()) {
+                case "if-true" -> Collections.singletonList(buildJavaIfRule(event, helper, true));
+                case "if-false" -> Collections.singletonList(buildJavaIfRule(event, helper, false));
+                case "switch" -> Collections.singletonList(buildJavaSwitchRule(event, helper));
+                case "switch-case" -> Collections.singletonList(buildJavaCaseRule(event, helper));
+                default -> Collections.emptyList();
+            };
+            case "kotlin" -> switch (event.kind()) {
+                case "if-true" -> Collections.singletonList(buildKotlinIfRule(event, helper, true));
+                case "if-false" -> Collections.singletonList(buildKotlinIfRule(event, helper, false));
+                case "switch" -> Collections.singletonList(buildKotlinSwitchRule(event, helper));
+                case "when-branch" -> Collections.singletonList(buildKotlinCaseRule(event, helper));
+                case "write" -> Collections.singletonList(buildKotlinWriteRule(event, helper));
+                default -> Collections.emptyList();
+            };
+            default -> Collections.emptyList();
+        };
     }
 
     private String buildJavaIfRule(ScanEvent e, String helper, boolean positive) {
@@ -521,7 +533,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
             String methodKey = e.getKey();
             List<String> methodRules = e.getValue();
             if (methodKey == null || hasRequiredBranches(methodRules, minBranches)) {
-                String first = methodRules.isEmpty() ? null : methodRules.get(0);
+                String first = methodRules.isEmpty() ? null : methodRules.getFirst();
                 if (first == null || !passesPrefixFilter(first, prefixes)) continue;
                 for (String rule : methodRules) {
                     String shardKey = computeShardKey(rule);
@@ -611,7 +623,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         List<File> directories = dirs.stream()
                 .map(this::resolvePath)
                 .filter(File::exists)
-                .collect(Collectors.toList());
+                .toList();
         List<String> includes = getIncludePatterns().getOrNull();
         List<String> excludes = getExcludePatterns().getOrElse(Collections.emptyList());
 
@@ -744,8 +756,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
     }
 
     private String buildEntryRule(String helper, String className, String methodName) {
-        return ("" +
-                "RULE enter@" + className + "." + methodName + "\n" +
+        return ("RULE enter@" + className + "." + methodName + "\n" +
                 "CLASS " + className + "\n" +
                 "METHOD " + methodName + "(..)\n" +
                 "HELPER " + helper + "\n" +
@@ -755,8 +766,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
     }
 
     private String buildExitRule(String helper, String className, String methodName) {
-        return ("" +
-                "RULE exit@" + className + "." + methodName + "\n" +
+        return ("RULE exit@" + className + "." + methodName + "\n" +
                 "CLASS " + className + "\n" +
                 "METHOD " + methodName + "(..)\n" +
                 "HELPER " + helper + "\n" +
