@@ -20009,3 +20009,481 @@
 2025-09-27 20:26:19.952 [WARN] [cid=-] ← GenerateBtmTaskFunctionalTest.generatesTracingRulesForSampleKotlinSources() OK in 15046 ms
 2025-09-27 20:26:19.962 [WARN] [cid=-] → GenerateBtmTaskFunctionalTest.subjectlessWhenPlaceholderIsDistinctive() []
 2025-09-27 20:26:19.964 [WARN] [cid=-] ← GenerateBtmTaskFunctionalTest.subjectlessWhenPlaceholderIsDistinctive() OK in 2 ms
+2025-09-28 17:52:03.609 [WARN] [cid=-] → ShardedWriter.writeHeader(..) [# Header
+]
+2025-09-28 17:52:03.617 [WARN] [cid=-] ← ShardedWriter.writeHeader(..) OK in 31 ms
+2025-09-28 17:52:03.625 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C0#run0:10, 4]
+2025-09-28 17:52:03.626 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.627 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C0.run0:10:if-true
+CLASS com.example.C0
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 10
+DO traceln("0")
+ENDRULE]
+2025-09-28 17:52:03.628 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 1 ms
+2025-09-28 17:52:03.629 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C1#run1:11, 4]
+2025-09-28 17:52:03.630 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.631 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C1.run1:11:if-true
+CLASS com.example.C1
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 11
+DO traceln("1")
+ENDRULE]
+2025-09-28 17:52:03.632 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 1 ms
+2025-09-28 17:52:03.633 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C2#run2:12, 4]
+2025-09-28 17:52:03.633 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.634 [WARN] [cid=-] → ShardedWriter.append(..) [1, RULE com.example.C2.run2:12:if-true
+CLASS com.example.C2
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 12
+DO traceln("2")
+ENDRULE]
+2025-09-28 17:52:03.635 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.636 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C3#run3:13, 4]
+2025-09-28 17:52:03.636 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.637 [WARN] [cid=-] → ShardedWriter.append(..) [2, RULE com.example.C3.run3:13:if-true
+CLASS com.example.C3
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 13
+DO traceln("3")
+ENDRULE]
+2025-09-28 17:52:03.638 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 1 ms
+2025-09-28 17:52:03.639 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C4#run0:14, 4]
+2025-09-28 17:52:03.639 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.640 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C4.run0:14:if-true
+CLASS com.example.C4
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 14
+DO traceln("4")
+ENDRULE]
+2025-09-28 17:52:03.641 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.641 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C5#run1:15, 4]
+2025-09-28 17:52:03.642 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.643 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C5.run1:15:if-true
+CLASS com.example.C5
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 15
+DO traceln("5")
+ENDRULE]
+2025-09-28 17:52:03.644 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.644 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C6#run2:16, 4]
+2025-09-28 17:52:03.645 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.646 [WARN] [cid=-] → ShardedWriter.append(..) [1, RULE com.example.C6.run2:16:if-true
+CLASS com.example.C6
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 16
+DO traceln("6")
+ENDRULE]
+2025-09-28 17:52:03.646 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.647 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C7#run3:17, 4]
+2025-09-28 17:52:03.647 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.648 [WARN] [cid=-] → ShardedWriter.append(..) [2, RULE com.example.C7.run3:17:if-true
+CLASS com.example.C7
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 17
+DO traceln("7")
+ENDRULE]
+2025-09-28 17:52:03.649 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.649 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C8#run0:18, 4]
+2025-09-28 17:52:03.650 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.651 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C8.run0:18:if-true
+CLASS com.example.C8
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 18
+DO traceln("8")
+ENDRULE]
+2025-09-28 17:52:03.651 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.652 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C9#run1:19, 4]
+2025-09-28 17:52:03.652 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.653 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C9.run1:19:if-true
+CLASS com.example.C9
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 19
+DO traceln("9")
+ENDRULE]
+2025-09-28 17:52:03.653 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.654 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C10#run2:20, 4]
+2025-09-28 17:52:03.655 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.656 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C10.run2:20:if-true
+CLASS com.example.C10
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 20
+DO traceln("10")
+ENDRULE]
+2025-09-28 17:52:03.656 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.657 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C11#run3:21, 4]
+2025-09-28 17:52:03.657 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.658 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C11.run3:21:if-true
+CLASS com.example.C11
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 21
+DO traceln("11")
+ENDRULE]
+2025-09-28 17:52:03.659 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.659 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C12#run0:22, 4]
+2025-09-28 17:52:03.660 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.661 [WARN] [cid=-] → ShardedWriter.append(..) [1, RULE com.example.C12.run0:22:if-true
+CLASS com.example.C12
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 22
+DO traceln("12")
+ENDRULE]
+2025-09-28 17:52:03.661 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 1 ms
+2025-09-28 17:52:03.662 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C13#run1:23, 4]
+2025-09-28 17:52:03.662 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.663 [WARN] [cid=-] → ShardedWriter.append(..) [2, RULE com.example.C13.run1:23:if-true
+CLASS com.example.C13
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 23
+DO traceln("13")
+ENDRULE]
+2025-09-28 17:52:03.664 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 1 ms
+2025-09-28 17:52:03.665 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C14#run2:24, 4]
+2025-09-28 17:52:03.665 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.666 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C14.run2:24:if-true
+CLASS com.example.C14
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 24
+DO traceln("14")
+ENDRULE]
+2025-09-28 17:52:03.666 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.667 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C15#run3:25, 4]
+2025-09-28 17:52:03.668 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.669 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C15.run3:25:if-true
+CLASS com.example.C15
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 25
+DO traceln("15")
+ENDRULE]
+2025-09-28 17:52:03.669 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.670 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C16#run0:26, 4]
+2025-09-28 17:52:03.670 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.671 [WARN] [cid=-] → ShardedWriter.append(..) [1, RULE com.example.C16.run0:26:if-true
+CLASS com.example.C16
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 26
+DO traceln("16")
+ENDRULE]
+2025-09-28 17:52:03.671 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.672 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C17#run1:27, 4]
+2025-09-28 17:52:03.672 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.673 [WARN] [cid=-] → ShardedWriter.append(..) [2, RULE com.example.C17.run1:27:if-true
+CLASS com.example.C17
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 27
+DO traceln("17")
+ENDRULE]
+2025-09-28 17:52:03.673 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.674 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C18#run2:28, 4]
+2025-09-28 17:52:03.674 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.675 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C18.run2:28:if-true
+CLASS com.example.C18
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 28
+DO traceln("18")
+ENDRULE]
+2025-09-28 17:52:03.676 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.677 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C19#run3:29, 4]
+2025-09-28 17:52:03.677 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.678 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C19.run3:29:if-true
+CLASS com.example.C19
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 29
+DO traceln("19")
+ENDRULE]
+2025-09-28 17:52:03.678 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.679 [WARN] [cid=-] → ShardedWriter.close() []
+2025-09-28 17:52:03.679 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.write(..) [[B@2b87581, 0, 798]
+2025-09-28 17:52:03.681 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.write(..) OK in 0 ms
+2025-09-28 17:52:03.681 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.682 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.682 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.683 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.683 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.close() []
+2025-09-28 17:52:03.684 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.close() OK in 0 ms
+2025-09-28 17:52:03.685 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.write(..) [[B@66434cc8, 0, 535]
+2025-09-28 17:52:03.685 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.write(..) OK in 0 ms
+2025-09-28 17:52:03.686 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.686 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.687 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.687 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.688 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.close() []
+2025-09-28 17:52:03.688 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.close() OK in 0 ms
+2025-09-28 17:52:03.689 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.write(..) [[B@42f22995, 0, 535]
+2025-09-28 17:52:03.689 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.write(..) OK in 0 ms
+2025-09-28 17:52:03.690 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.691 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.691 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.692 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.693 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.close() []
+2025-09-28 17:52:03.693 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.close() OK in 0 ms
+2025-09-28 17:52:03.694 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.write(..) [[B@693e4d19, 0, 798]
+2025-09-28 17:52:03.695 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.write(..) OK in 0 ms
+2025-09-28 17:52:03.695 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.696 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.697 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.698 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 1 ms
+2025-09-28 17:52:03.699 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.close() []
+2025-09-28 17:52:03.699 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.close() OK in 0 ms
+2025-09-28 17:52:03.700 [WARN] [cid=-] ← ShardedWriter.close() OK in 323848637 ms
+2025-09-28 17:52:03.701 [WARN] [cid=-] → ShardedWriter.close() []
+2025-09-28 17:52:03.701 [WARN] [cid=-] ← ShardedWriter.close() OK in 0 ms
+2025-09-28 17:52:03.847 [WARN] [cid=-] → ShardedWriter.writeHeader(..) [# Header
+]
+2025-09-28 17:52:03.847 [WARN] [cid=-] ← ShardedWriter.writeHeader(..) OK in 0 ms
+2025-09-28 17:52:03.848 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C0#run0:10, 4]
+2025-09-28 17:52:03.848 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.849 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C0.run0:10:if-true
+CLASS com.example.C0
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 10
+DO traceln("0")
+ENDRULE]
+2025-09-28 17:52:03.850 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 1 ms
+2025-09-28 17:52:03.851 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C1#run1:11, 4]
+2025-09-28 17:52:03.852 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.852 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C1.run1:11:if-true
+CLASS com.example.C1
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 11
+DO traceln("1")
+ENDRULE]
+2025-09-28 17:52:03.853 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.853 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C2#run2:12, 4]
+2025-09-28 17:52:03.854 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.854 [WARN] [cid=-] → ShardedWriter.append(..) [1, RULE com.example.C2.run2:12:if-true
+CLASS com.example.C2
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 12
+DO traceln("2")
+ENDRULE]
+2025-09-28 17:52:03.855 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.855 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C3#run3:13, 4]
+2025-09-28 17:52:03.856 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.856 [WARN] [cid=-] → ShardedWriter.append(..) [2, RULE com.example.C3.run3:13:if-true
+CLASS com.example.C3
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 13
+DO traceln("3")
+ENDRULE]
+2025-09-28 17:52:03.857 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.857 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C4#run0:14, 4]
+2025-09-28 17:52:03.858 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.858 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C4.run0:14:if-true
+CLASS com.example.C4
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 14
+DO traceln("4")
+ENDRULE]
+2025-09-28 17:52:03.858 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.859 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C5#run1:15, 4]
+2025-09-28 17:52:03.859 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.860 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C5.run1:15:if-true
+CLASS com.example.C5
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 15
+DO traceln("5")
+ENDRULE]
+2025-09-28 17:52:03.860 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.860 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C6#run2:16, 4]
+2025-09-28 17:52:03.861 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.861 [WARN] [cid=-] → ShardedWriter.append(..) [1, RULE com.example.C6.run2:16:if-true
+CLASS com.example.C6
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 16
+DO traceln("6")
+ENDRULE]
+2025-09-28 17:52:03.862 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.863 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C7#run3:17, 4]
+2025-09-28 17:52:03.863 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.864 [WARN] [cid=-] → ShardedWriter.append(..) [2, RULE com.example.C7.run3:17:if-true
+CLASS com.example.C7
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 17
+DO traceln("7")
+ENDRULE]
+2025-09-28 17:52:03.864 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.865 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C8#run0:18, 4]
+2025-09-28 17:52:03.865 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.866 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C8.run0:18:if-true
+CLASS com.example.C8
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 18
+DO traceln("8")
+ENDRULE]
+2025-09-28 17:52:03.866 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.867 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C9#run1:19, 4]
+2025-09-28 17:52:03.867 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.868 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C9.run1:19:if-true
+CLASS com.example.C9
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 19
+DO traceln("9")
+ENDRULE]
+2025-09-28 17:52:03.868 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.868 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C10#run2:20, 4]
+2025-09-28 17:52:03.869 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.869 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C10.run2:20:if-true
+CLASS com.example.C10
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 20
+DO traceln("10")
+ENDRULE]
+2025-09-28 17:52:03.870 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.870 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C11#run3:21, 4]
+2025-09-28 17:52:03.871 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.871 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C11.run3:21:if-true
+CLASS com.example.C11
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 21
+DO traceln("11")
+ENDRULE]
+2025-09-28 17:52:03.872 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.872 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C12#run0:22, 4]
+2025-09-28 17:52:03.872 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.873 [WARN] [cid=-] → ShardedWriter.append(..) [1, RULE com.example.C12.run0:22:if-true
+CLASS com.example.C12
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 22
+DO traceln("12")
+ENDRULE]
+2025-09-28 17:52:03.873 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.874 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C13#run1:23, 4]
+2025-09-28 17:52:03.874 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.875 [WARN] [cid=-] → ShardedWriter.append(..) [2, RULE com.example.C13.run1:23:if-true
+CLASS com.example.C13
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 23
+DO traceln("13")
+ENDRULE]
+2025-09-28 17:52:03.875 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.876 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C14#run2:24, 4]
+2025-09-28 17:52:03.876 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.877 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C14.run2:24:if-true
+CLASS com.example.C14
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 24
+DO traceln("14")
+ENDRULE]
+2025-09-28 17:52:03.877 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.878 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C15#run3:25, 4]
+2025-09-28 17:52:03.878 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.879 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C15.run3:25:if-true
+CLASS com.example.C15
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 25
+DO traceln("15")
+ENDRULE]
+2025-09-28 17:52:03.879 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.880 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C16#run0:26, 4]
+2025-09-28 17:52:03.880 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.881 [WARN] [cid=-] → ShardedWriter.append(..) [1, RULE com.example.C16.run0:26:if-true
+CLASS com.example.C16
+METHOD run0(..)
+HELPER helper.Helper
+AT LINE 26
+DO traceln("16")
+ENDRULE]
+2025-09-28 17:52:03.882 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.882 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C17#run1:27, 4]
+2025-09-28 17:52:03.883 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.883 [WARN] [cid=-] → ShardedWriter.append(..) [2, RULE com.example.C17.run1:27:if-true
+CLASS com.example.C17
+METHOD run1(..)
+HELPER helper.Helper
+AT LINE 27
+DO traceln("17")
+ENDRULE]
+2025-09-28 17:52:03.884 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.884 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C18#run2:28, 4]
+2025-09-28 17:52:03.885 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.885 [WARN] [cid=-] → ShardedWriter.append(..) [3, RULE com.example.C18.run2:28:if-true
+CLASS com.example.C18
+METHOD run2(..)
+HELPER helper.Helper
+AT LINE 28
+DO traceln("18")
+ENDRULE]
+2025-09-28 17:52:03.886 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.886 [WARN] [cid=-] → HashUtil.stableShard(..) [com.example.C19#run3:29, 4]
+2025-09-28 17:52:03.887 [WARN] [cid=-] ← HashUtil.stableShard(..) OK in 0 ms
+2025-09-28 17:52:03.887 [WARN] [cid=-] → ShardedWriter.append(..) [0, RULE com.example.C19.run3:29:if-true
+CLASS com.example.C19
+METHOD run3(..)
+HELPER helper.Helper
+AT LINE 29
+DO traceln("19")
+ENDRULE]
+2025-09-28 17:52:03.888 [WARN] [cid=-] ← ShardedWriter.append(..) OK in 0 ms
+2025-09-28 17:52:03.888 [WARN] [cid=-] → ShardedWriter.close() []
+2025-09-28 17:52:03.889 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.write(..) [[B@6ceb7b5e, 0, 798]
+2025-09-28 17:52:03.889 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.write(..) OK in 0 ms
+2025-09-28 17:52:03.889 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.890 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.890 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.891 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.891 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.close() []
+2025-09-28 17:52:03.891 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.close() OK in 0 ms
+2025-09-28 17:52:03.892 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.write(..) [[B@7dd00705, 0, 535]
+2025-09-28 17:52:03.892 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.write(..) OK in 0 ms
+2025-09-28 17:52:03.893 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.893 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.894 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.894 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.895 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.close() []
+2025-09-28 17:52:03.895 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.close() OK in 0 ms
+2025-09-28 17:52:03.896 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.write(..) [[B@f14e5bf, 0, 535]
+2025-09-28 17:52:03.896 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.write(..) OK in 0 ms
+2025-09-28 17:52:03.896 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.897 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.897 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.898 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.898 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.close() []
+2025-09-28 17:52:03.898 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.close() OK in 0 ms
+2025-09-28 17:52:03.899 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.write(..) [[B@d176a31, 0, 798]
+2025-09-28 17:52:03.899 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.write(..) OK in 0 ms
+2025-09-28 17:52:03.900 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.900 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.901 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.flush() []
+2025-09-28 17:52:03.901 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.flush() OK in 0 ms
+2025-09-28 17:52:03.901 [WARN] [cid=-] → ShardedWriter.CountingOutputStream.close() []
+2025-09-28 17:52:03.902 [WARN] [cid=-] ← ShardedWriter.CountingOutputStream.close() OK in 0 ms
+2025-09-28 17:52:03.902 [WARN] [cid=-] ← ShardedWriter.close() OK in 323848840 ms
+2025-09-28 17:52:03.903 [WARN] [cid=-] → ShardedWriter.close() []
+2025-09-28 17:52:03.903 [WARN] [cid=-] ← ShardedWriter.close() OK in 0 ms
