@@ -19,18 +19,6 @@ class RuleParitySmokeTest {
         GenerateBtmTask task = project.getTasks().register("parity", GenerateBtmTask.class).get();
 
         File sourceDir = Files.createTempDirectory("parity-src").toFile();
-        writeText(sourceDir, "Mix.kt", String.join("\n",
-                "package com.example",
-                "",
-                "class Mix {",
-                "    fun choice(flag: Int): String {",
-                "        return when (flag) {",
-                "            1 -> \"one\"",
-                "            else -> \"other\"",
-                "        }",
-                "    }",
-                "}")
-        );
         writeText(sourceDir, "Mix.java", String.join("\n",
                 "package com.example;",
                 "",
@@ -38,6 +26,13 @@ class RuleParitySmokeTest {
                 "    public void tap(boolean ready) {",
                 "        if (ready) {",
                 "            System.out.println(\"r\");",
+                "        }",
+                "    }",
+                "",
+                "    public int choice(int flag) {",
+                "        switch (flag) {",
+                "            case 1: return 1;",
+                "            default: return 2;",
                 "        }",
                 "    }",
                 "}")

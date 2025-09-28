@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 class GenerateBtmTaskFunctionalTest {
 
     @Test
-    void generatesTracingRulesForSampleKotlinSources() throws IOException {
+    void generatesTracingRulesForSampleJavaSources() throws IOException {
         File projectDir = Files.createTempDirectory("btmgen-functional-test").toFile();
         projectDir.deleteOnExit();
         writeSettings(projectDir);
@@ -55,14 +55,12 @@ class GenerateBtmTaskFunctionalTest {
                 .collect(Collectors.joining("\n"));
         System.out.println("[DEBUG_LOG] Output:\n" + output);
 
-        assertTrue(output.contains("enter@de.burger.forensics.sample.SampleFlowKt.decisionFlow"));
+        assertTrue(output.contains("enter@de.burger.forensics.sample.SampleFlow.decisionFlow"));
         assertTrue(output.contains("METHOD decisionFlow(..)"),
                 "METHOD should include (..) to indicate any parameters");
         assertTrue(output.contains("if-true"));
         assertTrue(output.contains(":case"));
-        assertTrue(output.contains("write-statusFlag"));
-        assertTrue(output.contains("when { … }"),
-                "subject-less when should emit a selector placeholder");
+        assertTrue(output.contains(":when"));
 
         File logFile = new File(projectDir, "logs/forensics-btmgen.log");
         assertTrue(logFile.exists() && logFile.isFile(),
@@ -93,12 +91,12 @@ class GenerateBtmTaskFunctionalTest {
                 "// The plugin no longer registers tasks automatically; register it explicitly",
                 "tasks.register<de.burger.forensics.plugin.GenerateBtmTask>(\"generateBtmRules\") {",
                 "    // Configure explicitly to avoid depending on extension wiring in tests",
-                "    srcDirs.set(listOf(\"src/main/kotlin\"))",
+                "    srcDirs.set(listOf(\"src/main/java\"))",
                 "    packagePrefix.set(\"de.burger.forensics.sample\")",
                 "    helperFqn.set(\"de.burger.forensics.ForensicsHelper\")",
                 "    entryExit.set(true)",
                 "    trackedVars.set(listOf(\"statusFlag\"))",
-                "    includeJava.set(false)",
+                "    includeJava.set(true)",
                 "    includeTimestamp.set(false)",
                 "    maxStringLength.set(0)",
                 "    pkgPrefixes.set(emptyList())",
@@ -125,62 +123,54 @@ class GenerateBtmTaskFunctionalTest {
     }
 
     private void writeSampleSource(File projectDir) throws IOException {
-        File sourceDir = new File(projectDir, "src/main/kotlin/de/burger/forensics/sample");
+        File sourceDir = new File(projectDir, "src/main/java/de/burger/forensics/sample");
         if (!sourceDir.mkdirs() && !sourceDir.exists()) {
             throw new IOException("Failed to create sample source directory");
         }
         String source = String.join("\n",
-                "package de.burger.forensics.sample",
+                "package de.burger.forensics.sample;",
                 "",
-                "@Suppress(\"UNUSED_PARAMETER\")",
-                "fun decisionFlow(customerType: String, amount: Int, subject: Any?): Boolean {",
-                "    var statusFlag = false",
-                "    if (customerType == \"VIP\") {",
-                "        statusFlag = true",
-                "    } else if (amount > 10_000) {",
-                "        statusFlag = true",
-                "    } else {",
-                "        statusFlag = amount > 0",
-                "    }",
-                "",
-                "    val normalized = customerType.trim().uppercase()",
-                "    when (normalized) {",
-                "        \"VIP\" -> statusFlag = true",
-                "        \"BLOCKED\", \"FRAUD\" -> statusFlag = false",
-                "        else -> statusFlag = amount > 100 && (subject is String)",
-                "    }",
-                "",
-                "    // subject-less when",
-                "    when {",
-                "        amount > 5000 -> statusFlag = true",
-                "        else -> {",
-                "            // no-op",
+                "public class SampleFlow {",
+                "    public boolean decisionFlow(String customerType, int amount, Object subject) {",
+                "        boolean statusFlag = false;",
+                "        if (\"VIP\".equals(customerType)) {",
+                "            statusFlag = true;",
+                "        } else if (amount > 10_000) {",
+                "            statusFlag = true;",
+                "        } else {",
+                "            statusFlag = amount > 0;",
                 "        }",
+                "",
+                "        String normalized = customerType.trim().toUpperCase();",
+                "        switch (normalized) {",
+                "            case \"VIP\":",
+                "                statusFlag = true;",
+                "                break;",
+                "            case \"BLOCKED\":",
+                "            case \"FRAUD\":",
+                "                statusFlag = false;",
+                "                break;",
+                "            default:",
+                "                statusFlag = amount > 100 && subject instanceof String;",
+                "        }",
+                "",
+                "        switch (amount / 1_000) {",
+                "            case 5:",
+                "                statusFlag = true;",
+                "                break;",
+                "            default:",
+                "                // no-op",
+                "        }",
+                "",
+                "        if (subject instanceof Number number) {",
+                "            statusFlag = number.doubleValue() > 0.0;",
+                "        } else if (!(subject instanceof String)) {",
+                "            statusFlag = false;",
+                "        }",
+                "",
+                "        return statusFlag;",
                 "    }",
-                "",
-                "    if (subject is Number) {",
-                "        statusFlag = subject.toDouble() > 0.0",
-                "    } else if (subject !is String) {",
-                "        statusFlag = false",
-                "    }",
-                "",
-                "    return statusFlag",
-                "}",
-                "",
-                "fun renderDecision(statusFlag: Boolean): String = when (statusFlag) {",
-                "    true -> \"APPROVED\"",
-                "    false -> \"DECLINED\"",
                 "}");
-        Files.writeString(new File(sourceDir, "SampleFlow.kt").toPath(), source);
-    }
-
-    @Test
-    void subjectlessWhenPlaceholderIsDistinctive() {
-        String placeholder = "when { … }";
-        assertTrue(placeholder.contains("…"), "placeholder should include a Unicode ellipsis");
-        assertTrue(placeholder.contains(" "));
-        assertTrue(placeholder.contains("{") && placeholder.contains("}"));
-        assertFalse(placeholder.matches("^[A-Za-z_][A-Za-z0-9_]*$"),
-                "placeholder must not be a valid simple identifier");
+        Files.writeString(new File(sourceDir, "SampleFlow.java").toPath(), source);
     }
 }

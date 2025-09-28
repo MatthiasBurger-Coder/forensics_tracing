@@ -9,7 +9,6 @@ plugins {
     // Core
     `java-library`
     `java-gradle-plugin`
-
     // Publishing
     alias(libs.plugins.gradle.plugin.publish)
     alias(libs.plugins.nexus.publish)

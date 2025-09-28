@@ -84,7 +84,7 @@ class BtmGenPluginFunctionalTest {
                 "// Explicitly register the task; plugin does not auto-create it anymore",
                 "tasks.register<de.burger.forensics.plugin.GenerateBtmTask>(\"generateBtmRules\") {",
                 "    // Configure explicitly to avoid relying on extension wiring",
-                "    srcDirs.set(listOf(\"src/main/kotlin\", \"src/main/java\"))",
+                "    srcDirs.set(listOf(\"src/main/java\"))",
                 "    packagePrefix.set(\"\")",
                 "    helperFqn.set(\"de.burger.forensics.ForensicsHelper\")",
                 "    entryExit.set(true)",
@@ -116,15 +116,22 @@ class BtmGenPluginFunctionalTest {
     }
 
     private void writeMinimalSource(File projectDir) throws IOException {
-        File sourceDir = new File(projectDir, "src/main/kotlin");
+        File sourceDir = new File(projectDir, "src/main/java/de/burger/forensics/sample");
         if (!sourceDir.mkdirs() && !sourceDir.exists()) {
             throw new IOException("Failed to create source directory");
         }
         String source = String.join("\n",
-                "fun hello(name: String): String {",
-                "    return \"Hello, ${'$'}name\"",
+                "package de.burger.forensics.sample;",
+                "",
+                "public class TopLevel {",
+                "    public String hello(String name) {",
+                "        if (name == null) {",
+                "            return \"Hello, world\";",
+                "        }",
+                "        return \"Hello, \" + name;",
+                "    }",
                 "}");
-        Files.writeString(new File(sourceDir, "TopLevel.kt").toPath(), source);
+        Files.writeString(new File(sourceDir, "TopLevel.java").toPath(), source);
     }
 
     private String readFirstOutputFile(File projectDir) throws IOException {
