@@ -14,9 +14,13 @@ import de.burger.forensics.plugin.translate.UnsafeExprTranslator
 import de.burger.forensics.plugin.util.HashUtil
 import de.burger.forensics.plugin.util.RuleIdUtil
 import org.gradle.api.DefaultTask
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.ProjectLayout
+import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
+import org.gradle.api.provider.ProviderFactory
 import org.gradle.api.tasks.*
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
@@ -35,9 +39,15 @@ import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import javax.inject.Inject
 
 @CacheableTask
 abstract class GenerateBtmTask : DefaultTask() {
+
+    // Injected Gradle services (configuration-cache friendly)
+    @get:Inject abstract val layout: ProjectLayout
+    @get:Inject abstract val objects: ObjectFactory
+    @get:Inject abstract val providers: ProviderFactory
 
     init {
         // Provide conventions so Gradle validation passes even if users don't wire the extension.
@@ -47,30 +57,30 @@ abstract class GenerateBtmTask : DefaultTask() {
         entryExit.convention(true)
         trackedVars.convention(emptyList())
         includeJava.convention(true)
-        includeTimestamp.convention(false)
+        includeTimestamp.convention(true)
         maxStringLength.convention(0)
         maxFileBytes.convention(2_000_000L)
 
         // New DSL inputs
         pkgPrefixes.convention(emptyList())
-        includePatterns.convention(emptyList())
-        excludePatterns.convention(emptyList())
+        includePatterns.convention(listOf("*.java", "**/*.java", "*.kt", "**/*.kt"))
+        excludePatterns.convention(listOf("**/build/**", "**/.gradle/**", "**/out/**", "**/generated/**"))
         parallelism.convention(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
         shards.convention(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
         gzipOutput.convention(false)
         filePrefix.convention("tracing-")
-        rotateMaxBytesPerFile.convention(4L * 1024 * 1024)
-        rotateIntervalSeconds.convention(0L)
+        rotateMaxBytesPerFile.convention(10L * 1024 * 1024)
+        rotateIntervalSeconds.convention(300L)
         flushThresholdBytes.convention(64 * 1024)
-        flushIntervalMillis.convention(2000L)
-        writerThreadSafe.convention(false)
+        flushIntervalMillis.convention(1_000L)
+        writerThreadSafe.convention(true)
 
         logLevel.convention("ERROR")
         logToFile.convention(true)
         logFilePath.convention("logs/forensics-btmgen.log")
 
         minBranchesPerMethod.convention(0)
-        safeMode.convention(false)
+        safeMode.convention(true)
         forceHelperForWhitelist.convention(false)
         useAstScanner.convention(true)
 
@@ -196,6 +206,10 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceFiles: ConfigurableFileCollection
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
     protected val kotlinSourceFiles: List<File>
         get() = resolveFiles(withExtension = ".kt")
 
@@ -227,7 +241,7 @@ abstract class GenerateBtmTask : DefaultTask() {
 
     private fun resolvePath(path: String): File {
         val file = File(path)
-        return if (file.isAbsolute) file else project.layout.projectDirectory.file(path).asFile
+        return if (file.isAbsolute) file else layout.projectDirectory.file(path).asFile
     }
 
     private fun extractClassName(rule: String): String? {
