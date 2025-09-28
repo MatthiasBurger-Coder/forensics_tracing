@@ -39,6 +39,14 @@ repositories {
     mavenCentral()
 }
 
+// Ensure no SLF4J binding (like Logback) is present on the plugin's main classpath
+configurations.named("compileClasspath") {
+    exclude(group = "ch.qos.logback", module = "logback-classic")
+}
+configurations.named("runtimeClasspath") {
+    exclude(group = "ch.qos.logback", module = "logback-classic")
+}
+
 // ------------------------------------------------------------------------------------
 // Dependencies (from libs.versions.toml)
 // ------------------------------------------------------------------------------------
@@ -46,11 +54,8 @@ dependencies {
     // Core analysis / parsing (JavaParser)
     implementation(libs.javaparser.symbol.solver.core)
 
-    // Logging facade + backend
     implementation(libs.slf4j.api)
-    runtimeOnly(libs.logback.classic)
-    runtimeOnly(libs.jul.to.slf4j)
-    runtimeOnly(libs.jcl.over.slf4j)
+    // Intentionally no SLF4J binding on the build classpath to avoid conflicts with Gradle's provider
 
     // AspectJ (if you use load-time weaving / agent elsewhere)
     implementation(libs.aspectj.rt)
@@ -61,6 +66,9 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)
+    testImplementation(libs.junit.platform.launcher)
+    testImplementation(libs.aspectj.weaver)
+    testImplementation(libs.byte.buddy.agent)
     testImplementation(libs.assertj.core)
 }
 
@@ -88,18 +96,20 @@ gradlePlugin {
             ?: "https://github.com/burger-matthias/forensics_tracing.git"
     )
     plugins {
-        create("forensicsTracingPlugin").apply {
+        create("btmGenPlugin").apply {
+            // This ID must match what tests use
             id = providers.gradleProperty("PLUGIN_ID").orNull
-                ?: "de.burger.it.forensics-tracing"
+                ?: "de.burger.forensics.btmgen"
+            // Point to actual implementation class in the project
             implementationClass = providers.gradleProperty("PLUGIN_IMPL_CLASS").orNull
-                ?: "de.burger.it.forensics.ForensicsTracingPlugin"
+                ?: "de.burger.forensics.plugin.BtmGenPlugin"
 
-            displayName = "Forensics Tracing Gradle Plugin"
+            displayName = "Forensics BTM Generator Gradle Plugin"
             description = providers.gradleProperty("POM_DESCRIPTION").orNull
-                ?: "Forensics Tracing Gradle Plugin focusing on Java sources. Kotlin parsing removed."
+                ?: "Generates Byteman tracing rules from Java sources."
 
             // Tags must be configured here (no pluginBundle in 2.x)
-            this.tags.addAll("forensics", "tracing", "static-analysis", "java")
+            this.tags.addAll("forensics", "tracing", "byteman", "java")
         }
     }
 }

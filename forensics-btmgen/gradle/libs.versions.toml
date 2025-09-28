@@ -2,10 +2,12 @@
 
 [versions]
 kotlin   = "2.2.20"
-junit    = "5.14.0"
+junit    = "5.13.4"
+junit-platform = "1.11.3"
 assertj  = "3.27.6"
 javaparser = "3.27.0"
 aspectj  = "1.9.24"
+bytebuddy = "1.14.12"
 slf4j    = "2.0.17"
 logback  = "1.5.18"
 
@@ -24,6 +26,7 @@ nexus-publish         = { id = "io.github.gradle-nexus.publish-plugin", version.
 kotlin-stdlib              = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
 
+
 # JavaParser
 javaparser-symbol-solver-core = { module = "com.github.javaparser:javaparser-symbol-solver-core", version.ref = "javaparser" }
 
@@ -38,10 +41,15 @@ jcl-over-slf4j  = { module = "org.slf4j:jcl-over-slf4j",   version.ref = "slf4j"
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 
 # Testing (JUnit 5 via BOM + Jupiter)
+# BOM
 junit-bom            = { module = "org.junit:junit-bom", version.ref = "junit" }
-junit-jupiter        = { module = "org.junit.jupiter:junit-jupiter",        version.ref = "junit" }
-junit-jupiter-api    = { module = "org.junit.jupiter:junit-jupiter-api",    version.ref = "junit" }
-junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit" }
+junit-jupiter        = { module = "org.junit.jupiter:junit-jupiter" }
+junit-jupiter-api    = { module = "org.junit.jupiter:junit-jupiter-api" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
+
+# ByteBuddy agent
+byte-buddy-agent = { module = "net.bytebuddy:byte-buddy-agent", version.ref = "bytebuddy" }
 
 # Assertions
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }

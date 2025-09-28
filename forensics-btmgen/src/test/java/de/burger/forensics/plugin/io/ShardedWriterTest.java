@@ -144,7 +144,7 @@ class ShardedWriterTest {
             Runnable task = () -> {
                 for (int i = 0; i < 200; i++) {
                     try {
-                        writer.append(0, buildRule("thread-" + Thread.currentThread().getId() + "-" + i, "data" + i));
+                        writer.append(0, buildRule("thread-" + Thread.currentThread().threadId() + "-" + i, "data" + i));
                     } catch (Throwable t) {
                         failure.compareAndSet(null, t);
                         throw new RuntimeException(t);
