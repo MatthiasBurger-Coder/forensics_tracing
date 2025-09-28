@@ -28,7 +28,18 @@ import javax.inject.Inject;
 import java.io.File;
 import java.nio.file.Files;
 import java.time.Instant;
-import java.util.*;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -173,6 +184,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         boolean includeEntryExit = getEntryExit().getOrElse(true);
         int maxLen = getMaxStringLength().getOrElse(0);
         long limit = getMaxFileBytes().getOrElse(2_000_000L);
+        List<String> tracked = resolveTrackedVars();
 
         int shardCount = Math.max(getShards().getOrElse(Runtime.getRuntime().availableProcessors()), 1);
         boolean gzip = getGzipOutput().getOrElse(false);
@@ -184,7 +196,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         boolean threadSafeValue = getWriterThreadSafe().getOrElse(false);
         int minBranches = getMinBranchesPerMethod().getOrElse(0);
 
-        String header = buildHeader(helper, allPkgPrefixes, getIncludeTimestamp().getOrElse(false));
+        String header = buildHeader(helper, allPkgPrefixes, tracked, getIncludeTimestamp().getOrElse(false));
 
         try (ShardedWriter writer = new ShardedWriter(
                 out, shardCount, gzip, prefix,
@@ -210,6 +222,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
                     }
                 }
             }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to generate legacy rules", e);
         }
     }
 
@@ -230,6 +244,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         boolean includeEntryExit = getEntryExit().getOrElse(true);
         long limit = getMaxFileBytes().getOrElse(2_000_000L);
         int minBranches = getMinBranchesPerMethod().getOrElse(0);
+        List<String> tracked = resolveTrackedVars();
 
         int shardCount = Math.max(getShards().getOrElse(Runtime.getRuntime().availableProcessors()), 1);
         boolean gzip = getGzipOutput().getOrElse(false);
@@ -240,7 +255,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         long flushIntervalValue = getFlushIntervalMillis().getOrElse(2000L);
         boolean threadSafeValue = getWriterThreadSafe().getOrElse(false);
 
-        String header = buildHeader(helper, allPkgPrefixes, getIncludeTimestamp().getOrElse(false));
+        String header = buildHeader(helper, allPkgPrefixes, tracked, getIncludeTimestamp().getOrElse(false));
 
         ScannerFacade scanner = new ScannerFacade();
         List<ScanEvent> events = new ArrayList<>();
@@ -279,34 +294,34 @@ public abstract class GenerateBtmTask extends DefaultTask {
         List<String> rules = new ArrayList<>();
         if (!events.isEmpty()) {
             List<ScanEvent> filtered = events.stream()
-                    .sorted(Comparator.comparing(ScanEvent::getLanguage)
-                            .thenComparing(ScanEvent::getFqcn)
-                            .thenComparing(ScanEvent::getMethod)
-                            .thenComparingInt(ScanEvent::getLine)
-                            .thenComparing(ScanEvent::getKind))
+                    .sorted(Comparator.comparing(ScanEvent::language)
+                            .thenComparing(ScanEvent::fqcn)
+                            .thenComparing(ScanEvent::method)
+                            .thenComparingInt(ScanEvent::line)
+                            .thenComparing(ScanEvent::kind))
                     .collect(Collectors.toList());
 
             Set<String> seenMethods = new LinkedHashSet<>();
             Set<String> methodsWithKotlinSwitch = filtered.stream()
-                    .filter(e -> "kotlin".equals(e.getLanguage()) && "switch".equals(e.getKind()))
-                    .map(e -> e.getLanguage() + ":" + e.getFqcn() + ":" + e.getMethod() + ":" + e.getSignature())
+                    .filter(e -> "kotlin".equals(e.language()) && "switch".equals(e.kind()))
+                    .map(e -> e.language() + ":" + e.fqcn() + ":" + e.method() + ":" + e.signature())
                     .collect(Collectors.toSet());
 
             for (ScanEvent e : filtered) {
-                if (e.getLine() < 0) continue;
-                if (!allPkgPrefixes.isEmpty() && allPkgPrefixes.stream().noneMatch(p -> e.getFqcn().startsWith(p)))
+                if (e.line() < 0) continue;
+                if (!allPkgPrefixes.isEmpty() && allPkgPrefixes.stream().noneMatch(p -> e.fqcn().startsWith(p)))
                     continue;
 
-                String methodKey = e.getLanguage() + ":" + e.getFqcn() + ":" + e.getMethod() + ":" + e.getSignature();
+                String methodKey = e.language() + ":" + e.fqcn() + ":" + e.method() + ":" + e.signature();
 
                 if (includeEntryExit && seenMethods.add(methodKey)) {
-                    rules.add(buildEntryRule(helper, e.getFqcn(), e.getMethod()));
-                    rules.add(buildExitRule(helper, e.getFqcn(), e.getMethod()));
+                    rules.add(buildEntryRule(helper, e.fqcn(), e.method()));
+                    rules.add(buildExitRule(helper, e.fqcn(), e.method()));
                 }
-                if ("kotlin".equals(e.getLanguage()) && "when-branch".equals(e.getKind())
+                if ("kotlin".equals(e.language()) && "when-branch".equals(e.kind())
                         && !methodsWithKotlinSwitch.contains(methodKey)) {
-                    ScanEvent synthetic = new ScanEvent("kotlin", e.getFqcn(), e.getMethod(),
-                            e.getSignature(), "switch", e.getLine(), null);
+                    ScanEvent synthetic = new ScanEvent("kotlin", e.fqcn(), e.method(),
+                            e.signature(), "switch", e.line(), null);
                     rules.add(buildKotlinSwitchRule(synthetic, helper));
                 }
                 rules.addAll(toRules(e, helper));
@@ -348,6 +363,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 flushThresholdValue, flushIntervalValue, threadSafeValue)) {
             writer.writeHeader(header);
             dispatchRules(rules, allPkgPrefixes, minBranches, shardCount, writer);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to generate AST rules", e);
         }
     }
 
@@ -356,9 +373,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
     // -------------------------
 
     private List<String> toRules(ScanEvent event, String helper) {
-        switch (event.getLanguage()) {
+        switch (event.language()) {
             case "java":
-                switch (event.getKind()) {
+                switch (event.kind()) {
                     case "if-true": return Collections.singletonList(buildJavaIfRule(event, helper, true));
                     case "if-false": return Collections.singletonList(buildJavaIfRule(event, helper, false));
                     case "switch":   return Collections.singletonList(buildJavaSwitchRule(event, helper));
@@ -366,7 +383,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
                     default: return Collections.emptyList();
                 }
             case "kotlin":
-                switch (event.getKind()) {
+                switch (event.kind()) {
                     case "if-true": return Collections.singletonList(buildKotlinIfRule(event, helper, true));
                     case "if-false": return Collections.singletonList(buildKotlinIfRule(event, helper, false));
                     case "switch":   return Collections.singletonList(buildKotlinSwitchRule(event, helper));
@@ -379,103 +396,103 @@ public abstract class GenerateBtmTask extends DefaultTask {
     }
 
     private String buildJavaIfRule(ScanEvent e, String helper, boolean positive) {
-        String conditionText = e.getConditionText() != null ? e.getConditionText() : "true";
+        String conditionText = e.conditionText() != null ? e.conditionText() : "true";
         String check = positive ? ("IF (" + conditionText + ")") : ("IF (!(" + conditionText + "))");
         return String.join("\n",
-            "RULE " + e.getFqcn() + "." + e.getMethod() + ":" + e.getLine() + ":" + (positive ? "if-true" : "if-false"),
-            "CLASS " + e.getFqcn(),
-            "METHOD " + e.getMethod() + "(..)",
+            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":" + (positive ? "if-true" : "if-false"),
+            "CLASS " + e.fqcn(),
+            "METHOD " + e.method() + "(..)",
             "HELPER " + helper,
-            "AT LINE " + e.getLine(),
+            "AT LINE " + e.line(),
             check,
-            "DO iff(\"" + e.getFqcn() + "\",\"" + e.getMethod() + "\"," + e.getLine() + ",\"" + escape(conditionText) + "\"," + positive + ")",
+            "DO iff(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + escape(conditionText) + "\"," + positive + ")",
             "ENDRULE");
     }
 
     private String buildJavaSwitchRule(ScanEvent e, String helper) {
-        String selector = escape(optStr(e.getConditionText()));
+        String selector = escape(optStr(e.conditionText()));
         return String.join("\n",
-            "RULE " + e.getFqcn() + "." + e.getMethod() + ":" + e.getLine() + ":when",
-            "CLASS " + e.getFqcn(),
-            "METHOD " + e.getMethod() + "(..)",
+            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":when",
+            "CLASS " + e.fqcn(),
+            "METHOD " + e.method() + "(..)",
             "HELPER " + helper,
-            "AT LINE " + e.getLine(),
-            "DO sw(\"" + e.getFqcn() + "\",\"" + e.getMethod() + "\"," + e.getLine() + ",\"" + selector + "\")",
+            "AT LINE " + e.line(),
+            "DO sw(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + selector + "\")",
             "ENDRULE");
     }
 
     private String buildJavaCaseRule(ScanEvent e, String helper) {
-        String label = escape(optStr(e.getConditionText(), "default"));
+        String label = escape(optStr(e.conditionText(), "default"));
         return String.join("\n",
-            "RULE " + e.getFqcn() + "." + e.getMethod() + ":" + e.getLine() + ":case",
-            "CLASS " + e.getFqcn(),
-            "METHOD " + e.getMethod() + "(..)",
+            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":case",
+            "CLASS " + e.fqcn(),
+            "METHOD " + e.method() + "(..)",
             "HELPER " + helper,
-            "AT LINE " + e.getLine(),
-            "DO kase(\"" + e.getFqcn() + "\",\"" + e.getMethod() + "\"," + e.getLine() + ",\"" + label + "\")",
+            "AT LINE " + e.line(),
+            "DO kase(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + label + "\")",
             "ENDRULE");
     }
 
     private String buildKotlinIfRule(ScanEvent e, String helper, boolean positive) {
-        String cond = e.getConditionText() != null ? e.getConditionText() : "true";
+        String cond = e.conditionText() != null ? e.conditionText() : "true";
         ConditionStrategy base = conditionStrategyFactory.from(cond);
-        String ruleId = RuleIdUtil.stableRuleId(e.getFqcn(), e.getMethod(), e.getLine(), cond);
+        String ruleId = RuleIdUtil.stableRuleId(e.fqcn(), e.method(), e.line(), cond);
         ConditionStrategy decorated = decorateCondition(base, ruleId);
         String rendered = decorated.toBytemanIf();
         List<String> reg = maybeBuildRegistrationBlock(ruleId, cond, rendered);
         String escaped = escape(cond);
 
         List<String> lines = new ArrayList<>();
-        lines.add("RULE " + e.getFqcn() + "." + e.getMethod() + ":" + e.getLine() + ":" + (positive ? "if-true" : "if-false"));
-        lines.add("CLASS " + e.getFqcn());
-        lines.add("METHOD " + e.getMethod() + "(..)"
+        lines.add("RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":" + (positive ? "if-true" : "if-false"));
+        lines.add("CLASS " + e.fqcn());
+        lines.add("METHOD " + e.method() + "(..)"
         );
         lines.add("HELPER " + helper);
-        lines.add("AT LINE " + e.getLine());
+        lines.add("AT LINE " + e.line());
         lines.add(positive ? "IF (" + rendered + ")" : "IF (!(" + rendered + "))");
         if (reg != null) lines.addAll(reg);
-        lines.add("DO iff(\"" + e.getFqcn() + "\",\"" + e.getMethod() + "\"," + e.getLine() + ",\"" + escaped + "\"," + positive + ")");
+        lines.add("DO iff(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + escaped + "\"," + positive + ")");
         lines.add("ENDRULE");
         return String.join("\n", lines);
     }
 
     private String buildKotlinSwitchRule(ScanEvent e, String helper) {
-        String raw = (e.getConditionText() != null && !e.getConditionText().isBlank())
-                ? e.getConditionText() : SUBJECTLESS_WHEN_PLACEHOLDER;
+        String raw = (e.conditionText() != null && !e.conditionText().isBlank())
+                ? e.conditionText() : SUBJECTLESS_WHEN_PLACEHOLDER;
         String sel = escape(raw);
         return String.join("\n",
-            "RULE " + e.getFqcn() + "." + e.getMethod() + ":" + e.getLine() + ":when",
-            "CLASS " + e.getFqcn(),
-            "METHOD " + e.getMethod() + "(..)",
+            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":when",
+            "CLASS " + e.fqcn(),
+            "METHOD " + e.method() + "(..)",
             "HELPER " + helper,
-            "AT LINE " + e.getLine(),
-            "DO sw(\"" + e.getFqcn() + "\",\"" + e.getMethod() + "\"," + e.getLine() + ",\"" + sel + "\")",
+            "AT LINE " + e.line(),
+            "DO sw(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + sel + "\")",
             "ENDRULE");
     }
 
     private String buildKotlinCaseRule(ScanEvent e, String helper) {
-        String label = escape(optStr(e.getConditionText(), "else"));
+        String label = escape(optStr(e.conditionText(), "else"));
         return String.join("\n",
-            "RULE " + e.getFqcn() + "." + e.getMethod() + ":" + e.getLine() + ":case",
-            "CLASS " + e.getFqcn(),
-            "METHOD " + e.getMethod() + "(..)",
+            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":case",
+            "CLASS " + e.fqcn(),
+            "METHOD " + e.method() + "(..)",
             "HELPER " + helper,
-            "AT LINE " + e.getLine(),
-            "DO kase(\"" + e.getFqcn() + "\",\"" + e.getMethod() + "\"," + e.getLine() + ",\"" + label + "\")",
+            "AT LINE " + e.line(),
+            "DO kase(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + label + "\")",
             "ENDRULE");
     }
 
     private String buildKotlinWriteRule(ScanEvent e, String helper) {
-        String name = e.getConditionText();
+        String name = e.conditionText();
         if (name == null || name.isBlank()) return "";
         String escapedVar = escape(name);
         return String.join("\n",
-            "RULE " + e.getFqcn() + "." + e.getMethod() + ":" + e.getLine() + ":write-" + name,
-            "CLASS " + e.getFqcn(),
-            "METHOD " + e.getMethod() + "(..)",
+            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":write-" + name,
+            "CLASS " + e.fqcn(),
+            "METHOD " + e.method() + "(..)",
             "HELPER " + helper,
             "AFTER WRITE $" + name,
-            "DO writeVar(\"" + e.getFqcn() + "\",\"" + e.getMethod() + "\"," + e.getLine() + ",\"" + escapedVar + "\",$" + name + ")",
+            "DO writeVar(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + escapedVar + "\",$" + name + ")",
             "ENDRULE");
     }
 
@@ -491,7 +508,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 if (passesPrefixFilter(rule, prefixes)) {
                     String shardKey = computeShardKey(rule);
                     int shard = HashUtil.stableShard(shardKey, shardCount);
-                    writer.append(shard, rule);
+                    appendRule(writer, shard, rule);
                 }
             }
             return;
@@ -509,9 +526,17 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 for (String rule : methodRules) {
                     String shardKey = computeShardKey(rule);
                     int shard = HashUtil.stableShard(shardKey, shardCount);
-                    writer.append(shard, rule);
+                    appendRule(writer, shard, rule);
                 }
             }
+        }
+    }
+
+    private void appendRule(ShardedWriter writer, int shard, String rule) {
+        try {
+            writer.append(shard, rule);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to append rule", e);
         }
     }
 
@@ -538,15 +563,30 @@ public abstract class GenerateBtmTask extends DefaultTask {
         return cls + "#" + method + ":" + line;
     }
 
-    private String buildHeader(String helper, List<String> prefixes, boolean withTs) {
+    private String buildHeader(String helper, List<String> prefixes, List<String> tracked, boolean withTs) {
         StringBuilder sb = new StringBuilder();
-        if (withTs) sb.append("# Generated at ").append(Instant.now()).append(" by forensics-btmgen\n");
-        else sb.append("# Generated by forensics-btmgen\n");
+        if (withTs) sb.append("# Generated at ").append(Instant.now()).append(" by de.burger.forensics.btmgen\n");
+        else sb.append("# Generated by de.burger.forensics.btmgen\n");
         sb.append("# Helper: ").append(helper).append('\n');
         if (!prefixes.isEmpty()) {
             sb.append("# Package prefix filters: ").append(String.join(", ", prefixes)).append('\n');
         }
+        if (tracked != null && !tracked.isEmpty()) {
+            sb.append("# Tracked variables: ").append(String.join(", ", tracked)).append('\n');
+        }
         return sb.toString();
+    }
+
+    private List<String> resolveTrackedVars() {
+        List<String> raw = getTrackedVars().getOrElse(Collections.emptyList());
+        if (raw == null || raw.isEmpty()) return Collections.emptyList();
+        LinkedHashSet<String> unique = new LinkedHashSet<>();
+        for (String entry : raw) {
+            if (entry == null) continue;
+            String trimmed = entry.trim();
+            if (!trimmed.isEmpty()) unique.add(trimmed);
+        }
+        return new ArrayList<>(unique);
     }
 
     // -------------------------
