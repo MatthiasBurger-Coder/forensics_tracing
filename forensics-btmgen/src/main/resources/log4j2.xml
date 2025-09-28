@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="OFF">
-    <!-- Log4j2 removed; SLF4J facade remains. Placeholder file kept to avoid resource deletion in builds. -->
-</Configuration>

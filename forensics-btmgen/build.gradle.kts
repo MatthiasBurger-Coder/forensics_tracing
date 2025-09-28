@@ -1,131 +1,172 @@
-import java.io.File
+/*
+ * Root build.gradle.kts for the forensics_tracing Gradle plugin
+ * - Uses versions from libs.versions.toml
+ * - No Kotlin source/deps (Kotlin parsing removed)
+ * - Ready for Gradle Plugin Portal + Sonatype (Nexus) publishing
+ */
 
 plugins {
-    id("java")
-    id("java-gradle-plugin")
-    kotlin("jvm") version "2.2.0"
-    id("maven-publish")
+    // Core
+    `java-library`
+    `java-gradle-plugin`
+
+    // Publishing
+    alias(libs.plugins.gradle.plugin.publish)
+    alias(libs.plugins.nexus.publish)
 }
 
-group = "de.burger.forensics"
-version = "1.0.0"
+group = providers.gradleProperty("POM_GROUP_ID").orNull ?: "de.burger.it"
+version = providers.gradleProperty("POM_VERSION").orNull ?: "0.1.0"
 
-description = "Generates Byteman tracing rules from Java sources"
-
+// ------------------------------------------------------------------------------------
+// Java toolchain & compilation
+// ------------------------------------------------------------------------------------
 java {
+    // Use JDK 23 as preferred by the project context
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
     }
+    withSourcesJar()
+    withJavadocJar()
 }
 
-gradlePlugin {
-    plugins {
-        register("btmgen") {
-            id = "de.burger.forensics.btmgen"
-            implementationClass = "de.burger.forensics.plugin.BtmGenPlugin"
-        }
-    }
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+    // Enable modern warnings without breaking the build
+    options.compilerArgs.addAll(listOf("-Xlint:deprecation", "-Xlint:unchecked"))
 }
 
 repositories {
     mavenCentral()
 }
 
-configurations {
-    create("ajc")
-}
-
+// ------------------------------------------------------------------------------------
+// Dependencies (from libs.versions.toml)
+// ------------------------------------------------------------------------------------
 dependencies {
-    implementation(gradleApi())
-    implementation(libs.kotlin.stdlib)
-    implementation(libs.kotlin.compiler.embeddable)
+    // Core analysis / parsing (JavaParser)
     implementation(libs.javaparser.symbol.solver.core)
 
-    // Logging facade and bridges
+    // Logging facade + backend
     implementation(libs.slf4j.api)
-    implementation(libs.jul.to.slf4j)
-    implementation(libs.jcl.over.slf4j)
+    runtimeOnly(libs.logback.classic)
+    runtimeOnly(libs.jul.to.slf4j)
+    runtimeOnly(libs.jcl.over.slf4j)
 
-    // Use Gradle's logging backend during plugin execution.
-    // Do NOT add any SLF4J provider/binding to main configurations to avoid multiple providers on classpath.
-    // For tests we provide a Log4j2 binding so log4j2.xml is honored.
-
-    // AspectJ runtime/weaver
+    // AspectJ (if you use load-time weaving / agent elsewhere)
     implementation(libs.aspectj.rt)
     runtimeOnly(libs.aspectj.weaver)
 
-    add("ajc", "org.aspectj:aspectjtools:1.9.21")
-
-    // For tests: allow self-attachment to obtain Instrumentation when -javaagent is unavailable
-    testImplementation("net.bytebuddy:byte-buddy-agent:1.14.13")
-    testImplementation(libs.aspectj.weaver)
-
+    // --- Test ---
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
-    testImplementation("org.junit.platform:junit-platform-launcher:1.10.2")
-    testImplementation(libs.assertj.core)
-    testImplementation(kotlin("test-junit5"))
-    testImplementation(gradleTestKit())
-
+    testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)
+    testImplementation(libs.assertj.core)
 }
 
-tasks.withType<Test>().configureEach {
+tasks.test {
     useJUnitPlatform()
-
-    // Ensure aspect file logging is enabled and points to the standard log file
-    doFirst {
-        systemProperty("forensics.btmgen.logToFile", "true")
-        systemProperty("forensics.btmgen.logFile", "logs/forensics-btmgen.log")
+    testLogging {
+        events("FAILED", "SKIPPED", "STANDARD_OUT", "STANDARD_ERROR")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = true
     }
 }
 
-tasks.register<JavaExec>("ajcWeave") {
-    val outDir = layout.buildDirectory.dir("classes-ajt").get().asFile
-    outputs.dir(outDir)
-    doFirst { outDir.mkdirs() }
-    classpath = files(configurations.getByName("ajc"), sourceSets.main.get().compileClasspath)
-    mainClass.set("org.aspectj.tools.ajc.Main")
-    args = listOf(
-        "-1.8",
-        "-inpath", sourceSets.main.get().output.classesDirs.asPath,
-        "-cp", sourceSets.main.get().compileClasspath.asPath,
-        "-sourceroots", sourceSets.main.get().allSource.srcDirs.joinToString(File.pathSeparator),
-        "-d", outDir.absolutePath
+// ------------------------------------------------------------------------------------
+// Gradle Plugin definition
+// Adjust `id`, `implementationClass`, display fields as needed.
+// ------------------------------------------------------------------------------------
+gradlePlugin {
+    // Top-level metadata for the plugin bundle
+    website.set(
+        providers.gradleProperty("POM_URL").orNull
+            ?: "https://github.com/burger-matthias/forensics_tracing"
     )
+    vcsUrl.set(
+        providers.gradleProperty("POM_SCM_URL").orNull
+            ?: "https://github.com/burger-matthias/forensics_tracing.git"
+    )
+    plugins {
+        create("forensicsTracingPlugin").apply {
+            id = providers.gradleProperty("PLUGIN_ID").orNull
+                ?: "de.burger.it.forensics-tracing"
+            implementationClass = providers.gradleProperty("PLUGIN_IMPL_CLASS").orNull
+                ?: "de.burger.it.forensics.ForensicsTracingPlugin"
+
+            displayName = "Forensics Tracing Gradle Plugin"
+            description = providers.gradleProperty("POM_DESCRIPTION").orNull
+                ?: "Forensics Tracing Gradle Plugin focusing on Java sources. Kotlin parsing removed."
+
+            // Tags must be configured here (no pluginBundle in 2.x)
+            this.tags.addAll("forensics", "tracing", "static-analysis", "java")
+        }
+    }
 }
 
+// ------------------------------------------------------------------------------------
+// Maven Publishing (to Sonatype) via nexus-publish
+// Configure credentials in environment or gradle.properties.
+// ------------------------------------------------------------------------------------
 publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            from(components["java"])
-            pom {
-                name.set("forensics-btmgen")
-                description.set(project.description)
-                url.set("https://example.com/forensics-btmgen")
-                licenses {
-                    license {
-                        name.set("Apache License, Version 2.0")
-                        url.set("https://www.apache.org/licenses/LICENSE-2.0")
-                    }
+    publications.withType<MavenPublication>().configureEach {
+        pom {
+            name.set(providers.gradleProperty("POM_NAME").orNull ?: "forensics-tracing")
+            description.set(
+                providers.gradleProperty("POM_DESCRIPTION").orNull
+                    ?: "Lightweight code forensics/tracing plugin for Java projects."
+            )
+            url.set(providers.gradleProperty("POM_URL").orNull ?: "https://github.com/burger-matthias/forensics_tracing")
+
+            licenses {
+                license {
+                    name.set(providers.gradleProperty("POM_LICENSE_NAME").orNull ?: "Apache-2.0")
+                    url.set(providers.gradleProperty("POM_LICENSE_URL").orNull
+                        ?: "https://www.apache.org/licenses/LICENSE-2.0")
+                    distribution.set("repo")
                 }
-                developers {
-                    developer {
-                        id.set("burger")
-                        name.set("Burger Forensics Team")
-                        email.set("info@example.com")
-                    }
+            }
+
+            developers {
+                developer {
+                    id.set(providers.gradleProperty("POM_DEVELOPER_ID").orNull ?: "mburger")
+                    name.set(providers.gradleProperty("POM_DEVELOPER_NAME").orNull ?: "Matthias Burger")
+                    email.set(providers.gradleProperty("POM_DEVELOPER_EMAIL").orNull ?: "dev@example.com")
                 }
-                scm {
-                    url.set("https://github.com/example/forensics-btmgen")
-                    connection.set("scm:git:https://github.com/example/forensics-btmgen.git")
-                    developerConnection.set("scm:git:ssh://git@github.com/example/forensics-btmgen.git")
-                }
+            }
+
+            scm {
+                connection.set(providers.gradleProperty("POM_SCM_CONNECTION").orNull
+                    ?: "scm:git:https://github.com/burger-matthias/forensics_tracing.git")
+                developerConnection.set(providers.gradleProperty("POM_SCM_DEV_CONNECTION").orNull
+                    ?: "scm:git:ssh://git@github.com/burger-matthias/forensics_tracing.git")
+                url.set(providers.gradleProperty("POM_SCM_URL").orNull
+                    ?: "https://github.com/burger-matthias/forensics_tracing")
             }
         }
     }
-    repositories {
-        mavenLocal()
+}
+
+
+// ------------------------------------------------------------------------------------
+// Jar manifest (optional but useful)
+// ------------------------------------------------------------------------------------
+tasks.jar {
+    manifest {
+        attributes(
+            "Implementation-Title" to "forensics-tracing",
+            "Implementation-Version" to project.version,
+            "Automatic-Module-Name" to "de.burger.it.forensics.tracing"
+        )
     }
 }
 
+// ------------------------------------------------------------------------------------
+// Quality gates (optional placeholders – add your tools if you like)
+// ------------------------------------------------------------------------------------
+// tasks.register("checkAll") {
+//     group = "verification"
+//     description = "Runs all verification tasks."
+//     dependsOn("check")
+// }
