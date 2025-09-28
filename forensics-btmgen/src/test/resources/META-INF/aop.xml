@@ -1,9 +1,7 @@
 <aspectj>
-    <weaver options="-verbose">
-        <!-- Limit weaving to our plugin and example trace packages to keep tests fast -->
+    <weaver>
         <include within="de.burger.forensics..*"/>
         <include within="org.example.trace..*"/>
-        <!-- Avoid weaving Gradle-decorated task subclasses to prevent VerifyError during class generation -->
         <exclude within="de.burger.forensics.plugin..*_Decorated"/>
     </weaver>
     <aspects>

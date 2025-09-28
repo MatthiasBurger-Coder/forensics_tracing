@@ -37,7 +37,7 @@ class JavaAstScannerTest {
                 "                return 0;",
                 "        }",
                 "    }",
-                "}");
+                "}"));
 
         List<ScanEvent> events = new JavaAstScanner().scan(root, List.of(), List.of());
         assertFalse(events.isEmpty(), "Expected events to be emitted");

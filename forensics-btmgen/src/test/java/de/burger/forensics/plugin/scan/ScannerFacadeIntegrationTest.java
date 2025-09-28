@@ -28,14 +28,14 @@ class ScannerFacadeIntegrationTest {
                 "            System.out.println(\"OK\");",
                 "        }",
                 "    }",
-                "}");
+                "}"));
         Path kotlinFile = root.resolve("Joint.kt");
         Files.writeString(kotlinFile, String.join("\n",
                 "package com.example",
                 "",
                 "class JointKt {",
                 "    fun test(value: Int) = if (value > 0) \"p\" else \"n\"",
-                "}");
+                "}"));
 
         List<ScanEvent> events = new ScannerFacade().scan(root, List.of(), List.of());
         assertFalse(events.isEmpty(), "Expected events to be emitted");

@@ -73,7 +73,7 @@ class JavaAstScannerFiltersTest {
                 "            switch (v) { default: return 1; }",
                 "        }",
                 "    }",
-                "}");
+                "}"));
 
         List<ScanEvent> events = new JavaAstScanner().scan(root, List.of(), List.of());
         assertFalse(events.isEmpty(), "Expected events to be emitted");

@@ -1,10 +1,7 @@
-// DEST: src/main/java/de/burger/forensics/plugin/KtPsiExtensions.java
 package de.burger.forensics.plugin;
 
-import com.intellij.openapi.editor.Document;
-import com.intellij.psi.FileViewProvider;
-import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.com.intellij.psi.PsiFile;
 import org.jetbrains.kotlin.psi.KtElement;
 
 final class KtPsiExtensions {
@@ -15,21 +12,28 @@ final class KtPsiExtensions {
 
     /**
      * Utility helper for retrieving 1-based line numbers for Kotlin PSI elements.
-     * Returns -1 if the backing document is not available.
+     * Returns -1 if the containing file or its text is not available.
      */
     private static int getLineNumber(@NotNull KtElement element) {
         PsiFile file = element.getContainingFile();
         if (file == null) {
             return -1;
         }
-        FileViewProvider viewProvider = file.getViewProvider();
-        if (viewProvider == null) {
+        CharSequence text = file.getText();
+        if (text == null) {
             return -1;
         }
-        Document document = viewProvider.getDocument();
-        if (document == null) {
+        int offset = element.getTextOffset();
+        if (offset < 0) {
             return -1;
         }
-        return document.getLineNumber(element.getTextOffset()) + 1;
+        int line = 1;
+        int limit = Math.min(offset, text.length());
+        for (int i = 0; i < limit; i++) {
+            if (text.charAt(i) == '\n') {
+                line++;
+            }
+        }
+        return line;
     }
 }

@@ -13,38 +13,38 @@ import org.jetbrains.annotations.NotNull;
 
 public abstract class BtmGenExtension {
 
-    private final ListProperty<String> srcDirs;
-    private final Property<String> pkgPrefix;
-    private final ListProperty<String> pkgPrefixes;
-    private final Property<String> helperFqn;
-    private final Property<Boolean> entryExit;
-    private final ListProperty<String> trackedVars;
-    private final Property<Boolean> includeJava;
-    private final Property<Boolean> includeTimestamp;
-    private final ListProperty<String> include;
-    private final ListProperty<String> exclude;
-    private final Property<Integer> parallelism;
-    private final Property<Integer> shardsProperty;
-    private final Property<Boolean> gzipOutputProperty;
-    private final Property<String> filePrefixProperty;
-    private final Property<Long> rotateMaxBytesPerFileProperty;
-    private final Property<Long> rotateIntervalSecondsProperty;
-    private final Property<Integer> flushThresholdBytesProperty;
-    private final Property<Long> flushIntervalMillisProperty;
-    private final Property<Boolean> writerThreadSafeProperty;
-    private final Property<Integer> minBranchesPerMethod;
-    private final Property<Boolean> safeMode;
-    private final Property<Boolean> forceHelperForWhitelist;
-    private final Property<Long> maxFileBytes;
-    private final Property<Boolean> useAstScanner;
+    private final ListProperty<@NotNull String> srcDirs;
+    private final Property<@NotNull String> pkgPrefix;
+    private final ListProperty<@NotNull String> pkgPrefixes;
+    private final Property<@NotNull String> helperFqn;
+    private final Property<@NotNull Boolean> entryExit;
+    private final ListProperty<@NotNull String> trackedVars;
+    private final Property<@NotNull Boolean> includeJava;
+    private final Property<@NotNull Boolean> includeTimestamp;
+    private final ListProperty<@NotNull String> include;
+    private final ListProperty<@NotNull String> exclude;
+    private final Property<@NotNull Integer> parallelism;
+    private final Property<@NotNull Integer> shardsProperty;
+    private final Property<@NotNull Boolean> gzipOutputProperty;
+    private final Property<@NotNull String> filePrefixProperty;
+    private final Property<@NotNull Long> rotateMaxBytesPerFileProperty;
+    private final Property<@NotNull Long> rotateIntervalSecondsProperty;
+    private final Property<@NotNull Integer> flushThresholdBytesProperty;
+    private final Property<@NotNull Long> flushIntervalMillisProperty;
+    private final Property<@NotNull Boolean> writerThreadSafeProperty;
+    private final Property<@NotNull Integer> minBranchesPerMethod;
+    private final Property<@NotNull Boolean> safeMode;
+    private final Property<@NotNull Boolean> forceHelperForWhitelist;
+    private final Property<@NotNull Long> maxFileBytes;
+    private final Property<@NotNull Boolean> useAstScanner;
     private final DirectoryProperty outputDir;
-    private final Property<Integer> maxStringLength;
-    private final Property<String> logLevel;
-    private final Property<Boolean> logToFile;
-    private final Property<String> logFilePath;
+    private final Property<@NotNull Integer> maxStringLength;
+    private final Property<@NotNull String> logLevel;
+    private final Property<@NotNull Boolean> logToFile;
+    private final Property<@NotNull String> logFilePath;
 
     @Inject
-    protected BtmGenExtension(@NotNull ObjectFactory objects, @NotNull ProjectLayout layout) {
+    public BtmGenExtension(@NotNull ObjectFactory objects, @NotNull ProjectLayout layout) {
         this.srcDirs = objects.listProperty(String.class);
         this.pkgPrefix = objects.property(String.class);
         this.pkgPrefixes = objects.listProperty(String.class);
@@ -108,122 +108,122 @@ public abstract class BtmGenExtension {
     }
 
     @NotNull
-    public ListProperty<String> getSrcDirs() {
+    public ListProperty<@NotNull String> getSrcDirs() {
         return srcDirs;
     }
 
     @NotNull
-    public Property<String> getPkgPrefix() {
+    public Property<@NotNull String> getPkgPrefix() {
         return pkgPrefix;
     }
 
     @NotNull
-    public ListProperty<String> getPkgPrefixes() {
+    public ListProperty<@NotNull String> getPkgPrefixes() {
         return pkgPrefixes;
     }
 
     @NotNull
-    public Property<String> getHelperFqn() {
+    public Property<@NotNull String> getHelperFqn() {
         return helperFqn;
     }
 
     @NotNull
-    public Property<Boolean> getEntryExit() {
+    public Property<@NotNull Boolean> getEntryExit() {
         return entryExit;
     }
 
     @NotNull
-    public ListProperty<String> getTrackedVars() {
+    public ListProperty<@NotNull String> getTrackedVars() {
         return trackedVars;
     }
 
     @NotNull
-    public Property<Boolean> getIncludeJava() {
+    public Property<@NotNull Boolean> getIncludeJava() {
         return includeJava;
     }
 
     @NotNull
-    public Property<Boolean> getIncludeTimestamp() {
+    public Property<@NotNull Boolean> getIncludeTimestamp() {
         return includeTimestamp;
     }
 
     @NotNull
-    public ListProperty<String> getInclude() {
+    public ListProperty<@NotNull String> getInclude() {
         return include;
     }
 
     @NotNull
-    public ListProperty<String> getExclude() {
+    public ListProperty<@NotNull String> getExclude() {
         return exclude;
     }
 
     @NotNull
-    public Property<Integer> getParallelism() {
+    public Property<@NotNull Integer> getParallelism() {
         return parallelism;
     }
 
     @NotNull
-    public Property<Integer> getShardsProperty() {
+    public Property<@NotNull Integer> getShardsProperty() {
         return shardsProperty;
     }
 
     @NotNull
-    public Property<Boolean> getGzipOutputProperty() {
+    public Property<@NotNull Boolean> getGzipOutputProperty() {
         return gzipOutputProperty;
     }
 
     @NotNull
-    public Property<String> getFilePrefixProperty() {
+    public Property<@NotNull String> getFilePrefixProperty() {
         return filePrefixProperty;
     }
 
     @NotNull
-    public Property<Long> getRotateMaxBytesPerFileProperty() {
+    public Property<@NotNull Long> getRotateMaxBytesPerFileProperty() {
         return rotateMaxBytesPerFileProperty;
     }
 
     @NotNull
-    public Property<Long> getRotateIntervalSecondsProperty() {
+    public Property<@NotNull Long> getRotateIntervalSecondsProperty() {
         return rotateIntervalSecondsProperty;
     }
 
     @NotNull
-    public Property<Integer> getFlushThresholdBytesProperty() {
+    public Property<@NotNull Integer> getFlushThresholdBytesProperty() {
         return flushThresholdBytesProperty;
     }
 
     @NotNull
-    public Property<Long> getFlushIntervalMillisProperty() {
+    public Property<@NotNull Long> getFlushIntervalMillisProperty() {
         return flushIntervalMillisProperty;
     }
 
     @NotNull
-    public Property<Boolean> getWriterThreadSafeProperty() {
+    public Property<@NotNull Boolean> getWriterThreadSafeProperty() {
         return writerThreadSafeProperty;
     }
 
     @NotNull
-    public Property<Integer> getMinBranchesPerMethod() {
+    public Property<@NotNull Integer> getMinBranchesPerMethod() {
         return minBranchesPerMethod;
     }
 
     @NotNull
-    public Property<Boolean> getSafeMode() {
+    public Property<@NotNull Boolean> getSafeMode() {
         return safeMode;
     }
 
     @NotNull
-    public Property<Boolean> getForceHelperForWhitelist() {
+    public Property<@NotNull Boolean> getForceHelperForWhitelist() {
         return forceHelperForWhitelist;
     }
 
     @NotNull
-    public Property<Long> getMaxFileBytes() {
+    public Property<@NotNull Long> getMaxFileBytes() {
         return maxFileBytes;
     }
 
     @NotNull
-    public Property<Boolean> getUseAstScanner() {
+    public Property<@NotNull Boolean> getUseAstScanner() {
         return useAstScanner;
     }
 
@@ -233,22 +233,22 @@ public abstract class BtmGenExtension {
     }
 
     @NotNull
-    public Property<Integer> getMaxStringLength() {
+    public Property<@NotNull Integer> getMaxStringLength() {
         return maxStringLength;
     }
 
     @NotNull
-    public Property<String> getLogLevel() {
+    public Property<@NotNull String> getLogLevel() {
         return logLevel;
     }
 
     @NotNull
-    public Property<Boolean> getLogToFile() {
+    public Property<@NotNull Boolean> getLogToFile() {
         return logToFile;
     }
 
     @NotNull
-    public Property<String> getLogFilePath() {
+    public Property<@NotNull String> getLogFilePath() {
         return logFilePath;
     }
 

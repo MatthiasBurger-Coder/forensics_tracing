@@ -1,6 +1,7 @@
 // DEST: src/test/java/de/burger/forensics/plugin/GlobRegexCacheTest.java
 package de.burger.forensics.plugin;
 
+import static de.burger.forensics.plugin.GlobUtils.globToRegexCached;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
