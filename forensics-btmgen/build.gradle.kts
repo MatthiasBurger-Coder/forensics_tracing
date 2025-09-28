@@ -3,7 +3,6 @@ import java.io.File
 plugins {
     id("java")
     id("java-gradle-plugin")
-    kotlin("jvm") version "2.2.0"
     id("maven-publish")
 }
 
@@ -37,8 +36,6 @@ configurations {
 
 dependencies {
     implementation(gradleApi())
-    implementation(libs.kotlin.stdlib)
-    implementation(libs.kotlin.compiler.embeddable)
     implementation(libs.javaparser.symbol.solver.core)
 
     // Logging facade and bridges
@@ -64,7 +61,6 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation("org.junit.platform:junit-platform-launcher:1.10.2")
     testImplementation(libs.assertj.core)
-    testImplementation(kotlin("test-junit5"))
     testImplementation(gradleTestKit())
 
     testRuntimeOnly(libs.junit.jupiter.engine)

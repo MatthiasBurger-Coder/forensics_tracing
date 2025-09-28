@@ -21,13 +21,13 @@ class SafeModeRegistrationTest {
         var project = ProjectBuilder.builder().build();
         GenerateBtmTask task = project.getTasks().register("generateUnsafe", GenerateBtmTask.class).get();
         File sourceDir = Files.createTempDirectory("btmgen-unsafe-src").toFile();
-        writeSource(sourceDir, "Demo.kt", String.join("\n",
-                "package com.example",
+        writeSource(sourceDir, "Demo.java", String.join("\n",
+                "package com.example;",
                 "",
-                "class Demo {",
-                "    fun sample(value: String?) {",
+                "public class Demo {",
+                "    public void sample(String value) {",
                 "        if (value != null) {",
-                "            println(value);",
+                "            System.out.println(value);",
                 "        }",
                 "    }",
                 "}")
@@ -55,13 +55,13 @@ class SafeModeRegistrationTest {
         var project = ProjectBuilder.builder().build();
         GenerateBtmTask task = project.getTasks().register("generateFallback", GenerateBtmTask.class).get();
         File sourceDir = Files.createTempDirectory("btmgen-fallback-src").toFile();
-        writeSource(sourceDir, "Demo.kt", String.join("\n",
-                "package com.example",
+        writeSource(sourceDir, "Demo.java", String.join("\n",
+                "package com.example;",
                 "",
-                "class Demo {",
-                "    fun sample(value: String?) {",
+                "public class Demo {",
+                "    public void sample(String value) {",
                 "        if (value != null && value.equals(\"OK\")) {",
-                "            println(value);",
+                "            System.out.println(value);",
                 "        }",
                 "    }",
                 "}")
@@ -87,7 +87,7 @@ class SafeModeRegistrationTest {
         task.getHelperFqn().set("org.example.trace.SafeEval");
         task.getEntryExit().set(false);
         task.getTrackedVars().set(Collections.emptyList());
-        task.getIncludeJava().set(false);
+        task.getIncludeJava().set(true);
         task.getIncludeTimestamp().set(false);
         task.getMaxStringLength().set(200);
         task.getPkgPrefixes().set(Collections.emptyList());

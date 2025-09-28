@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 class ScannerFacadeIntegrationTest {
 
     @Test
-    void scansJavaAndKotlinSourcesTogether() throws IOException {
+    void scansJavaSources() throws IOException {
         Path root = Files.createTempDirectory("facade-ast");
         Path javaFile = root.resolve("Joint.java");
         Files.writeString(javaFile, String.join("\n",
@@ -28,20 +28,18 @@ class ScannerFacadeIntegrationTest {
                 "            System.out.println(\"OK\");",
                 "        }",
                 "    }",
-                "}"));
-        Path kotlinFile = root.resolve("Joint.kt");
-        Files.writeString(kotlinFile, String.join("\n",
-                "package com.example",
-                "",
-                "class JointKt {",
-                "    fun test(value: Int) = if (value > 0) \"p\" else \"n\"",
+                "    public int pick(int value) {",
+                "        if (value > 0) {",
+                "            return 1;",
+                "        }",
+                "        return 0;",
+                "    }",
                 "}"));
 
         List<ScanEvent> events = new ScannerFacade().scan(root, List.of(), List.of());
         assertFalse(events.isEmpty(), "Expected events to be emitted");
         Set<String> languages = events.stream().map(ScanEvent::language).collect(Collectors.toSet());
-        assertEquals(Set.of("java", "kotlin"), languages);
+        assertEquals(Set.of("java"), languages);
         assertTrue(events.stream().anyMatch(event -> "java".equals(event.language()) && "if-true".equals(event.kind())));
-        assertTrue(events.stream().anyMatch(event -> "kotlin".equals(event.language()) && "if-true".equals(event.kind())));
     }
 }

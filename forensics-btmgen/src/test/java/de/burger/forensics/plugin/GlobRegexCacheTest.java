@@ -20,8 +20,8 @@ class GlobRegexCacheTest {
     @Test
     void returnsDifferentInstancesForDifferentGlobs() {
         Object javaGlob = globToRegexCached("**/*.java");
-        Object kotlinGlob = globToRegexCached("**/*.kt");
+        Object groovyGlob = globToRegexCached("**/*.groovy");
 
-        assertNotSame(javaGlob, kotlinGlob, "Different globs should yield different cached objects");
+        assertNotSame(javaGlob, groovyGlob, "Different globs should yield different cached objects");
     }
 }

@@ -76,7 +76,7 @@ public abstract class BtmGenExtension {
         this.logFilePath = objects.property(String.class);
 
         int processors = Math.max(Runtime.getRuntime().availableProcessors(), 1);
-        this.srcDirs.convention(List.of("src/main/java", "src/main/kotlin"));
+        this.srcDirs.convention(Collections.singletonList("src/main/java"));
         this.pkgPrefix.convention("");
         this.pkgPrefixes.convention(Collections.emptyList());
         this.helperFqn.convention("de.burger.forensics.ForensicsHelper");

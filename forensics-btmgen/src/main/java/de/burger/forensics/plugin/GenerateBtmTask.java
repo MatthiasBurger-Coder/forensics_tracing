@@ -54,13 +54,11 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Inject public abstract ObjectFactory getObjects();
     @Inject public abstract ProviderFactory getProviders();
 
-    // ---- Strategy factory (same behaviour as Kotlin version)
+    // ---- Strategy factory for safe-mode guards
     private final StrategyFactory conditionStrategyFactory = new DefaultStrategyFactory();
 
     // ---- Constants
     private static final String SAFE_EVAL_FQCN = "org.example.trace.SafeEval";
-    private static final String SUBJECTLESS_WHEN_PLACEHOLDER = "when { … }";
-
     private static final Pattern JAVA_PACKAGE_REGEX =
             Pattern.compile("(?m)^\\s*package\\s+([a-zA-Z0-9_.]+)\\s*;");
     private static final Pattern JAVA_CLASS_REGEX =
@@ -70,7 +68,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
     private static final Pattern ENTRY_EXIT_RULE_REGEX =
             Pattern.compile("^RULE\\s+(?:enter|exit)@([\\w.$]+)\\.([A-Za-z0-9_]+)", Pattern.MULTILINE);
 
-    // ---- Inputs (mirroring the Kotlin task)
+    // ---- Inputs
 
     @Input
     public abstract ListProperty<@NotNull String> getSrcDirs();
@@ -134,7 +132,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Inject
     public GenerateBtmTask() {
         // Provide safe conventions to satisfy Gradle validation.
-        getSrcDirs().convention(Arrays.asList("src/main/java", "src/main/kotlin"));
+        getSrcDirs().convention(Collections.singletonList("src/main/java"));
         getPackagePrefix().convention("");
         getHelperFqn().convention("de.burger.forensics.ForensicsHelper");
         getEntryExit().convention(true);
@@ -145,7 +143,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getMaxFileBytes().convention(2_000_000L);
 
         getPkgPrefixes().convention(Collections.emptyList());
-        getIncludePatterns().convention(Arrays.asList("**/*.java", "**/*.kt"));
+        getIncludePatterns().convention(Collections.singletonList("**/*.java"));
         getExcludePatterns().convention(Arrays.asList("**/build/**", "**/.gradle/**", "**/out/**", "**/generated/**"));
         int cpu = Math.max(Runtime.getRuntime().availableProcessors(), 1);
         getParallelism().convention(cpu);
@@ -276,18 +274,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
         List<String> includePkgs = allPkgPrefixes;
         List<String> excludePkgs = Collections.emptyList();
 
-        // Kotlin first (if present)
-        for (File file : getKotlinSourceFiles()) {
-            if (SourceFileGuards.shouldSkipLargeFile(file, limit, this::debug)) continue;
-            try {
-                events.addAll(scanner.scan(file.toPath(), includePkgs, excludePkgs));
-            } catch (StackOverflowError e) {
-                warn("Kotlin file StackOverflow: " + file.getAbsolutePath() + " (skipped)");
-                fileLog("WARN", "Kotlin StackOverflow: " + file.getAbsolutePath());
-            } catch (Throwable t) {
-                warn("Kotlin scan error: " + file.getAbsolutePath() + " -> " + t.getMessage());
-                fileLog("WARN", "Kotlin scan error: " + file.getAbsolutePath() + " -> " + t.getMessage());
-            }
+        List<File> ignoredKotlinFiles = getIgnoredKotlinSourceFiles();
+        if (!ignoredKotlinFiles.isEmpty()) {
+            warn("Detected " + ignoredKotlinFiles.size()
+                    + " Kotlin source file(s); Kotlin scanning has been removed and these files will be skipped.");
+            File first = ignoredKotlinFiles.getFirst();
+            fileLog("WARN", "Skipped Kotlin sources (" + ignoredKotlinFiles.size()
+                    + " file(s)); example: " + first.getAbsolutePath());
         }
 
         if (getIncludeJava().getOrElse(false)) {
@@ -308,18 +301,14 @@ public abstract class GenerateBtmTask extends DefaultTask {
         List<String> rules = new ArrayList<>();
         if (!events.isEmpty()) {
             List<ScanEvent> filtered = events.stream()
-                    .sorted(Comparator.comparing(ScanEvent::language)
-                            .thenComparing(ScanEvent::fqcn)
+                    .filter(e -> "java".equals(e.language()))
+                    .sorted(Comparator.comparing(ScanEvent::fqcn)
                             .thenComparing(ScanEvent::method)
                             .thenComparingInt(ScanEvent::line)
                             .thenComparing(ScanEvent::kind))
                     .toList();
 
             Set<String> seenMethods = new LinkedHashSet<>();
-            Set<String> methodsWithKotlinSwitch = filtered.stream()
-                    .filter(e -> "kotlin".equals(e.language()) && "switch".equals(e.kind()))
-                    .map(e -> e.language() + ":" + e.fqcn() + ":" + e.method() + ":" + e.signature())
-                    .collect(Collectors.toSet());
 
             for (ScanEvent e : filtered) {
                 if (e.line() < 0) continue;
@@ -331,12 +320,6 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 if (includeEntryExit && seenMethods.add(methodKey)) {
                     rules.add(buildEntryRule(helper, e.fqcn(), e.method()));
                     rules.add(buildExitRule(helper, e.fqcn(), e.method()));
-                }
-                if ("kotlin".equals(e.language()) && "when-branch".equals(e.kind())
-                        && !methodsWithKotlinSwitch.contains(methodKey)) {
-                    ScanEvent synthetic = new ScanEvent("kotlin", e.fqcn(), e.method(),
-                            e.signature(), "switch", e.line(), null);
-                    rules.add(buildKotlinSwitchRule(synthetic, helper));
                 }
                 rules.addAll(toRules(e, helper));
             }
@@ -387,38 +370,40 @@ public abstract class GenerateBtmTask extends DefaultTask {
     // -------------------------
 
     private List<String> toRules(ScanEvent event, String helper) {
-        return switch (event.language()) {
-            case "java" -> switch (event.kind()) {
-                case "if-true" -> Collections.singletonList(buildJavaIfRule(event, helper, true));
-                case "if-false" -> Collections.singletonList(buildJavaIfRule(event, helper, false));
-                case "switch" -> Collections.singletonList(buildJavaSwitchRule(event, helper));
-                case "switch-case" -> Collections.singletonList(buildJavaCaseRule(event, helper));
-                default -> Collections.emptyList();
-            };
-            case "kotlin" -> switch (event.kind()) {
-                case "if-true" -> Collections.singletonList(buildKotlinIfRule(event, helper, true));
-                case "if-false" -> Collections.singletonList(buildKotlinIfRule(event, helper, false));
-                case "switch" -> Collections.singletonList(buildKotlinSwitchRule(event, helper));
-                case "when-branch" -> Collections.singletonList(buildKotlinCaseRule(event, helper));
-                case "write" -> Collections.singletonList(buildKotlinWriteRule(event, helper));
-                default -> Collections.emptyList();
-            };
+        if (!"java".equals(event.language())) {
+            return Collections.emptyList();
+        }
+        return switch (event.kind()) {
+            case "if-true" -> Collections.singletonList(buildJavaIfRule(event, helper, true));
+            case "if-false" -> Collections.singletonList(buildJavaIfRule(event, helper, false));
+            case "switch" -> Collections.singletonList(buildJavaSwitchRule(event, helper));
+            case "switch-case" -> Collections.singletonList(buildJavaCaseRule(event, helper));
             default -> Collections.emptyList();
         };
     }
 
     private String buildJavaIfRule(ScanEvent e, String helper, boolean positive) {
-        String conditionText = e.conditionText() != null ? e.conditionText() : "true";
-        String check = positive ? ("IF (" + conditionText + ")") : ("IF (!(" + conditionText + "))");
-        return String.join("\n",
-            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":" + (positive ? "if-true" : "if-false"),
-            "CLASS " + e.fqcn(),
-            "METHOD " + e.method() + "(..)",
-            "HELPER " + helper,
-            "AT LINE " + e.line(),
-            check,
-            "DO iff(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + escape(conditionText) + "\"," + positive + ")",
-            "ENDRULE");
+        String cond = e.conditionText() != null ? e.conditionText() : "true";
+        ConditionStrategy base = conditionStrategyFactory.from(cond);
+        String ruleId = RuleIdUtil.stableRuleId(e.fqcn(), e.method(), e.line(), cond);
+        ConditionStrategy decorated = decorateCondition(base, ruleId);
+        String rendered = decorated.toBytemanIf();
+        List<String> registration = maybeBuildRegistrationBlock(ruleId, cond, rendered);
+        String escaped = escape(cond);
+
+        List<String> lines = new ArrayList<>();
+        lines.add("RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":" + (positive ? "if-true" : "if-false"));
+        lines.add("CLASS " + e.fqcn());
+        lines.add("METHOD " + e.method() + "(..)");
+        lines.add("HELPER " + helper);
+        lines.add("AT LINE " + e.line());
+        lines.add(positive ? "IF (" + rendered + ")" : "IF (!(" + rendered + "))");
+        if (registration != null) {
+            lines.addAll(registration);
+        }
+        lines.add("DO iff(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + escaped + "\"," + positive + ")");
+        lines.add("ENDRULE");
+        return String.join("\n", lines);
     }
 
     private String buildJavaSwitchRule(ScanEvent e, String helper) {
@@ -442,69 +427,6 @@ public abstract class GenerateBtmTask extends DefaultTask {
             "HELPER " + helper,
             "AT LINE " + e.line(),
             "DO kase(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + label + "\")",
-            "ENDRULE");
-    }
-
-    private String buildKotlinIfRule(ScanEvent e, String helper, boolean positive) {
-        String cond = e.conditionText() != null ? e.conditionText() : "true";
-        ConditionStrategy base = conditionStrategyFactory.from(cond);
-        String ruleId = RuleIdUtil.stableRuleId(e.fqcn(), e.method(), e.line(), cond);
-        ConditionStrategy decorated = decorateCondition(base, ruleId);
-        String rendered = decorated.toBytemanIf();
-        List<String> reg = maybeBuildRegistrationBlock(ruleId, cond, rendered);
-        String escaped = escape(cond);
-
-        List<String> lines = new ArrayList<>();
-        lines.add("RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":" + (positive ? "if-true" : "if-false"));
-        lines.add("CLASS " + e.fqcn());
-        lines.add("METHOD " + e.method() + "(..)"
-        );
-        lines.add("HELPER " + helper);
-        lines.add("AT LINE " + e.line());
-        lines.add(positive ? "IF (" + rendered + ")" : "IF (!(" + rendered + "))");
-        if (reg != null) lines.addAll(reg);
-        lines.add("DO iff(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + escaped + "\"," + positive + ")");
-        lines.add("ENDRULE");
-        return String.join("\n", lines);
-    }
-
-    private String buildKotlinSwitchRule(ScanEvent e, String helper) {
-        String raw = (e.conditionText() != null && !e.conditionText().isBlank())
-                ? e.conditionText() : SUBJECTLESS_WHEN_PLACEHOLDER;
-        String sel = escape(raw);
-        return String.join("\n",
-            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":when",
-            "CLASS " + e.fqcn(),
-            "METHOD " + e.method() + "(..)",
-            "HELPER " + helper,
-            "AT LINE " + e.line(),
-            "DO sw(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + sel + "\")",
-            "ENDRULE");
-    }
-
-    private String buildKotlinCaseRule(ScanEvent e, String helper) {
-        String label = escape(optStr(e.conditionText(), "else"));
-        return String.join("\n",
-            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":case",
-            "CLASS " + e.fqcn(),
-            "METHOD " + e.method() + "(..)",
-            "HELPER " + helper,
-            "AT LINE " + e.line(),
-            "DO kase(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + label + "\")",
-            "ENDRULE");
-    }
-
-    private String buildKotlinWriteRule(ScanEvent e, String helper) {
-        String name = e.conditionText();
-        if (name == null || name.isBlank()) return "";
-        String escapedVar = escape(name);
-        return String.join("\n",
-            "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":write-" + name,
-            "CLASS " + e.fqcn(),
-            "METHOD " + e.method() + "(..)",
-            "HELPER " + helper,
-            "AFTER WRITE $" + name,
-            "DO writeVar(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + escapedVar + "\",$" + name + ")",
             "ENDRULE");
     }
 
@@ -605,10 +527,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
     // File resolution & helpers
     // -------------------------
 
-    @InputFiles
-    @PathSensitive(PathSensitivity.RELATIVE)
-    protected List<File> getKotlinSourceFiles() {
-        return resolveFiles(".kt");
+    @Internal
+    protected List<File> getIgnoredKotlinSourceFiles() {
+        return detectFiles(".kt");
     }
 
     @InputFiles
@@ -636,6 +557,31 @@ public abstract class GenerateBtmTask extends DefaultTask {
                             boolean incOk = (includes == null || includes.isEmpty()) || includes.stream().anyMatch(glob -> globMatchesPath(rel, glob));
                             boolean excOk = excludes.stream().noneMatch(glob -> globMatchesPath(rel, glob));
                             if (incOk && excOk) result.add(p.toFile());
+                        });
+            } catch (Exception ignored) {}
+        }
+        result.sort(Comparator.comparing(File::getAbsolutePath));
+        return result;
+    }
+
+    private List<File> detectFiles(String withExtension) {
+        List<String> dirs = getSrcDirs().getOrNull();
+        if (dirs == null) return Collections.emptyList();
+        List<File> directories = dirs.stream()
+                .map(this::resolvePath)
+                .filter(File::exists)
+                .toList();
+        List<String> excludes = getExcludePatterns().getOrElse(Collections.emptyList());
+        List<File> result = new ArrayList<>();
+        for (File dir : directories) {
+            try (var paths = Files.walk(dir.toPath())) {
+                paths.filter(p -> Files.isRegularFile(p) && p.toString().endsWith(withExtension))
+                        .forEach(p -> {
+                            String rel = dir.toPath().relativize(p).toString().replace('\\', '/');
+                            boolean excluded = excludes.stream().anyMatch(glob -> globMatchesPath(rel, glob));
+                            if (!excluded) {
+                                result.add(p.toFile());
+                            }
                         });
             } catch (Exception ignored) {}
         }
