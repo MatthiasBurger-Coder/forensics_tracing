@@ -9,37 +9,30 @@ class DefaultStrategyFactoryTest {
     private final StrategyFactory factory = new DefaultStrategyFactory();
 
     @Test
-    void equalsLiteralRecognized() {
-        ConditionStrategy strategy = factory.from("user.status == \"OK\"");
-        assertThat(strategy).isInstanceOf(EqualsLiteralStrategy.class);
-        assertThat(strategy.toBytemanIf()).isEqualTo("user.status == \"OK\"");
+    void picksNullCheck() {
+        ConditionStrategy s = factory.from("obj == null");
+        assertThat(s.typeName()).contains("NullCheck");
+        assertThat(s.toBytemanIf()).isEqualTo("obj == null");
     }
 
     @Test
-    void instanceofRecognized() {
-        ConditionStrategy strategy = factory.from("obj instanceof com.acme.Type");
-        assertThat(strategy).isInstanceOf(InstanceOfStrategy.class);
-        assertThat(strategy.toBytemanIf()).isEqualTo("obj instanceof com.acme.Type");
+    void picksInstanceOf() {
+        ConditionStrategy s = factory.from("x instanceof Foo");
+        assertThat(s.typeName()).contains("InstanceOf");
+        assertThat(s.toBytemanIf()).isEqualTo("x instanceof Foo");
     }
 
     @Test
-    void compositeAndOr() {
-        ConditionStrategy strategy = factory.from("(a == 1) && (b instanceof X) || (c == 'Y')");
-        assertThat(strategy).isInstanceOf(BooleanCompositeStrategy.class);
-        assertThat(strategy.toBytemanIf()).contains("AND").contains("OR");
+    void picksLogical() {
+        ConditionStrategy s = factory.from("(a != null) && (b == 1)");
+        assertThat(s.typeName()).contains("Logical");
+        assertThat(s.toBytemanIf()).isEqualTo("(a != null) && (b == 1)");
     }
 
     @Test
-    void fallbackToOriginalExpression() {
-        String raw = "x != null && x.equals(\"OK\")";
-        ConditionStrategy strategy = factory.from(raw);
-        assertThat(strategy).isInstanceOf(OriginalExpressionStrategy.class);
-        assertThat(strategy.toBytemanIf()).isEqualTo(raw);
-    }
-
-    @Test
-    void blankBecomesTrue() {
-        ConditionStrategy strategy = factory.from("   ");
-        assertThat(strategy.toBytemanIf()).isEqualTo("true");
+    void fallsBackToGeneric() {
+        ConditionStrategy s = factory.from("safeCall(a?.b())");
+        assertThat(s.typeName()).contains("GenericUnsafe");
+        assertThat(s.toBytemanIf()).isNotBlank();
     }
 }

@@ -42,7 +42,7 @@ public final class JavaAstScanner implements SourceScanner {
                 typeSolver.add(new JavaParserTypeSolver(parent));
             }
         }
-        StaticJavaParser.getParserConfiguration().setSymbolResolver(new JavaSymbolSolver(typeSolver));
+        StaticJavaParser.getConfiguration().setSymbolResolver(new JavaSymbolSolver(typeSolver));
 
         // Walk filesystem with bounded depth and skip directory symlinks to avoid pathological recursion.
         try {

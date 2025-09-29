@@ -10,7 +10,6 @@ import de.burger.forensics.plugin.strategy.ConditionStrategy;
 import de.burger.forensics.plugin.strategy.DefaultStrategyFactory;
 import de.burger.forensics.plugin.strategy.SafeModeDecorator;
 import de.burger.forensics.plugin.strategy.StrategyFactory;
-import de.burger.forensics.plugin.translate.UnsafeExprTranslator;
 import de.burger.forensics.plugin.util.HashUtil;
 import de.burger.forensics.plugin.util.RuleIdUtil;
 import org.gradle.api.DefaultTask;
@@ -386,9 +385,11 @@ public abstract class GenerateBtmTask extends DefaultTask {
         String cond = e.conditionText() != null ? e.conditionText() : "true";
         ConditionStrategy base = conditionStrategyFactory.from(cond);
         String ruleId = RuleIdUtil.stableRuleId(e.fqcn(), e.method(), e.line(), cond);
-        ConditionStrategy decorated = decorateCondition(base, ruleId);
-        String rendered = decorated.toBytemanIf();
-        List<String> registration = maybeBuildRegistrationBlock(ruleId, cond, rendered);
+        boolean safeMode = getSafeMode().getOrElse(false);
+        ConditionStrategy effective = safeMode
+                ? new SafeModeDecorator(base, SAFE_EVAL_FQCN, ruleId)
+                : base;
+        String rendered = effective.toBytemanIf();
         String escaped = escape(cond);
 
         List<String> lines = new ArrayList<>();
@@ -398,9 +399,6 @@ public abstract class GenerateBtmTask extends DefaultTask {
         lines.add("HELPER " + helper);
         lines.add("AT LINE " + e.line());
         lines.add(positive ? "IF (" + rendered + ")" : "IF (!(" + rendered + "))");
-        if (registration != null) {
-            lines.addAll(registration);
-        }
         lines.add("DO iff(\"" + e.fqcn() + "\",\"" + e.method() + "\"," + e.line() + ",\"" + escaped + "\"," + positive + ")");
         lines.add("ENDRULE");
         return String.join("\n", lines);
@@ -675,30 +673,6 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
-    }
-
-    private ConditionStrategy decorateCondition(ConditionStrategy base, String ruleId) {
-        return new SafeModeDecorator(
-                base,
-                getSafeMode().getOrElse(false),
-                getForceHelperForWhitelist().getOrElse(false),
-                SAFE_EVAL_FQCN,
-                ruleId
-        );
-    }
-
-    private @Nullable List<String> maybeBuildRegistrationBlock(String ruleId, String rawExpression, String renderedCondition) {
-        String expected = SAFE_EVAL_FQCN + ".ifMatch(\"" + ruleId + "\")";
-        if (!expected.equals(renderedCondition)) return null;
-        String body = UnsafeExprTranslator.toHelperExpr(rawExpression);
-        String fqcn = SAFE_EVAL_FQCN;
-        return Arrays.asList(
-                "DO " + fqcn + ".register(\"" + ruleId + "\", new " + fqcn + ".Evaluator() {",
-                "    public boolean eval() {",
-                "        return " + body + ";",
-                "    }",
-                "});"
-        );
     }
 
     private String buildEntryRule(String helper, String className, String methodName) {

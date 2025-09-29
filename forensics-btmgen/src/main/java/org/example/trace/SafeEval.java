@@ -58,6 +58,14 @@ public final class SafeEval {
         return a || b;
     }
 
+    /**
+     * Main entry used by SafeModeDecorator: records metadata if desired and returns the evaluated result.
+     * Current implementation simply returns the delegate result; hooks may extend this later.
+     */
+    public static boolean eval(String ruleId, String expr, boolean result) {
+        return result;
+    }
+
     /** Registry entry capable of evaluating the original condition without side effects. */
     public interface Evaluator {
         boolean eval();

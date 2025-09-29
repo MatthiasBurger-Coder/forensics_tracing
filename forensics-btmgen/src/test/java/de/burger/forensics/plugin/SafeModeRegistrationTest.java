@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 class SafeModeRegistrationTest {
 
     @Test
-    void unsafeExpressionRegistersEvaluatorWithTranslation() throws IOException {
+    void unsafeExpressionWrapsWithSafeEvalCall() throws IOException {
         var project = ProjectBuilder.builder().build();
         GenerateBtmTask task = project.getTasks().register("generateUnsafe", GenerateBtmTask.class).get();
         File sourceDir = Files.createTempDirectory("btmgen-unsafe-src").toFile();
@@ -40,18 +40,18 @@ class SafeModeRegistrationTest {
         task.generate();
 
         String content = Files.readString(outputDir.resolve("tracing-0001-00001.btm"));
-        Pattern pattern = Pattern.compile("IF \\((org\\.example\\.trace\\.SafeEval\\.ifMatch\\(\"([^\"]+)\"\\))\\)");
+        Pattern pattern = Pattern.compile("IF \\(org\\.example\\.trace\\.SafeEval\\.eval\\(\"([^\"]+)\"",
+                Pattern.MULTILINE);
         Matcher matcher = pattern.matcher(content);
-        assertTrue(matcher.find(), "Expected IF guard to register evaluator");
-        String ruleId = matcher.group(2);
+        assertTrue(matcher.find(), "Expected IF guard to wrap expression with SafeEval.eval");
+        String ruleId = matcher.group(1);
         assertNotNull(ruleId, "Rule identifier should be captured");
-        assertTrue(content.contains("DO org.example.trace.SafeEval.register(\"" + ruleId
-                + "\", new org.example.trace.SafeEval.Evaluator() {"));
-        assertTrue(content.contains("return !org.example.trace.SafeEval.ifEq(value, null);"));
+        assertTrue(content.contains("SafeEval.eval(\"" + ruleId + "\",\"value != null\",(value != null))"));
+        assertTrue(!content.contains("SafeEval.register"));
     }
 
     @Test
-    void unsupportedExpressionFallsBackToTrueInEvaluatorBody() throws IOException {
+    void complexExpressionEscapesInnerSource() throws IOException {
         var project = ProjectBuilder.builder().build();
         GenerateBtmTask task = project.getTasks().register("generateFallback", GenerateBtmTask.class).get();
         File sourceDir = Files.createTempDirectory("btmgen-fallback-src").toFile();
@@ -74,11 +74,13 @@ class SafeModeRegistrationTest {
         task.generate();
 
         String content = Files.readString(outputDir.resolve("tracing-0001-00001.btm"));
-        Pattern pattern = Pattern.compile(
-                "DO org\\.example\\.trace\\.SafeEval\\.register\\(\"([^\"]+)\", new org\\.example\\.trace\\.SafeEval\\.Evaluator\\(\\) \\{");
+        Pattern pattern = Pattern.compile("IF \\(org\\.example\\.trace\\.SafeEval\\.eval\\(\"([^\"]+)\"",
+                Pattern.MULTILINE);
         Matcher matcher = pattern.matcher(content);
-        assertTrue(matcher.find(), "Expected evaluator registration entry");
-        assertTrue(content.contains("return true;"));
+        assertTrue(matcher.find(), "Expected IF guard to wrap complex expression with SafeEval.eval");
+        String escapedSource = "value != null && value.equals(\\\"OK\\\")";
+        assertTrue(content.contains("SafeEval.eval(\"" + matcher.group(1) +
+                "\",\"" + escapedSource + "\",(value != null && value.equals(\"OK\")))"));
     }
 
     private void configureTask(GenerateBtmTask task, File sourceDir) {
