@@ -1,22 +1,19 @@
 package de.burger.forensics.plugin.strategy;
 
-/** Renders: expr instanceof fqcn. */
-public final class InstanceOfStrategy implements ConditionStrategy {
-    private final String expr;
-    private final String fqcn;
+import java.util.Objects;
 
-    public InstanceOfStrategy(String expr, String fqcn) {
-        this.expr = expr;
-        this.fqcn = fqcn;
+/**
+ * Handles "x instanceof Type" patterns (including negations).
+ */
+public final class InstanceOfStrategy implements ConditionStrategy {
+    private final String raw;
+
+    public InstanceOfStrategy(String raw) {
+        this.raw = Objects.requireNonNull(raw);
     }
 
     @Override
     public String toBytemanIf() {
-        return expr + " instanceof " + fqcn;
-    }
-
-    @Override
-    public String toHelperIf(String helperFqcn, String ruleId) {
-        return helperFqcn + ".ifInstanceOf(" + expr + ", \"" + fqcn + "\")";
+        return raw;
     }
 }

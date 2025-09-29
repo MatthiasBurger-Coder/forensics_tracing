@@ -1,7 +1,6 @@
 package de.burger.forensics.plugin.strategy;
 
-/** Factory for selecting condition rendering strategies. */
+/** Factory for building ConditionStrategy from raw expression text. */
 public interface StrategyFactory {
-    /** Return a suitable strategy; default to OriginalExpressionStrategy for unknown forms. */
-    ConditionStrategy from(String conditionText);
+    ConditionStrategy from(String rawExpression);
 }

@@ -11,6 +11,17 @@ public final class UnsafeExprTranslator {
     private UnsafeExprTranslator() {
     }
 
+    public static String translate(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "true";
+        }
+        String helperExpr = toHelperExpr(raw);
+        if (!"true".equals(helperExpr)) {
+            return helperExpr;
+        }
+        return raw.trim();
+    }
+
     public static String toHelperExpr(String raw) {
         if (raw == null || raw.isBlank()) {
             return "true";

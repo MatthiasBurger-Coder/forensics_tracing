@@ -1,17 +1,20 @@
 package de.burger.forensics.plugin.strategy;
 
-/** Strategy to render a Byteman IF expression without changing semantics. */
+/**
+ * Renders a source-level condition expression into a Byteman-compatible IF() fragment.
+ * Implementations should not add surrounding "IF" or trailing rule lines; just the condition body.
+ */
 public interface ConditionStrategy {
-    /** Render the Byteman IF expression. Must not introduce side effects. */
+
+    /**
+     * @return Byteman IF() condition expression that is safe to embed, without surrounding "IF" keyword.
+     */
     String toBytemanIf();
 
-    /** Optional: short type tag for debugging/tests. */
-    default String kind() {
+    /**
+     * Optional: for debugging/diagnostics.
+     */
+    default String typeName() {
         return getClass().getSimpleName();
-    }
-
-    /** Render the IF expression using helper calls to {@code helperFqcn}. */
-    default String toHelperIf(String helperFqcn, String ruleId) {
-        return helperFqcn + ".ifMatch(\"" + ruleId + "\")";
     }
 }
