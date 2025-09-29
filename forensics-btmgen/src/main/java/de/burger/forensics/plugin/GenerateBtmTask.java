@@ -1,11 +1,8 @@
 package de.burger.forensics.plugin;
 
 import de.burger.forensics.plugin.engine.JavaPrefilter;
-import de.burger.forensics.plugin.engine.JavaRegexParser;
-import de.burger.forensics.plugin.engine.SourceFileGuards;
 import de.burger.forensics.plugin.io.ShardedWriter;
 import de.burger.forensics.plugin.scan.ScanEvent;
-import de.burger.forensics.plugin.scan.ScannerFacade;
 import de.burger.forensics.plugin.strategy.ConditionStrategy;
 import de.burger.forensics.plugin.strategy.DefaultStrategyFactory;
 import de.burger.forensics.plugin.strategy.SafeModeDecorator;
@@ -173,124 +170,14 @@ public abstract class GenerateBtmTask extends DefaultTask {
     // -------------------------
     @TaskAction
     public void generate() {
-        File out = ensureOutputDir();
-        String helper = getHelperFqn().get();
-        String legacyPrefix = opt(getPackagePrefix().getOrNull());
-
-        List<String> allPkgPrefixes = new ArrayList<>();
-        if (getPkgPrefixes().getOrNull() != null) {
-            for (String p : getPkgPrefixes().get()) if (!p.isBlank()) allPkgPrefixes.add(p);
-        }
-        if (legacyPrefix != null) allPkgPrefixes.add(legacyPrefix);
-
-        boolean includeEntryExit = getEntryExit().getOrElse(true);
-        long limit = getMaxFileBytes().getOrElse(2_000_000L);
-        int minBranches = getMinBranchesPerMethod().getOrElse(0);
-        List<String> tracked = resolveTrackedVars();
-
-        int shardCount = Math.max(getShards().getOrElse(Runtime.getRuntime().availableProcessors()), 1);
-        boolean gzip = getGzipOutput().getOrElse(false);
-        String prefix = orDefault(getFilePrefix().getOrElse("tracing-"), "tracing-");
-        long rotateMaxBytesValue = getRotateMaxBytesPerFile().getOrElse(4L * 1024 * 1024);
-        long rotateIntervalSecondsValue = getRotateIntervalSeconds().getOrElse(0L);
-        int flushThresholdValue = getFlushThresholdBytes().getOrElse(64 * 1024);
-        long flushIntervalValue = getFlushIntervalMillis().getOrElse(2000L);
-        boolean threadSafeValue = getWriterThreadSafe().getOrElse(false);
-
-        String header = buildHeader(helper, allPkgPrefixes, tracked, getIncludeTimestamp().getOrElse(false));
-
-        ScannerFacade scanner = new ScannerFacade();
-        List<ScanEvent> events = new ArrayList<>();
-        List<String> excludePkgs = Collections.emptyList();
-
-
-        if (getIncludeJava().getOrElse(false)) {
-            for (File file : getJavaSourceFiles()) {
-                if (SourceFileGuards.shouldSkipLargeFile(file, limit, this::debug)) continue;
-                try {
-                    events.addAll(scanner.scan(file.toPath(), allPkgPrefixes, excludePkgs));
-                } catch (StackOverflowError e) {
-                    warn("Java file StackOverflow: " + file.getAbsolutePath() + " (skipped)");
-                    fileLog("WARN", "Java StackOverflow: " + file.getAbsolutePath());
-                } catch (Throwable t) {
-                    warn("Java scan error: " + file.getAbsolutePath() + " -> " + t.getMessage());
-                    fileLog("WARN", "Java scan error: " + file.getAbsolutePath() + " -> " + t.getMessage());
-                }
-            }
-        }
-
-        List<String> rules = new ArrayList<>();
-        if (!events.isEmpty()) {
-            List<ScanEvent> filtered = events.stream()
-                    .filter(e -> "java".equals(e.language()))
-                    .sorted(Comparator.comparing(ScanEvent::fqcn)
-                            .thenComparing(ScanEvent::method)
-                            .thenComparingInt(ScanEvent::line)
-                            .thenComparing(ScanEvent::kind))
-                    .toList();
-
-            Set<String> seenMethods = new LinkedHashSet<>();
-
-            for (ScanEvent e : filtered) {
-                if (e.line() < 0) continue;
-                if (!allPkgPrefixes.isEmpty() && allPkgPrefixes.stream().noneMatch(p -> e.fqcn().startsWith(p)))
-                    continue;
-
-                String methodKey = e.language() + ":" + e.fqcn() + ":" + e.method() + ":" + e.signature();
-
-                if (includeEntryExit && seenMethods.add(methodKey)) {
-                    rules.add(buildEntryRule(helper, e.fqcn(), e.method()));
-                    rules.add(buildExitRule(helper, e.fqcn(), e.method()));
-                }
-                rules.addAll(toRules(e, helper));
-            }
-        }
-
-        // Regex fallback to add Java entry/exit for missing methods
-        if (getIncludeJava().getOrElse(false)) {
-            JavaRegexParser regex = new JavaRegexParser();
-            Set<String> seenJavaMethods = rules.stream()
-                    .map(this::extractEntryExitMethod)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-            for (File file : getJavaSourceFiles()) {
-                if (SourceFileGuards.shouldSkipLargeFile(file, limit, this::debug)) continue;
-                String text = read(file);
-                Set<String> missing = findMissingJavaMethods(text, seenJavaMethods);
-                if (missing.isEmpty()) continue;
-                try {
-                    List<String> fileRules = regex.scan(text, helper, legacyPrefix, includeEntryExit, getMaxStringLength().getOrElse(0));
-                    for (String rule : fileRules) {
-                        String mk = extractMethodKey(rule);
-                        if (mk == null) mk = extractEntryExitMethod(rule);
-                        if (mk == null || missing.contains(mk)) {
-                            rules.add(rule);
-                        }
-                    }
-                } catch (StackOverflowError e) {
-                    getLogger().error("Regex fallback StackOverflow in file: " + file.getAbsolutePath()
-                            + ". Skipping this file.", e);
-                    fileLog("ERROR", "Regex fallback StackOverflow: " + file.getAbsolutePath());
-                }
-            }
-        }
-
-        try (ShardedWriter writer = new ShardedWriter(
-                out, shardCount, gzip, prefix,
-                rotateMaxBytesValue, rotateIntervalSecondsValue,
-                flushThresholdValue, flushIntervalValue, threadSafeValue)) {
-            writer.writeHeader(header);
-            dispatchRules(rules, allPkgPrefixes, minBranches, shardCount, writer);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to generate AST rules", e);
-        }
+        GenerateBtmAction.run(this);
     }
 
     // -------------------------
     // Rules & utilities
     // -------------------------
 
-    private List<String> toRules(ScanEvent event, String helper) {
+    List<String> toRules(ScanEvent event, String helper) {
         if (!"java".equals(event.language())) {
             return Collections.emptyList();
         }
@@ -303,7 +190,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         };
     }
 
-    private String buildJavaIfRule(ScanEvent e, String helper, boolean positive) {
+    String buildJavaIfRule(ScanEvent e, String helper, boolean positive) {
         String cond = e.conditionText() != null ? e.conditionText() : "true";
         ConditionStrategy base = conditionStrategyFactory.from(cond);
         String ruleId = RuleIdUtil.stableRuleId(e.fqcn(), e.method(), e.line(), cond);
@@ -326,7 +213,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         return String.join("\n", lines);
     }
 
-    private String buildJavaSwitchRule(ScanEvent e, String helper) {
+    String buildJavaSwitchRule(ScanEvent e, String helper) {
         String selector = escape(optStr(e.conditionText()));
         return String.join("\n",
             "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":when",
@@ -338,7 +225,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
             "ENDRULE");
     }
 
-    private String buildJavaCaseRule(ScanEvent e, String helper) {
+    String buildJavaCaseRule(ScanEvent e, String helper) {
         String label = escape(optStr(e.conditionText(), "default"));
         return String.join("\n",
             "RULE " + e.fqcn() + "." + e.method() + ":" + e.line() + ":case",
@@ -350,7 +237,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
             "ENDRULE");
     }
 
-    private void dispatchRules(List<String> rules,
+    void dispatchRules(List<String> rules,
                                List<String> prefixes,
                                int minBranches,
                                int shardCount,
@@ -417,7 +304,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         return cls + "#" + method + ":" + line;
     }
 
-    private String buildHeader(String helper, List<String> prefixes, List<String> tracked, boolean withTs) {
+    String buildHeader(String helper, List<String> prefixes, List<String> tracked, boolean withTs) {
         StringBuilder sb = new StringBuilder();
         if (withTs) sb.append("# Generated at ").append(Instant.now()).append(" by de.burger.forensics.btmgen\n");
         else sb.append("# Generated by de.burger.forensics.btmgen\n");
@@ -431,7 +318,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         return sb.toString();
     }
 
-    private List<String> resolveTrackedVars() {
+    List<String> resolveTrackedVars() {
         List<String> raw = getTrackedVars().getOrElse(Collections.emptyList());
         if (raw.isEmpty()) return Collections.emptyList();
         LinkedHashSet<String> unique = new LinkedHashSet<>();
@@ -479,7 +366,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         return result;
     }
 
-    private File ensureOutputDir() {
+    File ensureOutputDir() {
         File outputDirectory = getOutputDir().get().getAsFile();
         if (!outputDirectory.exists()) outputDirectory.mkdirs();
         return outputDirectory;
@@ -506,7 +393,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         catch (Exception e) { return ""; }
     }
 
-    private Set<String> findMissingJavaMethods(String text, Set<String> seenJavaMethods) {
+    Set<String> findMissingJavaMethods(String text, Set<String> seenJavaMethods) {
         String sanitized = JavaPrefilter.prefilterJava(text);
         String pkg = group(JAVA_PACKAGE_REGEX.matcher(sanitized), 1);
         Set<String> missing = new LinkedHashSet<>();
@@ -545,13 +432,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
         return group(Pattern.compile("(?m)^\\s*CLASS\\s+([\\w.$]+)").matcher(rule), 1);
     }
 
-    private @Nullable String extractMethodKey(String rule) {
+    @Nullable String extractMethodKey(String rule) {
         Matcher m = Pattern.compile("(?m)^\\s*RULE\\s+([\\w.$]+)\\.([A-Za-z0-9_]+):").matcher(rule);
         if (m.find()) return m.group(1) + "." + m.group(2);
         return null;
     }
 
-    private @Nullable String extractEntryExitMethod(String rule) {
+    @Nullable String extractEntryExitMethod(String rule) {
         Matcher m = ENTRY_EXIT_RULE_REGEX.matcher(rule);
         if (m.find()) return m.group(1) + "." + m.group(2);
         return null;
@@ -567,7 +454,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .replace("\t", "\\t");
     }
 
-    private String buildEntryRule(String helper, String className, String methodName) {
+    String buildEntryRule(String helper, String className, String methodName) {
         return ("RULE enter@" + className + "." + methodName + "\n" +
                 "CLASS " + className + "\n" +
                 "METHOD " + methodName + "(..)\n" +
@@ -577,7 +464,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 "ENDRULE").trim();
     }
 
-    private String buildExitRule(String helper, String className, String methodName) {
+    String buildExitRule(String helper, String className, String methodName) {
         return ("RULE exit@" + className + "." + methodName + "\n" +
                 "CLASS " + className + "\n" +
                 "METHOD " + methodName + "(..)\n" +
@@ -587,13 +474,14 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 "ENDRULE").trim();
     }
 
-    private void debug(String msg) {
+    void debug(String msg) {
         if ("DEBUG".equalsIgnoreCase(getLogLevel().getOrElse("INFO"))) {
             getLogger().debug(msg);
             fileLog("DEBUG", msg);
         }
     }
-    private void warn(String msg) {
+
+    void warn(String msg) {
         getLogger().warn(msg);
     }
 
@@ -612,7 +500,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         }
     }
 
-    private void fileLog(String level, String message) {
+    void fileLog(String level, String message) {
         if (!getLogToFile().getOrElse(true)) return;
         try {
             File f = ensureLogFile();
