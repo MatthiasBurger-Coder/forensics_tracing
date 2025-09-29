@@ -1,11 +1,6 @@
 package de.burger.forensics.application.service;
 
-import de.burger.forensics.domain.model.Rule;
-import de.burger.forensics.domain.model.RuleId;
-import de.burger.forensics.domain.model.RuleIdFactory;
-import de.burger.forensics.domain.model.RuleType;
-import de.burger.forensics.domain.model.ScanEvent;
-import de.burger.forensics.domain.model.SourceLocation;
+import de.burger.forensics.domain.model.*;
 import de.burger.forensics.domain.port.out.ClockPort;
 import de.burger.forensics.domain.port.out.CodeScanPort;
 import de.burger.forensics.domain.port.out.LogPort;
@@ -13,16 +8,10 @@ import de.burger.forensics.domain.port.out.RuleRenderPort;
 import de.burger.forensics.domain.strategy.ConditionStrategy;
 import de.burger.forensics.domain.strategy.SafeMode;
 import de.burger.forensics.domain.strategy.StrategyFactory;
+
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Stream;
 
 /**
@@ -70,15 +59,37 @@ public final class GenerateRulesUseCase {
         log.debug("Scanned " + events.size() + " events");
 
         List<Rule> rules = new ArrayList<>();
-        Set<String> methodsWithEntryExit = new LinkedHashSet<>();
 
+        // Group events by method to optionally prepend/append ENTRY/EXIT rules per method
+        Map<String, List<ScanEvent>> byMethod = new LinkedHashMap<>();
         for (ScanEvent event : events) {
-            String methodKey = methodKey(event);
-            if (request.includeEntryExit() && methodsWithEntryExit.add(methodKey)) {
-                rules.add(entryRule(event.location(), request.helperFqcn()));
-                rules.add(exitRule(event.location(), request.helperFqcn()));
+            String key = methodKey(event);
+            byMethod.computeIfAbsent(key, k -> new ArrayList<>()).add(event);
+        }
+
+        for (Map.Entry<String, List<ScanEvent>> entry : byMethod.entrySet()) {
+            List<ScanEvent> methodEvents = entry.getValue();
+            if (!methodEvents.isEmpty() && request.includeEntryExit()) {
+                boolean hasEntry = methodEvents.stream().anyMatch(e -> e.kind() == RuleType.ENTRY);
+                boolean hasExit = methodEvents.stream().anyMatch(e -> e.kind() == RuleType.EXIT);
+                SourceLocation firstLoc = methodEvents.getFirst().location();
+                SourceLocation lastLoc = methodEvents.getLast().location();
+                if (!hasEntry) {
+                    rules.add(entryRule(firstLoc, request.helperFqcn()));
+                }
+                // add all method events
+                for (ScanEvent event : methodEvents) {
+                    rules.addAll(mapEvent(event, request.helperFqcn(), request.safeMode()));
+                }
+                if (!hasExit) {
+                    rules.add(exitRule(lastLoc, request.helperFqcn()));
+                }
+            } else {
+                // No entry/exit requested, just map events
+                for (ScanEvent event : methodEvents) {
+                    rules.addAll(mapEvent(event, request.helperFqcn(), request.safeMode()));
+                }
             }
-            rules.addAll(mapEvent(event, request.helperFqcn(), request.safeMode()));
         }
 
         if (request.minBranches() > 0) {
@@ -89,7 +100,7 @@ public final class GenerateRulesUseCase {
             .map(renderer::render)
             .toList();
 
-        log.info("Finished rule generation at " + clock.now() + " with " + rendered.size() + " rules");
+        log.debug("Finished rule generation at " + clock.now() + " with " + rendered.size() + " rules");
         return new RuleGenerationResult(rendered);
     }
 

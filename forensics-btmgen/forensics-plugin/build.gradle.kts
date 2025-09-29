@@ -4,7 +4,6 @@ plugins {
     `java-library`
     `java-gradle-plugin`
     alias(libs.plugins.gradle.plugin.publish)
-    alias(libs.plugins.nexus.publish)
 }
 
 dependencies {

@@ -3,8 +3,6 @@ import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.tasks.compile.JavaCompile
 
 plugins {
-    `java-library` apply false
-    `java-gradle-plugin` apply false
     alias(libs.plugins.gradle.plugin.publish) apply false
     alias(libs.plugins.nexus.publish) apply false
 }

@@ -63,9 +63,10 @@ class GenerateRulesUseCaseTest {
 
         RuleGenerationResult result = useCase.generate(request);
         assertThat(result.renderedRules())
-            .hasSize(1)
-            .first()
-            .satisfies(rule -> assertThat(rule).startsWith("RULE "));
+            .hasSize(3);
+        assertThat(result.renderedRules().get(0)).startsWith("RULE ");
+        assertThat(result.renderedRules().get(1)).startsWith("RULE ");
+        assertThat(result.renderedRules().get(2)).startsWith("RULE ");
         assertThat(info.get()).contains("Starting rule generation");
     }
 }
