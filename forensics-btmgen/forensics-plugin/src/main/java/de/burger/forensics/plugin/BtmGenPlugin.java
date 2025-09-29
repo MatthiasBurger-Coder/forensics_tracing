@@ -11,6 +11,7 @@ import de.burger.forensics.plugin.adapters.GradleLogAdapter;
 import de.burger.forensics.plugin.adapters.SystemClockAdapter;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.Task;
 import org.gradle.api.tasks.TaskProvider;
 
 /**
@@ -57,6 +58,9 @@ public final class BtmGenPlugin implements Plugin<Project> {
             }
         );
 
-        project.getTasks().named("build").configure(build -> build.dependsOn(task));
+        Task buildTask = project.getTasks().findByName("build");
+        if (buildTask != null) {
+            buildTask.dependsOn(task);
+        }
     }
 }

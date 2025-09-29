@@ -3,14 +3,9 @@ package de.burger.forensics.plugin;
 import de.burger.forensics.application.service.GenerateRulesUseCase;
 import de.burger.forensics.application.service.GenerationRequest;
 import de.burger.forensics.application.service.RuleGenerationResult;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import de.burger.forensics.plugin.io.BtmFileWriter;
 import java.nio.file.Path;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
+import java.time.Clock;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -35,6 +30,7 @@ import org.gradle.api.tasks.TaskAction;
 public abstract class GenerateBtmTask extends DefaultTask {
 
     private GenerateRulesUseCase useCase;
+    private BtmFileWriter fileWriter = new BtmFileWriter(Clock.systemDefaultZone());
 
     @InputFiles
     @PathSensitive(PathSensitivity.RELATIVE)
@@ -65,61 +61,48 @@ public abstract class GenerateBtmTask extends DefaultTask {
         this.useCase = useCase;
     }
 
+    void setFileWriter(BtmFileWriter fileWriter) {
+        this.fileWriter = Objects.requireNonNull(fileWriter, "fileWriter");
+    }
+
     @TaskAction
     public void runGenerator() {
         Objects.requireNonNull(useCase, "useCase must be configured by the plugin");
 
+        List<Path> roots = getSourcePaths();
         List<String> prefixes = getPackagePrefixes().getOrElse(List.of());
-        Set<String> allRules = new LinkedHashSet<>();
+        Set<String> aggregatedRules = new LinkedHashSet<>();
 
-        for (Path root : getSourcePaths()) {
-            GenerationRequest request = new GenerationRequest(
-                root,
-                getHelperFqn().get(),
-                getSafeMode().getOrElse(true),
-                getIncludeEntryExit().getOrElse(true),
-                prefixes,
-                getMinBranchesPerMethod().getOrElse(0),
-                List.of()
-            );
+        for (Path root : roots) {
+            GenerationRequest request = buildRequest(root, prefixes);
             RuleGenerationResult result = useCase.generate(request);
-            allRules.addAll(result.renderedRules());
+            aggregatedRules.addAll(result.renderedRules());
         }
 
-        writeOutput(new ArrayList<>(allRules));
+        Path output = getOutputFile().get().getAsFile().toPath();
+        fileWriter.write(
+            output,
+            getIncludeTimestamp().getOrElse(true),
+            getHelperFqn().get(),
+            List.copyOf(aggregatedRules)
+        );
     }
 
     private List<Path> getSourcePaths() {
-        List<Path> paths = new ArrayList<>();
-        getSourceDirectories().getFiles().forEach(file -> paths.add(file.toPath()));
-        return paths;
+        return getSourceDirectories().getFiles().stream()
+            .map(file -> file.toPath())
+            .toList();
     }
 
-    private void writeOutput(List<String> rules) {
-        Path output = getOutputFile().get().getAsFile().toPath();
-        try {
-            Files.createDirectories(output.getParent());
-            List<String> lines = new ArrayList<>();
-            if (getIncludeTimestamp().getOrElse(true)) {
-                lines.add("# Generated at " + DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(ZonedDateTime.now()));
-            } else {
-                lines.add("# Generated rules");
-            }
-            lines.add("# Helper: " + getHelperFqn().get());
-            if (!rules.isEmpty()) {
-                lines.add("# Rule count: " + rules.size());
-            }
-            lines.add("");
-            Files.write(output, lines, StandardCharsets.UTF_8);
-            try (var writer = Files.newBufferedWriter(output, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND)) {
-                for (String rule : rules) {
-                    writer.write(rule);
-                    writer.write(System.lineSeparator());
-                    writer.write(System.lineSeparator());
-                }
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to write generated rules", e);
-        }
+    private GenerationRequest buildRequest(Path root, List<String> prefixes) {
+        return new GenerationRequest(
+            root,
+            getHelperFqn().get(),
+            getSafeMode().getOrElse(true),
+            getIncludeEntryExit().getOrElse(true),
+            prefixes,
+            getMinBranchesPerMethod().getOrElse(0),
+            List.of()
+        );
     }
 }
