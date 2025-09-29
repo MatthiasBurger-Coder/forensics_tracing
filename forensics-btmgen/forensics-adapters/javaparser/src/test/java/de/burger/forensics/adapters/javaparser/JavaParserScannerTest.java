@@ -38,4 +38,33 @@ class JavaParserScannerTest {
                 assertThat(event.location().fqcn()).isEqualTo("example.Sample");
             });
     }
+
+    @Test
+    void scansSwitchReturnAndThrowStatements() throws IOException {
+        Path tempDir = Files.createTempDirectory("scanner-test-2");
+        Path source = tempDir.resolve("Advanced.java");
+        Files.writeString(source, """
+            package example;
+            public class Advanced {
+              public int compute(int value) {
+                if (value > 10) {
+                  throw new IllegalArgumentException();
+                } else if (value < 0) {
+                  return -1;
+                }
+                switch (value) {
+                  case 1 -> value = 2;
+                  default -> value = 3;
+                }
+                return value;
+              }
+            }
+            """
+        );
+
+        List<ScanEvent> events = scanner.scan(tempDir).toList();
+
+        assertThat(events).extracting(ScanEvent::kind)
+            .contains(RuleType.IF_TRUE, RuleType.IF_FALSE, RuleType.SWITCH, RuleType.SWITCH_CASE, RuleType.RETURN, RuleType.THROW);
+    }
 }
