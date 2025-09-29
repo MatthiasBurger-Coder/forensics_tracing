@@ -171,72 +171,10 @@ public abstract class GenerateBtmTask extends DefaultTask {
     // ---- Task action
     @TaskAction
     public void generate() {
-        if (getUseAstScanner().getOrElse(true)) {
-            generateWithAst();
-        } else {
-            generateLegacy();
-        }
+        // Legacy regex path removed; always use AST-based generation
+        generateWithAst();
     }
 
-    // -------------------------
-    // Legacy path (regex)
-    // -------------------------
-    private void generateLegacy() {
-        File out = ensureOutputDir();
-        String helper = getHelperFqn().get();
-        String legacyPrefix = opt(getPackagePrefix().getOrNull());
-
-        List<String> allPkgPrefixes = new ArrayList<>();
-        if (getPkgPrefixes().getOrNull() != null) {
-            for (String p : getPkgPrefixes().get()) if (!p.isBlank()) allPkgPrefixes.add(p);
-        }
-        if (legacyPrefix != null) allPkgPrefixes.add(legacyPrefix);
-
-        boolean includeEntryExit = getEntryExit().getOrElse(true);
-        int maxLen = getMaxStringLength().getOrElse(0);
-        long limit = getMaxFileBytes().getOrElse(2_000_000L);
-        List<String> tracked = resolveTrackedVars();
-
-        int shardCount = Math.max(getShards().getOrElse(Runtime.getRuntime().availableProcessors()), 1);
-        boolean gzip = getGzipOutput().getOrElse(false);
-        String prefix = orDefault(getFilePrefix().getOrElse("tracing-"), "tracing-");
-        long rotateMaxBytesValue = getRotateMaxBytesPerFile().getOrElse(4L * 1024 * 1024);
-        long rotateIntervalSecondsValue = getRotateIntervalSeconds().getOrElse(0L);
-        int flushThresholdValue = getFlushThresholdBytes().getOrElse(64 * 1024);
-        long flushIntervalValue = getFlushIntervalMillis().getOrElse(2000L);
-        boolean threadSafeValue = getWriterThreadSafe().getOrElse(false);
-        int minBranches = getMinBranchesPerMethod().getOrElse(0);
-
-        String header = buildHeader(helper, allPkgPrefixes, tracked, getIncludeTimestamp().getOrElse(false));
-
-        try (ShardedWriter writer = new ShardedWriter(
-                out, shardCount, gzip, prefix,
-                rotateMaxBytesValue, rotateIntervalSecondsValue,
-                flushThresholdValue, flushIntervalValue, threadSafeValue)) {
-
-            writer.writeHeader(header);
-
-            if (getIncludeJava().getOrElse(false)) {
-                JavaRegexParser scanner = new JavaRegexParser();
-                for (File file : getJavaSourceFiles()) {
-                    if (SourceFileGuards.shouldSkipLargeFile(file, limit, this::debug)) continue;
-                    String text = read(file);
-                    try {
-                        List<String> fileRules = scanner.scan(text, helper, legacyPrefix, includeEntryExit, maxLen);
-                        dispatchRules(fileRules, allPkgPrefixes, minBranches, shardCount, writer);
-                    } catch (StackOverflowError e) {
-                        warn("Regex fallback StackOverflow in file: " + file.getAbsolutePath() + " (skipped)");
-                        fileLog("WARN", "Regex fallback StackOverflow: " + file.getAbsolutePath());
-                    } catch (Throwable t) {
-                        warn("Regex fallback error in file: " + file.getAbsolutePath() + " -> " + t.getMessage());
-                        fileLog("WARN", "Regex fallback error: " + file.getAbsolutePath() + " -> " + t.getMessage());
-                    }
-                }
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to generate legacy rules", e);
-        }
-    }
 
     // -------------------------
     // AST path (ScannerFacade)
@@ -270,23 +208,14 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
         ScannerFacade scanner = new ScannerFacade();
         List<ScanEvent> events = new ArrayList<>();
-        List<String> includePkgs = allPkgPrefixes;
         List<String> excludePkgs = Collections.emptyList();
 
-        List<File> ignoredKotlinFiles = getIgnoredKotlinSourceFiles();
-        if (!ignoredKotlinFiles.isEmpty()) {
-            warn("Detected " + ignoredKotlinFiles.size()
-                    + " Kotlin source file(s); Kotlin scanning has been removed and these files will be skipped.");
-            File first = ignoredKotlinFiles.getFirst();
-            fileLog("WARN", "Skipped Kotlin sources (" + ignoredKotlinFiles.size()
-                    + " file(s)); example: " + first.getAbsolutePath());
-        }
 
         if (getIncludeJava().getOrElse(false)) {
             for (File file : getJavaSourceFiles()) {
                 if (SourceFileGuards.shouldSkipLargeFile(file, limit, this::debug)) continue;
                 try {
-                    events.addAll(scanner.scan(file.toPath(), includePkgs, excludePkgs));
+                    events.addAll(scanner.scan(file.toPath(), allPkgPrefixes, excludePkgs));
                 } catch (StackOverflowError e) {
                     warn("Java file StackOverflow: " + file.getAbsolutePath() + " (skipped)");
                     fileLog("WARN", "Java StackOverflow: " + file.getAbsolutePath());
@@ -511,7 +440,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
     private List<String> resolveTrackedVars() {
         List<String> raw = getTrackedVars().getOrElse(Collections.emptyList());
-        if (raw == null || raw.isEmpty()) return Collections.emptyList();
+        if (raw.isEmpty()) return Collections.emptyList();
         LinkedHashSet<String> unique = new LinkedHashSet<>();
         for (String entry : raw) {
             if (entry == null) continue;
@@ -525,18 +454,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
     // File resolution & helpers
     // -------------------------
 
-    @Internal
-    protected List<File> getIgnoredKotlinSourceFiles() {
-        return detectFiles(".kt");
-    }
-
     @InputFiles
     @PathSensitive(PathSensitivity.RELATIVE)
     protected List<File> getJavaSourceFiles() {
-        return getIncludeJava().getOrElse(false) ? resolveFiles(".java") : Collections.emptyList();
+        return getIncludeJava().getOrElse(false) ? resolveFiles() : Collections.emptyList();
     }
 
-    private List<File> resolveFiles(String withExtension) {
+    private List<File> resolveFiles() {
         List<String> dirs = getSrcDirs().getOrNull();
         if (dirs == null) return Collections.emptyList();
         List<File> directories = dirs.stream()
@@ -549,37 +473,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
         List<File> result = new ArrayList<>();
         for (File dir : directories) {
             try (var paths = Files.walk(dir.toPath())) {
-                paths.filter(p -> Files.isRegularFile(p) && p.toString().endsWith(withExtension))
+                paths.filter(p -> Files.isRegularFile(p) && p.toString().endsWith(".java"))
                         .forEach(p -> {
                             String rel = dir.toPath().relativize(p).toString().replace('\\', '/');
                             boolean incOk = (includes == null || includes.isEmpty()) || includes.stream().anyMatch(glob -> globMatchesPath(rel, glob));
                             boolean excOk = excludes.stream().noneMatch(glob -> globMatchesPath(rel, glob));
                             if (incOk && excOk) result.add(p.toFile());
-                        });
-            } catch (Exception ignored) {}
-        }
-        result.sort(Comparator.comparing(File::getAbsolutePath));
-        return result;
-    }
-
-    private List<File> detectFiles(String withExtension) {
-        List<String> dirs = getSrcDirs().getOrNull();
-        if (dirs == null) return Collections.emptyList();
-        List<File> directories = dirs.stream()
-                .map(this::resolvePath)
-                .filter(File::exists)
-                .toList();
-        List<String> excludes = getExcludePatterns().getOrElse(Collections.emptyList());
-        List<File> result = new ArrayList<>();
-        for (File dir : directories) {
-            try (var paths = Files.walk(dir.toPath())) {
-                paths.filter(p -> Files.isRegularFile(p) && p.toString().endsWith(withExtension))
-                        .forEach(p -> {
-                            String rel = dir.toPath().relativize(p).toString().replace('\\', '/');
-                            boolean excluded = excludes.stream().anyMatch(glob -> globMatchesPath(rel, glob));
-                            if (!excluded) {
-                                result.add(p.toFile());
-                            }
                         });
             } catch (Exception ignored) {}
         }

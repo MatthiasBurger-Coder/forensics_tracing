@@ -1,10 +1,7 @@
 package de.burger.forensics.plugin.translate;
 
-/**
- * Translates a restricted subset of raw expressions into SafeEval helper calls.
- * Only supports: '==', '!=', 'instanceof', '&&', '||' with simple identifiers or literals.
- * Falls back to "true" for anything else, ensuring the generated evaluator stays safe.
- */
+import java.util.Objects;
+
 public final class UnsafeExprTranslator {
     private static final String HELPER = "org.example.trace.SafeEval";
 
@@ -69,7 +66,7 @@ public final class UnsafeExprTranslator {
         }
 
         private String parseOr() {
-            String left = parseAnd();
+            StringBuilder left = new StringBuilder(parseAnd());
             if (failed) {
                 return null;
             }
@@ -84,17 +81,13 @@ public final class UnsafeExprTranslator {
                     failed = true;
                     return null;
                 }
-                if (left == null) {
-                    failed = true;
-                    return null;
-                }
-                left = HELPER + ".or(" + left + ", " + right + ")";
+                left = new StringBuilder(HELPER + ".or(" + left + ", " + right + ")");
             }
-            return left;
+            return left.toString();
         }
 
         private String parseAnd() {
-            String left = parseComparison();
+            StringBuilder left = new StringBuilder(Objects.requireNonNull(parseComparison()));
             if (failed) {
                 return null;
             }
@@ -109,13 +102,9 @@ public final class UnsafeExprTranslator {
                     failed = true;
                     return null;
                 }
-                if (left == null) {
-                    failed = true;
-                    return null;
-                }
-                left = HELPER + ".and(" + left + ", " + right + ")";
+                left = new StringBuilder(HELPER + ".and(" + left + ", " + right + ")");
             }
-            return left;
+            return left.toString();
         }
 
         private String parseComparison() {
@@ -204,11 +193,7 @@ public final class UnsafeExprTranslator {
                     pos++;
                     return input.substring(start, pos);
                 }
-                if (ch == '\\' && !escaped) {
-                    escaped = true;
-                } else {
-                    escaped = false;
-                }
+                escaped = ch == '\\' && !escaped;
                 pos++;
             }
             failed = true;
