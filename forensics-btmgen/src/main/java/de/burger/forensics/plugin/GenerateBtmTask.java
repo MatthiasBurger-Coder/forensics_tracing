@@ -168,18 +168,11 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getOutputDir().convention(getLayout().getBuildDirectory().dir("forensics"));
     }
 
-    // ---- Task action
-    @TaskAction
-    public void generate() {
-        // Legacy regex path removed; always use AST-based generation
-        generateWithAst();
-    }
-
-
     // -------------------------
     // AST path (ScannerFacade)
     // -------------------------
-    private void generateWithAst() {
+    @TaskAction
+    public void generate() {
         File out = ensureOutputDir();
         String helper = getHelperFqn().get();
         String legacyPrefix = opt(getPackagePrefix().getOrNull());
