@@ -1,6 +1,11 @@
 package de.burger.forensics.application.service;
 
-import de.burger.forensics.domain.model.*;
+import de.burger.forensics.domain.model.Rule;
+import de.burger.forensics.domain.model.RuleId;
+import de.burger.forensics.domain.model.RuleIdFactory;
+import de.burger.forensics.domain.model.RuleType;
+import de.burger.forensics.domain.model.ScanEvent;
+import de.burger.forensics.domain.model.SourceLocation;
 import de.burger.forensics.domain.port.out.ClockPort;
 import de.burger.forensics.domain.port.out.CodeScanPort;
 import de.burger.forensics.domain.port.out.LogPort;
@@ -8,10 +13,16 @@ import de.burger.forensics.domain.port.out.RuleRenderPort;
 import de.burger.forensics.domain.strategy.ConditionStrategy;
 import de.burger.forensics.domain.strategy.SafeMode;
 import de.burger.forensics.domain.strategy.StrategyFactory;
-
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -43,9 +54,21 @@ public final class GenerateRulesUseCase {
         Instant start = clock.now();
         log.info("Starting rule generation at " + start + " for " + root);
 
-        List<ScanEvent> events;
-        try (Stream<ScanEvent> stream = scanner.scan(root)) {
-            events = stream
+        List<ScanEvent> events = collectScanEvents(request);
+        log.debug("Scanned " + events.size() + " events");
+
+        Map<String, List<ScanEvent>> byMethod = groupEventsByMethod(events);
+        List<Rule> rules = generateRules(byMethod, request);
+        List<Rule> filtered = applyBranchFilter(rules, request.minBranches());
+        List<String> rendered = renderRules(filtered);
+
+        log.debug("Finished rule generation at " + clock.now() + " with " + rendered.size() + " rules");
+        return new RuleGenerationResult(rendered);
+    }
+
+    private List<ScanEvent> collectScanEvents(GenerationRequest request) {
+        try (Stream<ScanEvent> stream = scanner.scan(request.root())) {
+            return stream
                 .filter(event -> event.language() == null || "java".equalsIgnoreCase(event.language()))
                 .filter(event -> matchesPrefixes(event.location(), request.packagePrefixes()))
                 .sorted(Comparator
@@ -55,53 +78,98 @@ public final class GenerateRulesUseCase {
                     .thenComparing(ScanEvent::kind))
                 .toList();
         }
+    }
 
-        log.debug("Scanned " + events.size() + " events");
-
-        List<Rule> rules = new ArrayList<>();
-
-        // Group events by method to optionally prepend/append ENTRY/EXIT rules per method
+    private Map<String, List<ScanEvent>> groupEventsByMethod(List<ScanEvent> events) {
         Map<String, List<ScanEvent>> byMethod = new LinkedHashMap<>();
         for (ScanEvent event : events) {
             String key = methodKey(event);
             byMethod.computeIfAbsent(key, k -> new ArrayList<>()).add(event);
         }
+        return byMethod;
+    }
 
-        for (Map.Entry<String, List<ScanEvent>> entry : byMethod.entrySet()) {
-            List<ScanEvent> methodEvents = entry.getValue();
-            if (!methodEvents.isEmpty() && request.includeEntryExit()) {
-                boolean hasEntry = methodEvents.stream().anyMatch(e -> e.kind() == RuleType.ENTRY);
-                boolean hasExit = methodEvents.stream().anyMatch(e -> e.kind() == RuleType.EXIT);
-                SourceLocation firstLoc = methodEvents.getFirst().location();
-                SourceLocation lastLoc = methodEvents.getLast().location();
-                if (!hasEntry) {
-                    rules.add(entryRule(firstLoc, request.helperFqcn()));
-                }
-                // add all method events
-                for (ScanEvent event : methodEvents) {
-                    rules.addAll(mapEvent(event, request.helperFqcn(), request.safeMode()));
-                }
-                if (!hasExit) {
-                    rules.add(exitRule(lastLoc, request.helperFqcn()));
-                }
-            } else {
-                // No entry/exit requested, just map events
-                for (ScanEvent event : methodEvents) {
-                    rules.addAll(mapEvent(event, request.helperFqcn(), request.safeMode()));
-                }
+    private List<Rule> generateRules(Map<String, List<ScanEvent>> byMethod, GenerationRequest request) {
+        List<Rule> rules = new ArrayList<>();
+        for (List<ScanEvent> methodEvents : byMethod.values()) {
+            rules.addAll(generateRulesForMethod(methodEvents, request));
+        }
+        return rules;
+    }
+
+    private List<Rule> generateRulesForMethod(List<ScanEvent> methodEvents, GenerationRequest request) {
+        List<Rule> rules = new ArrayList<>();
+        if (methodEvents.isEmpty()) {
+            return rules;
+        }
+        if (request.includeEntryExit()) {
+            addEntryRuleIfMissing(methodEvents, request, rules);
+            addEventRules(methodEvents, request, rules);
+            addExitRuleIfMissing(methodEvents, request, rules);
+        } else {
+            addEventRules(methodEvents, request, rules);
+        }
+        return rules;
+    }
+
+    private void addEntryRuleIfMissing(List<ScanEvent> methodEvents,
+                                       GenerationRequest request,
+                                       List<Rule> rules) {
+        boolean hasEntry = methodEvents.stream().anyMatch(e -> e.kind() == RuleType.ENTRY);
+        if (!hasEntry) {
+            SourceLocation firstLoc = methodEvents.getFirst().location();
+            rules.add(entryRule(firstLoc, request.helperFqcn()));
+        }
+    }
+
+    private void addExitRuleIfMissing(List<ScanEvent> methodEvents,
+                                      GenerationRequest request,
+                                      List<Rule> rules) {
+        boolean hasExit = methodEvents.stream().anyMatch(e -> e.kind() == RuleType.EXIT);
+        if (!hasExit) {
+            SourceLocation lastLoc = methodEvents.getLast().location();
+            rules.add(exitRule(lastLoc, request.helperFqcn()));
+        }
+    }
+
+    private void addEventRules(List<ScanEvent> methodEvents,
+                               GenerationRequest request,
+                               List<Rule> rules) {
+        for (ScanEvent event : methodEvents) {
+            rules.addAll(mapEvent(event, request.helperFqcn(), request.safeMode()));
+        }
+    }
+
+    private List<Rule> applyBranchFilter(List<Rule> rules, int minBranches) {
+        if (minBranches <= 0) {
+            return rules;
+        }
+        Map<String, List<Rule>> byMethod = new LinkedHashMap<>();
+        for (Rule rule : rules) {
+            String key = rule.location().fqcn() + "#" + rule.location().method();
+            byMethod.computeIfAbsent(key, k -> new ArrayList<>()).add(rule);
+        }
+        List<Rule> filtered = new ArrayList<>();
+        for (Map.Entry<String, List<Rule>> entry : byMethod.entrySet()) {
+            long branchCount = entry.getValue().stream()
+                .filter(rule -> rule.type() == RuleType.IF_TRUE
+                    || rule.type() == RuleType.IF_FALSE
+                    || rule.type() == RuleType.SWITCH
+                    || rule.type() == RuleType.SWITCH_CASE)
+                .count();
+            if (branchCount >= minBranches) {
+                filtered.addAll(entry.getValue());
             }
         }
+        return filtered;
+    }
 
-        if (request.minBranches() > 0) {
-            rules = filterByBranchDensity(rules, request.minBranches());
+    private List<String> renderRules(List<Rule> rules) {
+        Set<String> rendered = new LinkedHashSet<>();
+        for (Rule rule : rules) {
+            rendered.add(renderer.render(rule));
         }
-
-        List<String> rendered = rules.stream()
-            .map(renderer::render)
-            .toList();
-
-        log.debug("Finished rule generation at " + clock.now() + " with " + rendered.size() + " rules");
-        return new RuleGenerationResult(rendered);
+        return List.copyOf(rendered);
     }
 
     private List<Rule> mapEvent(ScanEvent event, String helperFqcn, boolean safeMode) {
@@ -142,27 +210,6 @@ public final class GenerateRulesUseCase {
     private Rule exitRule(SourceLocation location, String helperFqcn) {
         RuleId ruleId = RuleIdFactory.from(location, RuleType.EXIT);
         return new Rule(ruleId, location, "true", true, helperFqcn, RuleType.EXIT);
-    }
-
-    private List<Rule> filterByBranchDensity(List<Rule> rules, int minBranches) {
-        Map<String, List<Rule>> byMethod = new LinkedHashMap<>();
-        for (Rule rule : rules) {
-            String key = rule.location().fqcn() + "#" + rule.location().method();
-            byMethod.computeIfAbsent(key, k -> new ArrayList<>()).add(rule);
-        }
-        List<Rule> filtered = new ArrayList<>();
-        for (Map.Entry<String, List<Rule>> entry : byMethod.entrySet()) {
-            long branchCount = entry.getValue().stream()
-                .filter(rule -> rule.type() == RuleType.IF_TRUE
-                    || rule.type() == RuleType.IF_FALSE
-                    || rule.type() == RuleType.SWITCH
-                    || rule.type() == RuleType.SWITCH_CASE)
-                .count();
-            if (branchCount >= minBranches) {
-                filtered.addAll(entry.getValue());
-            }
-        }
-        return filtered;
     }
 
     private boolean matchesPrefixes(SourceLocation location, List<String> prefixes) {

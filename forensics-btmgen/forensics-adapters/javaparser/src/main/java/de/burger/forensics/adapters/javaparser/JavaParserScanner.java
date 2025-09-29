@@ -1,5 +1,6 @@
 package de.burger.forensics.adapters.javaparser;
 
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
@@ -52,7 +53,9 @@ public final class JavaParserScanner implements CodeScanPort {
                 typeSolver.add(new JavaParserTypeSolver(parent));
             }
         }
-        StaticJavaParser.getConfiguration().setSymbolResolver(new JavaSymbolSolver(typeSolver));
+        ParserConfiguration configuration = new ParserConfiguration();
+        configuration.setSymbolResolver(new JavaSymbolSolver(typeSolver));
+        StaticJavaParser.setConfiguration(configuration);
 
         try {
             Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), 64, new SimpleFileVisitor<>() {
