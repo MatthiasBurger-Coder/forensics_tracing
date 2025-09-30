@@ -1,18 +1,13 @@
 import org.gradle.api.plugins.JavaPlugin
 import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.tasks.compile.JavaCompile
-import org.gradle.api.publish.maven.MavenPublication
 import org.gradle.api.tasks.javadoc.Javadoc
 import org.gradle.external.javadoc.StandardJavadocDocletOptions
 
 plugins {
     `java-library`
     `java-gradle-plugin`
-    id("maven-publish")
-    alias(libs.plugins.gradle.plugin.publish)
 }
-
-repositories { mavenCentral() }
 
 dependencies {
     implementation(libs.slf4j.api)
@@ -28,6 +23,7 @@ dependencies {
     testImplementation(libs.aspectj.weaver)
     testImplementation(libs.byte.buddy.agent)
     testImplementation(libs.assertj.core)
+    testImplementation(platform(libs.mockito.bom))
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.junit.jupiter)
 }
@@ -54,8 +50,6 @@ tasks.withType<Javadoc>().configureEach {
     // Do not fail the build if Javadoc encounters warnings
     isFailOnError = false
 }
-
-
 
 tasks.test {
     useJUnitPlatform()
@@ -87,65 +81,6 @@ configurations.named("runtimeClasspath") {
     exclude(group = "ch.qos.logback", module = "logback-classic")
 }
 
-gradlePlugin {
-    website.set(
-        providers.gradleProperty("POM_URL").orNull
-            ?: "https://github.com/burger-matthias/forensics_tracing"
-    )
-    vcsUrl.set(
-        providers.gradleProperty("POM_SCM_URL").orNull
-            ?: "https://github.com/burger-matthias/forensics_tracing.git"
-    )
-    plugins {
-        register("btmGenPlugin") {
-            id = providers.gradleProperty("PLUGIN_ID").orNull
-                ?: "de.burger.forensics.btmgen"
-            implementationClass = providers.gradleProperty("PLUGIN_IMPL_CLASS").orNull
-                ?: "de.burger.forensics.plugin.BtmGenPlugin"
-            displayName = "Forensics BTM Generator Gradle Plugin"
-            description = providers.gradleProperty("POM_DESCRIPTION").orNull
-                ?: "Generates Byteman tracing rules from Java sources."
-            tags.set(listOf("forensics", "tracing", "byteman", "java"))
-        }
-    }
-}
-
-publishing {
-    publications.withType<MavenPublication>().configureEach {
-        pom {
-            name.set(providers.gradleProperty("POM_NAME").orNull ?: "forensics-tracing")
-            description.set(
-                providers.gradleProperty("POM_DESCRIPTION").orNull
-                    ?: "Lightweight code forensics/tracing plugin for Java projects."
-            )
-            url.set(providers.gradleProperty("POM_URL").orNull ?: "https://github.com/burger-matthias/forensics_tracing")
-            licenses {
-                license {
-                    name.set(providers.gradleProperty("POM_LICENSE_NAME").orNull ?: "Apache-2.0")
-                    url.set(providers.gradleProperty("POM_LICENSE_URL").orNull
-                        ?: "https://www.apache.org/licenses/LICENSE-2.0")
-                    distribution.set("repo")
-                }
-            }
-            developers {
-                developer {
-                    id.set(providers.gradleProperty("POM_DEVELOPER_ID").orNull ?: "mburger")
-                    name.set(providers.gradleProperty("POM_DEVELOPER_NAME").orNull ?: "Matthias Burger")
-                    email.set(providers.gradleProperty("POM_DEVELOPER_EMAIL").orNull ?: "dev@example.com")
-                }
-            }
-            scm {
-                connection.set(providers.gradleProperty("POM_SCM_CONNECTION").orNull
-                    ?: "scm:git:https://github.com/burger-matthias/forensics_tracing.git")
-                developerConnection.set(providers.gradleProperty("POM_SCM_DEV_CONNECTION").orNull
-                    ?: "scm:git:ssh://git@github.com/burger-matthias/forensics_tracing.git")
-                url.set(providers.gradleProperty("POM_SCM_URL").orNull
-                    ?: "https://github.com/burger-matthias/forensics_tracing")
-            }
-        }
-    }
-}
-
 tasks.jar {
     manifest {
         attributes(
@@ -158,13 +93,7 @@ tasks.jar {
 
 
 
-
-repositories {
-    mavenCentral()
-}
-
-
 // Project coordinates for publishing
 // Use Gradle properties if provided, otherwise fall back to sensible defaults
 group = providers.gradleProperty("GROUP").orNull ?: "de.burger.forensics"
-version = providers.gradleProperty("VERSION").orNull ?: "0.0.1-SNAPSHOT"
+version = providers.gradleProperty("VERSION").orNull ?: "1.0.0-SNAPSHOT"

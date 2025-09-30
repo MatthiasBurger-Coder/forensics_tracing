@@ -1,7 +1,4 @@
-# Centralized dependency versions for the project (updated 2025-09-28)
-
 [versions]
-kotlin   = "2.2.20"
 junit    = "5.13.4"
 junit-platform = "1.11.3"
 assertj  = "3.27.6"
@@ -10,22 +7,17 @@ aspectj  = "1.9.24"
 bytebuddy = "1.14.12"
 slf4j    = "2.0.17"
 logback  = "1.5.18"
+mockito = "5.13.0"
 
 # Gradle plugins
-gradle-plugin-publish = "2.0.0"
-nexus-publish         = "2.0.0"
+#gradle-plugin-publish = "2.0.0"
+#nexus-publish         = "2.0.0"
 
 [plugins]
-# Use via: plugins { alias(libs.plugins.kotlin-jvm) apply false }
-kotlin-jvm           = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-gradle-plugin-publish = { id = "com.gradle.plugin-publish", version.ref = "gradle-plugin-publish" }
-nexus-publish         = { id = "io.github.gradle-nexus.publish-plugin", version.ref = "nexus-publish" }
+#gradle-plugin-publish = { id = "com.gradle.plugin-publish", version.ref = "gradle-plugin-publish" }
+#nexus-publish         = { id = "io.github.gradle-nexus.publish-plugin", version.ref = "nexus-publish" }
 
 [libraries]
-# Kotlin (nur falls noch benötigt)
-kotlin-stdlib              = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
-kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
-
 
 # JavaParser
 javaparser-symbol-solver-core = { module = "com.github.javaparser:javaparser-symbol-solver-core", version.ref = "javaparser" }
@@ -47,6 +39,12 @@ junit-jupiter        = { module = "org.junit.jupiter:junit-jupiter" }
 junit-jupiter-api    = { module = "org.junit.jupiter:junit-jupiter-api" }
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
+
+# BOM liefert die Versionen für alle Mockito-Module
+mockito-bom           = { module = "org.mockito:mockito-bom", version.ref = "mockito" }
+mockito-core          = { module = "org.mockito:mockito-core" }
+mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter" }
+mockito-inline        = { module = "org.mockito:mockito-inline" }
 
 # ByteBuddy agent
 byte-buddy-agent = { module = "net.bytebuddy:byte-buddy-agent", version.ref = "bytebuddy" }
