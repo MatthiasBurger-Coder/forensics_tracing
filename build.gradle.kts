@@ -10,12 +10,16 @@ plugins {
     id("com.gradle.plugin-publish") version "2.0.0"
 }
 
+val aspectjAgent by configurations.creating
+
 dependencies {
     implementation(libs.slf4j.api)
+    aspectjAgent(libs.aspectj.weaver)
     implementation(libs.aspectj.rt)
     runtimeOnly(libs.aspectj.weaver)
     implementation(libs.javaparser.symbol.solver.core)
 
+    testRuntimeOnly(libs.aspectj.weaver)
     testRuntimeOnly(libs.logback.classic)
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
@@ -28,6 +32,8 @@ dependencies {
     testImplementation(platform(libs.mockito.bom))
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.junit.jupiter)
+
+    testImplementation(gradleTestKit())
 }
 
 plugins.withType<JavaPlugin>().configureEach {
@@ -54,18 +60,25 @@ tasks.withType<Javadoc>().configureEach {
 }
 
 val testLogFile = layout.buildDirectory.file("test-logs/forensics-btmgen.log")
+
 tasks.test {
     useJUnitPlatform()
 
     doFirst {
         testLogFile.get().asFile.parentFile.mkdirs()
+//        val weaver = configurations.testRuntimeClasspath.get().files
+//            .find { it.name.startsWith("aspectjweaver") }
+//            ?: throw GradleException(
+//                "aspectjweaver JAR not found on testRuntimeClasspath. " +
+//                        "Add testRuntimeOnly(libs.aspectj.weaver) to dependencies."
+//            )
+//
+//        jvmArgs("-javaagent=${weaver.absolutePath}")
     }
 
-    // System-Properties für deine logback-test.xml setzen
     systemProperty("forensics.btmgen.logToFile", "true")
     systemProperty("forensics.btmgen.logFile", testLogFile.get().asFile.absolutePath)
 
-    // Mockito als Java-Agent konfigurieren, um Warnungen zu vermeiden
     val byteBuddyAgent = configurations.testRuntimeClasspath.get()
         .firstOrNull { it.name.contains("byte-buddy-agent") }
 
