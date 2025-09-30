@@ -1,0 +1,32 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{ISO8601} %-5level [%X{cid}] %logger - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- File Appender für forensics.btmgen.logFile -->
+    <if condition='property("forensics.btmgen.logToFile").equals("true")'>
+        <then>
+            <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+                <file>${forensics.btmgen.logFile:-logs/forensics-btmgen.log}</file>
+                <encoder>
+                    <pattern>%d{ISO8601} %-5level [%X{cid}] %logger - %msg%n</pattern>
+                </encoder>
+                <append>true</append>
+            </appender>
+        </then>
+    </if>
+
+    <logger name="org.aspectj" level="INFO"/>
+    <logger name="decision-trace" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="STDOUT"/>
+        <if condition='property("forensics.btmgen.logToFile").equals("true")'>
+            <then>
+                <appender-ref ref="FILE"/>
+            </then>
+        </if>
+    </root>
+</configuration>

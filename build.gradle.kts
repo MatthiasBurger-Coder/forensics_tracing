@@ -7,6 +7,7 @@ import org.gradle.external.javadoc.StandardJavadocDocletOptions
 plugins {
     `java-library`
     `java-gradle-plugin`
+    id("com.gradle.plugin-publish") version "2.0.0"
 }
 
 dependencies {
@@ -15,6 +16,7 @@ dependencies {
     runtimeOnly(libs.aspectj.weaver)
     implementation(libs.javaparser.symbol.solver.core)
 
+    testRuntimeOnly(libs.logback.classic)
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.junit.jupiter.api)
@@ -51,8 +53,17 @@ tasks.withType<Javadoc>().configureEach {
     isFailOnError = false
 }
 
+val testLogFile = layout.buildDirectory.file("test-logs/forensics-btmgen.log")
 tasks.test {
     useJUnitPlatform()
+
+    doFirst {
+        testLogFile.get().asFile.parentFile.mkdirs()
+    }
+
+    // System-Properties für deine logback-test.xml setzen
+    systemProperty("forensics.btmgen.logToFile", "true")
+    systemProperty("forensics.btmgen.logFile", testLogFile.get().asFile.absolutePath)
 
     // Mockito als Java-Agent konfigurieren, um Warnungen zu vermeiden
     val byteBuddyAgent = configurations.testRuntimeClasspath.get()
@@ -91,9 +102,37 @@ tasks.jar {
     }
 }
 
-
-
 // Project coordinates for publishing
 // Use Gradle properties if provided, otherwise fall back to sensible defaults
 group = providers.gradleProperty("GROUP").orNull ?: "de.burger.forensics"
 version = providers.gradleProperty("VERSION").orNull ?: "1.0.0-SNAPSHOT"
+
+gradlePlugin {
+    // Top-level metadata for the plugin bundle
+    website.set(
+        providers.gradleProperty("POM_URL").orNull
+            ?: "https://github.com/burger-matthias/forensics_tracing"
+    )
+    vcsUrl.set(
+        providers.gradleProperty("POM_SCM_URL").orNull
+            ?: "https://github.com/burger-matthias/forensics_tracing.git"
+    )
+    plugins {
+        create("btmGenPlugin").apply {
+            // This ID must match what tests use
+            id = providers.gradleProperty("PLUGIN_ID").orNull
+                ?: "de.burger.forensics.btmgen"
+            // Point to actual implementation class in the project
+            implementationClass = providers.gradleProperty("PLUGIN_IMPL_CLASS").orNull
+                ?: "de.burger.forensics.plugin.BtmGenPlugin"
+
+            displayName = "Forensics BTM Generator Gradle Plugin"
+            description = providers.gradleProperty("POM_DESCRIPTION").orNull
+                ?: "Generates Byteman tracing rules from Java sources."
+
+            // Tags must be configured here (no pluginBundle in 2.x)
+            val pluginTags: List<String> = listOf("forensics", "tracing", "byteman", "java")
+            tags.set(pluginTags)
+        }
+    }
+}
