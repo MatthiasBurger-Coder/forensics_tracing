@@ -1,7 +1,7 @@
 <aspectj>
   <weaver options="-verbose">
     <!-- Weave all project classes under de.burger -->
-    <include within="de.burger..*"/>
+    <include within="de.burger.forensics..*"/>
   </weaver>
   <aspects>
     <!-- Reactivated logging AOP: use the actual logging aspect in this project -->

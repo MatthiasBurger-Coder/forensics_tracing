@@ -35,7 +35,7 @@ dependencies {
 
     testImplementation(gradleTestKit())
 }
-
+val java21 = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
 plugins.withType<JavaPlugin>().configureEach {
     extensions.configure<JavaPluginExtension> {
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
@@ -61,19 +61,43 @@ tasks.withType<Javadoc>().configureEach {
 
 val testLogFile = layout.buildDirectory.file("test-logs/forensics-btmgen.log")
 
+fun javaAgentArg(file: java.io.File): String {
+    val p = file.absolutePath
+    // Falls Leerzeichen/Sonderzeichen: komplett in Anführungszeichen setzen
+    val quoted = if (p.any { it.isWhitespace() }) "\"$p\"" else p
+    return "-javaagent:$quoted"
+}
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+    javaLauncher.set(java21)      // <- NICHT nachträglich woanders überschreiben!
+
+    // Einmalig den Agent ermitteln und anhängen
+    jvmArgumentProviders += org.gradle.process.CommandLineArgumentProvider {
+        val weaverJar = aspectjAgent.resolve().firstOrNull { it.name.startsWith("aspectjweaver") }
+            ?: throw GradleException("aspectjweaver*.jar nicht gefunden. Füge 'aspectjAgent(libs.aspectj.weaver)' hinzu.")
+        val arg = javaAgentArg(weaverJar)
+        // Diagnose in der Konsole – hilft, falls die JVM wieder nicht startet
+        println("Attaching AspectJ agent for tests: $arg")
+        listOf(
+            arg,
+            // nützliche Diagnostik (optional):
+            "-XX:+PrintCommandLineFlags"
+        )
+    }
+
+    maxParallelForks = 1
+    testLogging {
+        events("FAILED", "SKIPPED")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = true // zeigt Aspect-Logs in der Test-Konsole
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
 
     doFirst {
         testLogFile.get().asFile.parentFile.mkdirs()
-//        val weaver = configurations.testRuntimeClasspath.get().files
-//            .find { it.name.startsWith("aspectjweaver") }
-//            ?: throw GradleException(
-//                "aspectjweaver JAR not found on testRuntimeClasspath. " +
-//                        "Add testRuntimeOnly(libs.aspectj.weaver) to dependencies."
-//            )
-//
-//        jvmArgs("-javaagent=${weaver.absolutePath}")
     }
 
     systemProperty("forensics.btmgen.logToFile", "true")
@@ -135,7 +159,7 @@ gradlePlugin {
             // This ID must match what tests use
             id = providers.gradleProperty("PLUGIN_ID").orNull
                 ?: "de.burger.forensics.btmgen"
-            // Point to actual implementation class in the project
+            // Point to the actual implementation class in the project
             implementationClass = providers.gradleProperty("PLUGIN_IMPL_CLASS").orNull
                 ?: "de.burger.forensics.plugin.BtmGenPlugin"
 
