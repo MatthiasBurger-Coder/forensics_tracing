@@ -1,0 +1,10 @@
+<aspectj>
+  <weaver options="-verbose">
+    <!-- Weave all project classes under de.burger -->
+    <include within="de.burger..*"/>
+  </weaver>
+  <aspects>
+    <!-- Reactivated logging AOP: use the actual logging aspect in this project -->
+    <aspect name="de.burger.forensics.infrastructure.logging.MethodLoggingAspect"/>
+  </aspects>
+</aspectj>
