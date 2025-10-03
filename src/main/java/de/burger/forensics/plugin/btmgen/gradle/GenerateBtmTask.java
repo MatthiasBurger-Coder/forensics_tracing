@@ -30,11 +30,15 @@ public abstract class GenerateBtmTask extends DefaultTask {
     // ---- Configurable inputs ----
     @InputDirectory
     @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
     public abstract DirectoryProperty getSourceRoot();
 
     @OutputFile
     @Optional
     public abstract RegularFileProperty getOutputFile();
+
+    @OutputDirectory
+    public abstract DirectoryProperty getOutputDir();
 
     /** Optional: render exactly one template with given class/method instead of scanning. */
     @Input @Optional public abstract Property<@NotNull String> getTemplateId();

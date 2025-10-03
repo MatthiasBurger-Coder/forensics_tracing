@@ -17,11 +17,13 @@ public abstract class BtmGenExtension {
     private StrategyRegistry registry = StrategyRegistries.defaultRegistry();
     private final Property<@NotNull File> sourceRoot;
     private final Property<@NotNull File> outputFile;
+    private final Property<String> includes;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
         this.sourceRoot = objects.property(File.class);
         this.outputFile = objects.property(File.class);
+        this.includes = objects.property(String.class);
     }
 
     /** Strategy registry used by tasks to render rules. */
@@ -33,4 +35,6 @@ public abstract class BtmGenExtension {
 
     /** Output .btm file location. */
     public Property<@NotNull File> getOutputFile() { return outputFile; }
+
+    public Property<@NotNull String> getIncludes() { return includes; }
 }
