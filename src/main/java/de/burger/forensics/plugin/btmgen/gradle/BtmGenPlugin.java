@@ -2,18 +2,23 @@ package de.burger.forensics.plugin.btmgen.gradle;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.file.RegularFile;
+import org.gradle.api.file.Directory;
 import org.gradle.api.tasks.TaskProvider;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.File;
+
 /**
- * Registers the extension and the generateBtmRules task.
- * Defaults are applied safely during task registration (no Provider lambdas).
+ * Compatible wiring when the extension exposes Property<File> rather than DirectoryProperty/RegularFileProperty.
+ * We map File -> Directory/RegularFile Providers without reading values eagerly.
  */
-public class BtmGenPlugin implements Plugin<@NotNull Project> {
+public final class BtmGenPlugin implements Plugin<@NotNull Project> {
+
     @Override
     public void apply(Project project) {
-        // Create extension
-        BtmGenExtension ext = project.getExtensions().create("btmGen", BtmGenExtension.class);
+        final BtmGenLegacyFileExtension ext = project.getExtensions()
+                .create("btmGen", BtmGenLegacyFileExtension.class);
 
         // Register task
         TaskProvider<@NotNull GenerateBtmTask> task = project.getTasks().register(
@@ -55,8 +60,11 @@ public class BtmGenPlugin implements Plugin<@NotNull Project> {
                 }
         );
 
-        // Optional: hook into build lifecycle
-        project.getTasks().matching(it -> it.getName().equals("build"))
-                .configureEach(it -> it.dependsOn(task));
+                    task.getSourceRoot().finalizeValueOnRead();
+                    task.getOutputFile().finalizeValueOnRead();
+                });
+
+        project.getTasks().matching(t -> t.getName().equals("build"))
+                .configureEach(t -> t.dependsOn(taskProvider));
     }
 }

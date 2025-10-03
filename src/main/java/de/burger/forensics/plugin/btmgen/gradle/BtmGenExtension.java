@@ -17,7 +17,7 @@ public abstract class BtmGenExtension {
     private StrategyRegistry registry = StrategyRegistries.defaultRegistry();
     private final Property<@NotNull File> sourceRoot;
     private final Property<@NotNull File> outputFile;
-    private final Property<String> includes;
+    private final Property<@NotNull String> includes;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
