@@ -1,5 +1,6 @@
 [versions]
 junit    = "5.13.4"
+archunit = "1.4.1"
 junit-platform = "1.11.3"
 assertj  = "3.27.6"
 javaparser = "3.27.0"
@@ -28,17 +29,18 @@ aspectj-weaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj"
 
 # Logging
 slf4j-api       = { module = "org.slf4j:slf4j-api",        version.ref = "slf4j" }
+slf4j-simple    = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 jul-to-slf4j    = { module = "org.slf4j:jul-to-slf4j",     version.ref = "slf4j" }
 jcl-over-slf4j  = { module = "org.slf4j:jcl-over-slf4j",   version.ref = "slf4j" }
-logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 
 # Testing (JUnit 5 via BOM + Jupiter)
 # BOM
-junit-bom            = { module = "org.junit:junit-bom", version.ref = "junit" }
-junit-jupiter        = { module = "org.junit.jupiter:junit-jupiter" }
-junit-jupiter-api    = { module = "org.junit.jupiter:junit-jupiter-api" }
-junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }
+junit-bom               = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter           = { module = "org.junit.jupiter:junit-jupiter" }
+junit-jupiter-api       = { module = "org.junit.jupiter:junit-jupiter-api" }
+junit-jupiter-engine    = { module = "org.junit.jupiter:junit-jupiter-engine" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
+archunit-junit          = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit"}
 
 # BOM liefert die Versionen für alle Mockito-Module
 mockito-bom           = { module = "org.mockito:mockito-bom", version.ref = "mockito" }

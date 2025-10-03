@@ -1,4 +1,4 @@
-package de.burger.forensics.adapter.javaparser;
+package de.burger.forensics.adapters.javaparser;
 
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;

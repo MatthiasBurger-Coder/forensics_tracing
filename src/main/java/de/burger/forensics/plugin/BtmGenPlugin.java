@@ -1,7 +1,7 @@
 package de.burger.forensics.plugin;
 
-import de.burger.forensics.adapter.byteman.BytemanRuleRenderer;
-import de.burger.forensics.adapter.javaparser.JavaParserScanner;
+import de.burger.forensics.adapters.byteman.BytemanRuleRenderer;
+import de.burger.forensics.adapters.javaparser.JavaParserScanner;
 import de.burger.forensics.application.service.GenerateRulesUseCase;
 import de.burger.forensics.domain.port.out.CodeScanPort;
 import de.burger.forensics.domain.port.out.RuleRenderPort;

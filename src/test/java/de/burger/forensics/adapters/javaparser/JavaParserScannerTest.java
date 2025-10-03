@@ -1,4 +1,4 @@
-package de.burger.forensics.adapter.javaparser;
+package de.burger.forensics.adapters.javaparser;
 
 import de.burger.forensics.domain.model.RuleType;
 import de.burger.forensics.domain.model.ScanEvent;

@@ -3,6 +3,7 @@ import org.gradle.api.plugins.JavaPluginExtension
 import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.api.tasks.javadoc.Javadoc
 import org.gradle.external.javadoc.StandardJavadocDocletOptions
+import org.gradle.internal.os.OperatingSystem
 
 plugins {
     `java-library`
@@ -13,28 +14,52 @@ plugins {
 val aspectjAgent by configurations.creating
 
 dependencies {
-    implementation(libs.slf4j.api)
+
+    // Runtime
+    compileOnly(libs.slf4j.api)
+
     aspectjAgent(libs.aspectj.weaver)
     implementation(libs.aspectj.rt)
     runtimeOnly(libs.aspectj.weaver)
+
     implementation(libs.javaparser.symbol.solver.core)
 
+    // Logging
+    testImplementation(libs.slf4j.api)
+
+    // AspectJ
     testRuntimeOnly(libs.aspectj.weaver)
-    testRuntimeOnly(libs.logback.classic)
+    testImplementation(libs.aspectj.weaver)
+
+    // Junit 5
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.junit.jupiter.api)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testImplementation(libs.junit.platform.launcher)
-    testImplementation(libs.aspectj.weaver)
-    testImplementation(libs.byte.buddy.agent)
+
     testImplementation(libs.assertj.core)
+
+    // Mockito
     testImplementation(platform(libs.mockito.bom))
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.junit.jupiter)
 
+    // Arch-unit
+    testImplementation(libs.archunit.junit)
+
+    //Byte Man
+    testImplementation(libs.byte.buddy.agent)
+
     testImplementation(gradleTestKit())
 }
+
+configurations.all {
+    exclude(group = "ch.qos.logback", module = "logback-classic")
+    exclude(group = "org.slf4j", module = "slf4j-reload4j")
+    exclude(group = "org.slf4j", module = "slf4j-log4j12")
+}
+
 val java21 = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
 plugins.withType<JavaPlugin>().configureEach {
     extensions.configure<JavaPluginExtension> {
@@ -97,30 +122,48 @@ tasks.test {
     useJUnitPlatform()
 
     doFirst {
+        // Log-Ordner sicherstellen
         testLogFile.get().asFile.parentFile.mkdirs()
-    }
 
-    systemProperty("forensics.btmgen.logToFile", "true")
-    systemProperty("forensics.btmgen.logFile", testLogFile.get().asFile.absolutePath)
+        // Aspect-File-Mirror
+        systemProperty("forensics.btmgen.logToFile", "true")
+        systemProperty("forensics.btmgen.logFile", testLogFile.get().asFile.absolutePath)
 
-    val byteBuddyAgent = configurations.testRuntimeClasspath.get()
-        .firstOrNull { it.name.contains("byte-buddy-agent") }
+        // AspectJ Weaver lokalisieren
+        val weaverFile = configurations.testRuntimeClasspath.get()
+            .files.firstOrNull { it.name.startsWith("aspectjweaver") || it.name.contains("aspectjweaver") }
+            ?: error("AspectJ weaver not found on testRuntimeClasspath. Add testRuntimeOnly(\"org.aspectj:aspectjweaver:<ver>\").")
 
-    if (byteBuddyAgent != null) {
+        // Windows: Pfad mit Leerzeichen MUSS in Anführungszeichen
+        val os = OperatingSystem.current()
+        val agentArg =
+            if (os.isWindows) "-javaagent:\"${weaverFile.absolutePath}\""
+            else "-javaagent=${weaverFile.absolutePath}"
+
         jvmArgs(
-            "-javaagent:${byteBuddyAgent.absolutePath}",
-            "-Xshare:off"  // Deaktiviert Class Data Sharing, um die Warnung zu unterdrücken
+            agentArg,
+            "-Xshare:off" // ok, optional
         )
-    } else {
-        jvmArgs("-Xshare:off")
+
+        // Weniger Weaver-Output
+        systemProperty("org.aspectj.weaver.showWeaveInfo", "false")
+        systemProperty("aj.weaving.verbose", "false")
+
+        // Explizit die aop.xml aus main laden (nur 1x vorhanden lassen)
+        systemProperty("org.aspectj.weaver.loadtime.configuration", "classpath:META-INF/aop.xml")
+
+        // Dein eigener Schalter
+        systemProperty("forensics.aspect.enabled", "true")
     }
 
+    // Test-Logging
     testLogging {
         events("FAILED", "SKIPPED", "STANDARD_OUT", "STANDARD_ERROR")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         showStandardStreams = true
     }
 }
+
 
 configurations.named("compileClasspath") {
     exclude(group = "ch.qos.logback", module = "logback-classic")

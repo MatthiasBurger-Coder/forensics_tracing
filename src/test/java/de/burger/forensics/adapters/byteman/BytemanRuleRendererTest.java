@@ -1,4 +1,4 @@
-package de.burger.forensics.adapter.byteman;
+package de.burger.forensics.adapters.byteman;
 
 import de.burger.forensics.domain.model.Rule;
 import de.burger.forensics.domain.model.RuleId;
