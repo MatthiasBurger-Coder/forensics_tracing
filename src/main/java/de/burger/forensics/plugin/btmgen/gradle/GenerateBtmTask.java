@@ -14,7 +14,6 @@ import org.gradle.api.tasks.*;
 import org.gradle.api.tasks.Optional;
 import org.jetbrains.annotations.NotNull;
 
-import javax.inject.Inject;
 import java.io.IOException;
 import java.nio.file.*;
 import java.time.Clock;
@@ -50,18 +49,11 @@ public abstract class GenerateBtmTask extends DefaultTask {
     // Provided by plugin (or set manually in build script)
     private BtmGenExtension extension;
 
-    @Inject
-    public GenerateBtmTask(ProjectLayout layout) {
-        // sensible defaults
-        getSourceRoot().convention(layout.getProjectDirectory().dir("src/main/java"));
-        getOutputFile().convention(
-                layout.getBuildDirectory().file("forensics/forensics.btm")
-        );
-    }
-
     /** Injected via plugin apply() */
     public void setExtension(BtmGenExtension ext) {
         this.extension = Objects.requireNonNull(ext, "BtmGenExtension must not be null");
+
+        applyDefaultConventions();
 
         // ✅ Use direct setters (no Provider lambdas) to avoid "Provider is not a functional interface"
         if (ext.getSourceRoot().isPresent()) {
@@ -75,6 +67,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @TaskAction
     public void generate() {
         ensureExtension();
+        applyDefaultConventions();
         final Path srcRoot = getSourceRoot().get().getAsFile().toPath();
         final Path outFile = getOutputFile().get().getAsFile().toPath();
         final StrategyRegistry registry = extension.getRegistry() != null
@@ -145,6 +138,14 @@ public abstract class GenerateBtmTask extends DefaultTask {
             }
             setExtension(ext);
         }
+    }
+
+    private void applyDefaultConventions() {
+        ProjectLayout layout = getProject().getLayout();
+        getSourceRoot().convention(layout.getProjectDirectory().dir("src/main/java"));
+        getOutputFile().convention(
+                layout.getBuildDirectory().file("forensics/forensics.btm")
+        );
     }
 
     private boolean hasMinimalInputs() {
