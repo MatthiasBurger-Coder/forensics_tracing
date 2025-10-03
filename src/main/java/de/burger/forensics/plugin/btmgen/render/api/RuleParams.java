@@ -8,5 +8,14 @@ public record RuleParams(
         String methodDesc,   // optional descriptor/signature, may be null
         String displayName,  // human label (optional)
         String condition,    // optional IF guard (Byteman expression)
-        String sqlHint       // optional SQL preview for JDBC template
-) { }
+        String sqlHint,      // optional SQL preview for JDBC template
+        String helperFqn     // helper implementation invoked from the rule
+) {
+    public static final String DEFAULT_HELPER_FQN = "de.burger.forensics.infrastructure.rt.RtTrace";
+
+    public RuleParams {
+        if (helperFqn == null || helperFqn.isBlank()) {
+            helperFqn = DEFAULT_HELPER_FQN;
+        }
+    }
+}

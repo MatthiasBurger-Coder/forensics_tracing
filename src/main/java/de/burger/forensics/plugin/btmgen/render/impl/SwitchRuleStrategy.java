@@ -16,13 +16,13 @@ public final class SwitchRuleStrategy extends AbstractBytemanStrategy implements
             AT ENTRY
             IF true
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.onSwitch(%s.class, "%s", %s );
+                %s.onSwitch(%s.class, "%s", %s );
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
-                p.className(), p.methodName(),
+                p.helperFqn(), p.className(), p.methodName(),
                 p.displayName() == null ? "\"\"" : "\"" + esc(p.displayName()) + "\""
         );
     }

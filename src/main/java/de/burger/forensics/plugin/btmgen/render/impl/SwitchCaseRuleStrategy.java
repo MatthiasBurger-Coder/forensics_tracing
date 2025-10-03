@@ -17,13 +17,13 @@ public final class SwitchCaseRuleStrategy extends AbstractBytemanStrategy implem
             AT ENTRY
             IF true
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.onCase(%s.class, "%s", "%s");
+                %s.onCase(%s.class, "%s", "%s");
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
-                p.className(), p.methodName(), label
+                p.helperFqn(), p.className(), p.methodName(), label
         );
     }
 }

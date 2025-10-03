@@ -15,14 +15,14 @@ public final class MethodEnterRuleStrategy extends AbstractBytemanStrategy imple
             AT ENTRY
             %s
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.onEnter(%s.class, "%s", $* );
+                %s.onEnter(%s.class, "%s", $* );
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 ifClause(p.condition()),
-                p.className(), p.methodName()
+                p.helperFqn(), p.className(), p.methodName()
         );
     }
 }

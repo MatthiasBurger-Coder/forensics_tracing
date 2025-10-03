@@ -49,6 +49,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Input @Optional public abstract Property<@NotNull Integer>  getMinBranchesPerMethod();
     @Input @Optional public abstract Property<@NotNull Boolean> getLogToFile();
     @Input @Optional public abstract Property<@NotNull String>  getLogFilePath();
+    @Input @Optional public abstract Property<@NotNull String>  getHelperFqn();
 
     // Provided by plugin (or set manually in build script)
     private BtmGenExtension extension;
@@ -70,6 +71,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 getOutputDir().fileValue(file.getParentFile());
             }
         }
+        getHelperFqn().convention(ext.getHelperFqn());
     }
 
     @TaskAction
@@ -100,7 +102,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
                     getMethodDesc().getOrNull(),
                     getClassName().get() + "#" + getMethodName().get(),
                     null,
-                    null
+                    null,
+                    resolveHelperFqn()
             );
             allRules.add(renderer.render(templateIdOrDefault(), params));
         } else {
@@ -189,44 +192,48 @@ public abstract class GenerateBtmTask extends DefaultTask {
         for (MethodSig m : methods) {
             // Always add method enter/exit
             rules.add(renderer.render("METHOD_ENTER", new RuleParams(
-                    "METHOD_ENTER", m.className, m.methodName, m.methodDesc, m.displayName(), null, null
+                    "METHOD_ENTER", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
             )));
             rules.add(renderer.render("METHOD_EXIT", new RuleParams(
-                    "METHOD_EXIT", m.className, m.methodName, m.methodDesc, m.displayName(), null, null
+                    "METHOD_EXIT", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
             )));
 
             // Return / Throw
             if (m.hasReturn) {
                 rules.add(renderer.render("RETURN", new RuleParams(
-                        "RETURN", m.className, m.methodName, m.methodDesc, m.displayName(), null, null
+                        "RETURN", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
                 )));
             }
             if (m.hasThrow) {
                 rules.add(renderer.render("THROW", new RuleParams(
-                        "THROW", m.className, m.methodName, m.methodDesc, m.displayName(), null, null
+                        "THROW", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
                 )));
             }
 
             // If / Switch – map both branches & switch markers (coarse grained)
             if (hasIf) {
                 rules.add(renderer.render("IF_TRUE", new RuleParams(
-                        "IF_TRUE", m.className, m.methodName, m.methodDesc, m.displayName(), "true", null
+                        "IF_TRUE", m.className, m.methodName, m.methodDesc, m.displayName(), "true", null, resolveHelperFqn()
                 )));
                 rules.add(renderer.render("IF_FALSE", new RuleParams(
-                        "IF_FALSE", m.className, m.methodName, m.methodDesc, m.displayName(), "false", null
+                        "IF_FALSE", m.className, m.methodName, m.methodDesc, m.displayName(), "false", null, resolveHelperFqn()
                 )));
             }
             if (hasSwitch) {
                 rules.add(renderer.render("SWITCH", new RuleParams(
-                        "SWITCH", m.className, m.methodName, m.methodDesc, m.displayName(), null, null
+                        "SWITCH", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
                 )));
                 rules.add(renderer.render("SWITCH_CASE", new RuleParams(
-                        "SWITCH_CASE", m.className, m.methodName, m.methodDesc, m.displayName(), null, null
+                        "SWITCH_CASE", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
                 )));
             }
         }
 
         return rules;
+    }
+
+    private String resolveHelperFqn() {
+        return getHelperFqn().getOrElse(RuleParams.DEFAULT_HELPER_FQN);
     }
 
     private String findPackage(String code) {
