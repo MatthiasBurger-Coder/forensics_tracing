@@ -7,8 +7,8 @@ import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
 import de.burger.forensics.plugin.btmgen.writer.BtmFileWriter;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.file.RegularFileProperty;
-import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.*;
 import org.gradle.api.tasks.Optional;
@@ -51,11 +51,11 @@ public abstract class GenerateBtmTask extends DefaultTask {
     private BtmGenExtension extension;
 
     @Inject
-    public GenerateBtmTask(ObjectFactory objects) {
+    public GenerateBtmTask(ProjectLayout layout) {
         // sensible defaults
-        getSourceRoot().convention(getProject().getLayout().getProjectDirectory().dir("src/main/java"));
+        getSourceRoot().convention(layout.getProjectDirectory().dir("src/main/java"));
         getOutputFile().convention(
-                getProject().getLayout().getBuildDirectory().file("forensics/forensics.btm")
+                layout.getBuildDirectory().file("forensics/forensics.btm")
         );
     }
 
