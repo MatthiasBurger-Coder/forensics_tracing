@@ -1,8 +1,3 @@
-import org.gradle.api.plugins.JavaPlugin
-import org.gradle.api.plugins.JavaPluginExtension
-import org.gradle.api.tasks.compile.JavaCompile
-import org.gradle.api.tasks.javadoc.Javadoc
-import org.gradle.external.javadoc.StandardJavadocDocletOptions
 import org.gradle.internal.os.OperatingSystem
 
 plugins {
@@ -75,13 +70,7 @@ plugins.withType<JavaPlugin>().configureEach {
 
 // Relax Javadoc doclint to avoid failing the build on strict checks
 tasks.withType<Javadoc>().configureEach {
-    options.encoding = "UTF-8"
-    val opts = options as StandardJavadocDocletOptions
-    // Disable all doclint checks and suppress warnings output
-    opts.addBooleanOption("Xdoclint:none", true)
-    opts.addBooleanOption("quiet", true)
-    // Do not fail the build if Javadoc encounters warnings
-    isFailOnError = false
+    enabled = false
 }
 
 val testLogFile = layout.buildDirectory.file("test-logs/forensics-btmgen.log")
@@ -94,18 +83,14 @@ fun javaAgentArg(file: java.io.File): String {
 }
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
-    javaLauncher.set(java21)      // <- NICHT nachträglich woanders überschreiben!
-
-    // Einmalig den Agent ermitteln und anhängen
-    jvmArgumentProviders += org.gradle.process.CommandLineArgumentProvider {
+    javaLauncher.set(java21)
+    jvmArgumentProviders += CommandLineArgumentProvider {
         val weaverJar = aspectjAgent.resolve().firstOrNull { it.name.startsWith("aspectjweaver") }
             ?: throw GradleException("aspectjweaver*.jar nicht gefunden. Füge 'aspectjAgent(libs.aspectj.weaver)' hinzu.")
         val arg = javaAgentArg(weaverJar)
-        // Diagnose in der Konsole – hilft, falls die JVM wieder nicht startet
         println("Attaching AspectJ agent for tests: $arg")
         listOf(
             arg,
-            // nützliche Diagnostik (optional):
             "-XX:+PrintCommandLineFlags"
         )
     }
@@ -185,7 +170,7 @@ tasks.jar {
 // Project coordinates for publishing
 // Use Gradle properties if provided, otherwise fall back to sensible defaults
 group = providers.gradleProperty("GROUP").orNull ?: "de.burger.forensics"
-version = providers.gradleProperty("VERSION").orNull ?: "1.0.0-SNAPSHOT"
+version = providers.gradleProperty("VERSION").orNull ?: "0.0.2-SNAPSHOT"
 
 gradlePlugin {
     // Top-level metadata for the plugin bundle
@@ -204,7 +189,7 @@ gradlePlugin {
                 ?: "de.burger.forensics.btmgen"
             // Point to the actual implementation class in the project
             implementationClass = providers.gradleProperty("PLUGIN_IMPL_CLASS").orNull
-                ?: "de.burger.forensics.plugin.BtmGenPlugin"
+                ?: "de.burger.forensics.plugin.btmgen.gradle.BtmGenPlugin"
 
             displayName = "Forensics BTM Generator Gradle Plugin"
             description = providers.gradleProperty("POM_DESCRIPTION").orNull

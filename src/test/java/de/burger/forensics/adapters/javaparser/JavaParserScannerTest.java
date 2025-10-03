@@ -1,6 +1,6 @@
 package de.burger.forensics.adapters.javaparser;
 
-import de.burger.forensics.domain.model.RuleType;
+import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +35,7 @@ class JavaParserScannerTest {
         assertThat(events)
             .singleElement()
             .satisfies(event -> {
-                assertThat(event.kind()).isEqualTo(RuleType.IF_TRUE);
+                assertThat(event.kind()).isEqualTo(RuleTemplate.IF_TRUE);
                 assertThat(event.location().fqcn()).isEqualTo("example.Sample");
             });
     }
@@ -66,6 +66,6 @@ class JavaParserScannerTest {
         List<ScanEvent> events = scanner.scan(tempDir).toList();
 
         assertThat(events).extracting(ScanEvent::kind)
-            .contains(RuleType.IF_TRUE, RuleType.IF_FALSE, RuleType.SWITCH, RuleType.SWITCH_CASE, RuleType.RETURN, RuleType.THROW);
+            .contains(RuleTemplate.IF_TRUE, RuleTemplate.IF_FALSE, RuleTemplate.SWITCH, RuleTemplate.SWITCH_CASE, RuleTemplate.RETURN, RuleTemplate.THROW);
     }
 }

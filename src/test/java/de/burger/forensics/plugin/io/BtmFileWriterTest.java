@@ -1,5 +1,6 @@
 package de.burger.forensics.plugin.io;
 
+import de.burger.forensics.plugin.btmgen.writer.BtmFileWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

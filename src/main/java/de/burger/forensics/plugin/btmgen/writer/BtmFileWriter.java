@@ -1,4 +1,4 @@
-package de.burger.forensics.plugin.io;
+package de.burger.forensics.plugin.btmgen.writer;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;

@@ -5,7 +5,7 @@ package de.burger.forensics.domain.model;
  */
 public record ScanEvent(SourceLocation location,
                         String signature,
-                        RuleType kind,
+                        RuleTemplate kind,
                         String conditionText,
                         String language) {
 }

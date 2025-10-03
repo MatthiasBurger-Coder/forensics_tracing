@@ -10,7 +10,7 @@ class RuleIdFactoryTest {
 
     @Test
     void createsDeterministicIdFromScanEvent() {
-        ScanEvent event = new ScanEvent(location, "test()", RuleType.IF_TRUE, "value > 0", "java");
+        ScanEvent event = new ScanEvent(location, "test()", RuleTemplate.IF_TRUE, "value > 0", "java");
 
         RuleId id1 = RuleIdFactory.from(event, "value > 0");
         RuleId id2 = RuleIdFactory.from(event, "value > 0");
@@ -20,20 +20,20 @@ class RuleIdFactoryTest {
 
     @Test
     void createsIdFromLocationAndType() {
-        RuleId id = RuleIdFactory.from(location, RuleType.ENTRY);
+        RuleId id = RuleIdFactory.from(location, RuleTemplate.METHOD_ENTER);
 
         assertThat(id.value()).isNotBlank().hasSize(32);
     }
 
     @Test
     void rejectsNullArguments() {
-        ScanEvent event = new ScanEvent(location, "test()", RuleType.IF_TRUE, "value > 0", "java");
+        ScanEvent event = new ScanEvent(location, "test()", RuleTemplate.IF_TRUE, "value > 0", "java");
 
         assertThatThrownBy(() -> RuleIdFactory.from(null, "foo"))
             .isInstanceOf(NullPointerException.class);
         assertThatCode(() -> RuleIdFactory.from(event, null))
             .doesNotThrowAnyException();
-        assertThatThrownBy(() -> RuleIdFactory.from((SourceLocation) null, RuleType.ENTRY))
+        assertThatThrownBy(() -> RuleIdFactory.from((SourceLocation) null, RuleTemplate.METHOD_ENTER))
             .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> RuleIdFactory.from(location, null))
             .isInstanceOf(NullPointerException.class);

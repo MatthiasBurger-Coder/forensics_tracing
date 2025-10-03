@@ -21,7 +21,7 @@ public final class RuleIdFactory {
         return new RuleId(hash(payload));
     }
 
-    public static RuleId from(SourceLocation location, RuleType type) {
+    public static RuleId from(SourceLocation location, RuleTemplate type) {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(type, "type");
         String payload = location.fqcn() + "#" + location.method() + ":" + type;

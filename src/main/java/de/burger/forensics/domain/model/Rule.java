@@ -8,5 +8,5 @@ public record Rule(RuleId id,
                    String condition,
                    boolean positive,
                    String helperFqn,
-                   RuleType type) {
+                   RuleTemplate type) {
 }

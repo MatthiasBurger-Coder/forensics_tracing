@@ -3,7 +3,7 @@ package de.burger.forensics.application.service;
 import de.burger.forensics.domain.model.Rule;
 import de.burger.forensics.domain.model.RuleId;
 import de.burger.forensics.domain.model.RuleIdFactory;
-import de.burger.forensics.domain.model.RuleType;
+import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.SourceLocation;
 import de.burger.forensics.domain.port.out.ClockPort;
@@ -115,7 +115,7 @@ public final class GenerateRulesUseCase {
     private void addEntryRuleIfMissing(List<ScanEvent> methodEvents,
                                        GenerationRequest request,
                                        List<Rule> rules) {
-        boolean hasEntry = methodEvents.stream().anyMatch(e -> e.kind() == RuleType.ENTRY);
+        boolean hasEntry = methodEvents.stream().anyMatch(e -> e.kind() == RuleTemplate.METHOD_ENTER);
         if (!hasEntry) {
             SourceLocation firstLoc = methodEvents.getFirst().location();
             rules.add(entryRule(firstLoc, request.helperFqcn()));
@@ -125,7 +125,7 @@ public final class GenerateRulesUseCase {
     private void addExitRuleIfMissing(List<ScanEvent> methodEvents,
                                       GenerationRequest request,
                                       List<Rule> rules) {
-        boolean hasExit = methodEvents.stream().anyMatch(e -> e.kind() == RuleType.EXIT);
+        boolean hasExit = methodEvents.stream().anyMatch(e -> e.kind() == RuleTemplate.METHOD_EXIT);
         if (!hasExit) {
             SourceLocation lastLoc = methodEvents.getLast().location();
             rules.add(exitRule(lastLoc, request.helperFqcn()));
@@ -152,10 +152,10 @@ public final class GenerateRulesUseCase {
         List<Rule> filtered = new ArrayList<>();
         for (Map.Entry<String, List<Rule>> entry : byMethod.entrySet()) {
             long branchCount = entry.getValue().stream()
-                .filter(rule -> rule.type() == RuleType.IF_TRUE
-                    || rule.type() == RuleType.IF_FALSE
-                    || rule.type() == RuleType.SWITCH
-                    || rule.type() == RuleType.SWITCH_CASE)
+                .filter(rule -> rule.type() == RuleTemplate.IF_TRUE
+                    || rule.type() == RuleTemplate.IF_FALSE
+                    || rule.type() == RuleTemplate.SWITCH
+                    || rule.type() == RuleTemplate.SWITCH_CASE)
                 .count();
             if (branchCount >= minBranches) {
                 filtered.addAll(entry.getValue());
@@ -174,15 +174,15 @@ public final class GenerateRulesUseCase {
 
     private List<Rule> mapEvent(ScanEvent event, String helperFqcn, boolean safeMode) {
         List<Rule> rules = new ArrayList<>();
-        RuleType type = event.kind();
+        RuleTemplate type = event.kind();
         switch (type) {
-            case IF_TRUE -> rules.add(ruleFrom(event, helperFqcn, safeMode, true, RuleType.IF_TRUE));
-            case IF_FALSE -> rules.add(ruleFrom(event, helperFqcn, safeMode, false, RuleType.IF_FALSE));
-            case SWITCH -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleType.SWITCH));
-            case SWITCH_CASE -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleType.SWITCH_CASE));
-            case RETURN -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleType.RETURN));
-            case THROW -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleType.THROW));
-            case ENTRY, EXIT -> rules.add(ruleFrom(event, helperFqcn, false, true, type));
+            case IF_TRUE -> rules.add(ruleFrom(event, helperFqcn, safeMode, true, RuleTemplate.IF_TRUE));
+            case IF_FALSE -> rules.add(ruleFrom(event, helperFqcn, safeMode, false, RuleTemplate.IF_FALSE));
+            case SWITCH -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleTemplate.SWITCH));
+            case SWITCH_CASE -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleTemplate.SWITCH_CASE));
+            case RETURN -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleTemplate.RETURN));
+            case THROW -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleTemplate.THROW));
+            case METHOD_ENTER , METHOD_EXIT -> rules.add(ruleFrom(event, helperFqcn, false, true, type));
         }
         return rules;
     }
@@ -191,7 +191,7 @@ public final class GenerateRulesUseCase {
                           String helperFqcn,
                           boolean safeMode,
                           boolean positive,
-                          RuleType overrideType) {
+                          RuleTemplate overrideType) {
         ConditionStrategy base = strategyFactory.from(event.conditionText());
         String baseRendered = base.toBytemanIf();
         RuleId ruleId = RuleIdFactory.from(event, baseRendered);
@@ -203,13 +203,13 @@ public final class GenerateRulesUseCase {
     }
 
     private Rule entryRule(SourceLocation location, String helperFqcn) {
-        RuleId ruleId = RuleIdFactory.from(location, RuleType.ENTRY);
-        return new Rule(ruleId, location, "true", true, helperFqcn, RuleType.ENTRY);
+        RuleId ruleId = RuleIdFactory.from(location, RuleTemplate.METHOD_ENTER);
+        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_ENTER);
     }
 
     private Rule exitRule(SourceLocation location, String helperFqcn) {
-        RuleId ruleId = RuleIdFactory.from(location, RuleType.EXIT);
-        return new Rule(ruleId, location, "true", true, helperFqcn, RuleType.EXIT);
+        RuleId ruleId = RuleIdFactory.from(location, RuleTemplate.METHOD_EXIT);
+        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_EXIT);
     }
 
     private boolean matchesPrefixes(SourceLocation location, List<String> prefixes) {

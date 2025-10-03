@@ -18,7 +18,7 @@ import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
-import de.burger.forensics.domain.model.RuleType;
+import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.SourceLocation;
 import de.burger.forensics.domain.port.out.CodeScanPort;
@@ -106,9 +106,9 @@ public final class JavaParserScanner implements CodeScanPort {
                 var condition = current.getCondition();
                 int line = condition.getBegin().map(p -> p.line).orElse(-1);
                 SourceLocation location = new SourceLocation(fqcn, methodName, line);
-                events.add(new ScanEvent(location, signature, RuleType.IF_TRUE, condition.toString(), "java"));
+                events.add(new ScanEvent(location, signature, RuleTemplate.IF_TRUE, condition.toString(), "java"));
                 if (current.getElseStmt().isPresent()) {
-                    events.add(new ScanEvent(location, signature, RuleType.IF_FALSE, condition.toString(), "java"));
+                    events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, condition.toString(), "java"));
                 }
                 var elseStmt = current.getElseStmt().orElse(null);
                 if (elseStmt instanceof IfStmt next) {
@@ -122,7 +122,7 @@ public final class JavaParserScanner implements CodeScanPort {
         declaration.findAll(SwitchStmt.class).forEach(sw -> {
             int line = sw.getSelector().getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            events.add(new ScanEvent(location, signature, RuleType.SWITCH, sw.getSelector().toString(), "java"));
+            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH, sw.getSelector().toString(), "java"));
         });
 
         declaration.findAll(SwitchEntry.class).forEach(entry -> {
@@ -134,19 +134,19 @@ public final class JavaParserScanner implements CodeScanPort {
                     .map(String::trim)
                     .collect(Collectors.joining(" | "));
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            events.add(new ScanEvent(location, signature, RuleType.SWITCH_CASE, label, "java"));
+            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH_CASE, label, "java"));
         });
 
         declaration.findAll(ReturnStmt.class).forEach(ret -> {
             int line = ret.getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            events.add(new ScanEvent(location, signature, RuleType.RETURN, ret.toString(), "java"));
+            events.add(new ScanEvent(location, signature, RuleTemplate.RETURN, ret.toString(), "java"));
         });
 
         declaration.findAll(ThrowStmt.class).forEach(th -> {
             int line = th.getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            events.add(new ScanEvent(location, signature, RuleType.THROW, th.getExpression().toString(), "java"));
+            events.add(new ScanEvent(location, signature, RuleTemplate.THROW, th.getExpression().toString(), "java"));
         });
     }
 
