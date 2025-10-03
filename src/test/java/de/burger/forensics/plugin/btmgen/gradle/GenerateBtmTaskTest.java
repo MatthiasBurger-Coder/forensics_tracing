@@ -44,7 +44,7 @@ class GenerateBtmTaskTest {
         task.generate();
 
         assertEquals(1, strategy.calls.size(), "Expected exactly one rendered rule");
-        RuleParams params = strategy.calls.get(0);
+        RuleParams params = strategy.calls.getFirst();
         assertEquals("com.example.Foo", params.className());
         assertEquals("bar", params.methodName());
         assertEquals("(I)V", params.methodDesc());
@@ -60,19 +60,21 @@ class GenerateBtmTaskTest {
         Path srcDir = tempDir.resolve("src/main/java/com/example");
         Files.createDirectories(srcDir);
         Path javaFile = srcDir.resolve("Sample.java");
-        Files.writeString(javaFile, "package com.example;\n" +
-                "public class Sample {\n" +
-                "  public int alpha() {\n" +
-                "    if (true) { }\n" +
-                "    switch (1) { case 1 -> {} }\n" +
-                "    return 1;\n" +
-                "  }\n" +
-                "  public void beta() {\n" +
-                "    if (false) { }\n" +
-                "    switch (2) { case 2 -> {} }\n" +
-                "    throw new IllegalStateException();\n" +
-                "  }\n" +
-                "}\n");
+        Files.writeString(javaFile, """
+                package com.example;
+                public class Sample {
+                  public int alpha() {
+                    if (true) { }
+                    switch (1) { case 1 -> {} }
+                    return 1;
+                  }
+                  public void beta() {
+                    if (false) { }
+                    switch (2) { case 2 -> {} }
+                    throw new IllegalStateException();
+                  }
+                }
+                """);
 
         var task = project.getTasks().register("generateBtmScan", GenerateBtmTask.class).get();
 
@@ -107,9 +109,9 @@ class GenerateBtmTaskTest {
         assertEquals(2, strategies.get("METHOD_ENTER").calls.size());
         assertEquals(2, strategies.get("METHOD_EXIT").calls.size());
         assertEquals(1, strategies.get("RETURN").calls.size());
-        assertEquals("alpha", strategies.get("RETURN").calls.get(0).methodName());
+        assertEquals("alpha", strategies.get("RETURN").calls.getFirst().methodName());
         assertEquals(1, strategies.get("THROW").calls.size());
-        assertEquals("beta", strategies.get("THROW").calls.get(0).methodName());
+        assertEquals("beta", strategies.get("THROW").calls.getFirst().methodName());
 
         assertEquals(Set.of("alpha", "beta"),
                 strategies.get("IF_TRUE").calls.stream().map(RuleParams::methodName).collect(Collectors.toSet()));
