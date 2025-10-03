@@ -64,7 +64,11 @@ public abstract class GenerateBtmTask extends DefaultTask {
             getSourceRoot().set(ext.getSourceRoot().get());
         }
         if (ext.getOutputFile().isPresent()) {
-            getOutputFile().fileValue(ext.getOutputFile().get());
+            var file = ext.getOutputFile().get();
+            getOutputFile().fileValue(file);
+            if (file.getParentFile() != null) {
+                getOutputDir().fileValue(file.getParentFile());
+            }
         }
     }
 
@@ -149,6 +153,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getSourceRoot().convention(layout.getProjectDirectory().dir("src/main/java"));
         getOutputFile().convention(
                 layout.getBuildDirectory().file("forensics/forensics.btm")
+        );
+        getOutputDir().convention(
+                layout.getBuildDirectory().dir("forensics")
         );
     }
 
