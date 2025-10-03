@@ -26,7 +26,7 @@ class GenerateBtmTaskTest {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
         Files.createDirectories(tempDir.resolve("src/main/java"));
 
-        var task = project.getTasks().create("generateBtmMinimal", GenerateBtmTask.class);
+        var task = project.getTasks().register("generateBtmMinimal", GenerateBtmTask.class).get();
 
         var extension = project.getObjects().newInstance(BtmGenExtension.class);
         var strategy = new RecordingStrategy("CUSTOM");
@@ -74,7 +74,7 @@ class GenerateBtmTaskTest {
                 "  }\n" +
                 "}\n");
 
-        var task = project.getTasks().create("generateBtmScan", GenerateBtmTask.class);
+        var task = project.getTasks().register("generateBtmScan", GenerateBtmTask.class).get();
 
         var extension = project.getObjects().newInstance(BtmGenExtension.class);
         Map<String, RecordingStrategy> strategies = registerDefaultStrategies(extension);
