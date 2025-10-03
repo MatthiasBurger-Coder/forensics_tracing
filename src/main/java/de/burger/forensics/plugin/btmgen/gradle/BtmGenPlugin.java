@@ -36,10 +36,20 @@ public class BtmGenPlugin implements Plugin<@NotNull Project> {
                     }
 
                     if (ext.getOutputFile().isPresent()) {
-                        t.getOutputFile().fileValue(ext.getOutputFile().get());
+                        var file = ext.getOutputFile().get();
+                        t.getOutputFile().fileValue(file);
+                        if (file.getParentFile() != null) {
+                            t.getOutputDir().fileValue(file.getParentFile());
+                        }
                     } else {
                         t.getOutputFile().convention(
                                 project.getLayout().getBuildDirectory().file("forensics/forensics.btm")
+                        );
+                    }
+
+                    if (!t.getOutputDir().isPresent()) {
+                        t.getOutputDir().convention(
+                                project.getLayout().getBuildDirectory().dir("forensics")
                         );
                     }
                 }
