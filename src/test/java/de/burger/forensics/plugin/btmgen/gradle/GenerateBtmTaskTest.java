@@ -48,6 +48,7 @@ class GenerateBtmTaskTest {
         assertEquals("com.example.Foo", params.className());
         assertEquals("bar", params.methodName());
         assertEquals("(I)V", params.methodDesc());
+        assertEquals(RuleParams.DEFAULT_HELPER_FQN, params.helperFqn());
 
         assertTrue(Files.exists(outputFile), "Output file should be created");
         String content = Files.readString(outputFile);
@@ -121,6 +122,35 @@ class GenerateBtmTaskTest {
                 strategies.get("IF_FALSE").calls.stream().map(RuleParams::condition).toList());
         assertEquals(2, strategies.get("SWITCH").calls.size());
         assertEquals(2, strategies.get("SWITCH_CASE").calls.size());
+
+        strategies.values().forEach(recording ->
+                recording.calls.forEach(params ->
+                        assertEquals(RuleParams.DEFAULT_HELPER_FQN, params.helperFqn())));
+    }
+
+    @Test
+    void generateRespectsCustomHelperFqn(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Files.createDirectories(tempDir.resolve("src/main/java"));
+
+        var task = project.getTasks().register("generateBtmCustomHelper", GenerateBtmTask.class).get();
+
+        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        var strategy = new RecordingStrategy("CUSTOM");
+        extension.setRegistry(StrategyRegistry.builder().register(strategy).build());
+        extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        Path outputFile = tempDir.resolve("build/forensics/custom-helper.btm");
+        extension.getOutputFile().set(outputFile.toFile());
+        extension.getHelperFqn().set("com.example.Helper");
+
+        task.setExtension(extension);
+        task.getTemplateId().set("CUSTOM");
+        task.getClassName().set("com.example.Foo");
+        task.getMethodName().set("bar");
+
+        task.generate();
+
+        assertEquals("com.example.Helper", strategy.calls.getFirst().helperFqn());
     }
 
     private static Map<String, RecordingStrategy> registerDefaultStrategies(BtmGenExtension extension) {

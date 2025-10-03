@@ -16,14 +16,14 @@ public final class IfFalseRuleStrategy extends AbstractBytemanStrategy implement
             AT ENTRY
             IF %s
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.onBranch(%s.class, "%s", "IF_FALSE");
+                %s.onBranch(%s.class, "%s", "IF_FALSE");
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 cond,
-                p.className(), p.methodName()
+                p.helperFqn(), p.className(), p.methodName()
         );
     }
 }

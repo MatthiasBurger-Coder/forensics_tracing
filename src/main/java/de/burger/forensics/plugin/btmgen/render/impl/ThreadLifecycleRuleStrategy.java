@@ -16,7 +16,7 @@ public final class ThreadLifecycleRuleStrategy extends AbstractBytemanStrategy i
             AT ENTRY
             IF true
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.threadFork($0.getName());
+                %s.threadFork($0.getName());
             ENDRULE
 
             RULE %s-join : thread join
@@ -25,8 +25,8 @@ public final class ThreadLifecycleRuleStrategy extends AbstractBytemanStrategy i
             AT ENTRY
             IF true
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.threadJoin($0.getName());
+                %s.threadJoin($0.getName());
             ENDRULE
-            """.formatted(id, id);
+            """.formatted(id, p.helperFqn(), id, p.helperFqn());
     }
 }

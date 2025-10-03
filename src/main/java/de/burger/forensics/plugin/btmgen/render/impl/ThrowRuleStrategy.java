@@ -15,13 +15,14 @@ public final class ThrowRuleStrategy extends AbstractBytemanStrategy implements 
             AT THROW
             %s
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.onException($^);
+                %s.onException($^);
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
-                ifClause(p.condition())
+                ifClause(p.condition()),
+                p.helperFqn()
         );
     }
 }

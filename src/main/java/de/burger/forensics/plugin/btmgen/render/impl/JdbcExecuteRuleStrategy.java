@@ -19,7 +19,7 @@ public final class JdbcExecuteRuleStrategy extends AbstractBytemanStrategy imple
             AT ENTRY
             IF true
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.ioBegin("JDBC", "%s#%s%s");
+                %s.ioBegin("JDBC", "%s#%s%s");
             ENDRULE
 
             RULE %s-end : jdbc io end
@@ -28,11 +28,11 @@ public final class JdbcExecuteRuleStrategy extends AbstractBytemanStrategy imple
             AT EXIT
             IF true
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.ioEnd("JDBC", "%s#%s%s");
+                %s.ioEnd("JDBC", "%s#%s%s");
             ENDRULE
             """.formatted(
-                id, target, methods, target, methods, hint,
-                id, target, methods, target, methods, hint
+                id, target, methods, p.helperFqn(), target, methods, hint,
+                id, target, methods, p.helperFqn(), target, methods, hint
         );
     }
 

@@ -1,5 +1,6 @@
 package de.burger.forensics.plugin.btmgen.gradle;
 
+import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
 import org.gradle.api.model.ObjectFactory;
@@ -19,6 +20,7 @@ public abstract class BtmGenExtension {
     private final Property<@NotNull File> outputFile;
     private final Property<@NotNull String> includes;
     private final Property<@NotNull File> sourceRootFile;
+    private final Property<@NotNull String> helperFqn;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
@@ -26,8 +28,10 @@ public abstract class BtmGenExtension {
         this.outputFile = objects.property(File.class);
         this.includes = objects.property(String.class);
         this.sourceRootFile = objects.property(File.class);
+        this.helperFqn = objects.property(String.class);
         this.sourceRoot.convention(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
+        this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
     }
 
     /** Strategy registry used by tasks to render rules. */
@@ -43,4 +47,7 @@ public abstract class BtmGenExtension {
     public Property<@NotNull String> getIncludes() { return includes; }
 
     public Property<@NotNull File> getSourceRootFile() { return sourceRootFile; }
+
+    /** Fully qualified helper class invoked from generated rules. */
+    public Property<@NotNull String> getHelperFqn() { return helperFqn; }
 }

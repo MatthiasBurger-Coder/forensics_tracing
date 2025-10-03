@@ -15,14 +15,14 @@ public final class ReturnRuleStrategy extends AbstractBytemanStrategy implements
             AT EXIT
             %s
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.onExit(%s.class, "%s", $! );
+                %s.onExit(%s.class, "%s", $! );
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 ifClause(p.condition()),
-                p.className(), p.methodName()
+                p.helperFqn(), p.className(), p.methodName()
         );
     }
 }
