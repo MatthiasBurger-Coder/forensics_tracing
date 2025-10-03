@@ -15,7 +15,7 @@ public final class MethodExitRuleStrategy extends AbstractBytemanStrategy implem
             AT EXIT
             %s
             DO
-                de.burger.forensics.infrastructure.rt.RtTrace.onExitVoid(%s.class, "%s");
+                de.burger.forensics.infrastructure.rt.RtTrace.onExit(%s.class, "%s", null);
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
