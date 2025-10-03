@@ -1,5 +1,3 @@
-import org.gradle.internal.os.OperatingSystem
-
 plugins {
     `java-library`
     `java-gradle-plugin`
@@ -88,7 +86,6 @@ tasks.withType<Test>().configureEach {
         val weaverJar = aspectjAgent.resolve().firstOrNull { it.name.startsWith("aspectjweaver") }
             ?: throw GradleException("aspectjweaver*.jar nicht gefunden. Füge 'aspectjAgent(libs.aspectj.weaver)' hinzu.")
         val arg = javaAgentArg(weaverJar)
-        println("Attaching AspectJ agent for tests: $arg")
         listOf(
             arg,
             "-XX:+PrintCommandLineFlags"
@@ -119,14 +116,9 @@ tasks.test {
             .files.firstOrNull { it.name.startsWith("aspectjweaver") || it.name.contains("aspectjweaver") }
             ?: error("AspectJ weaver not found on testRuntimeClasspath. Add testRuntimeOnly(\"org.aspectj:aspectjweaver:<ver>\").")
 
-        // Windows: Pfad mit Leerzeichen MUSS in Anführungszeichen
-        val os = OperatingSystem.current()
-        val agentArg =
-            if (os.isWindows) "-javaagent:\"${weaverFile.absolutePath}\""
-            else "-javaagent=${weaverFile.absolutePath}"
 
+        val agentArg = javaAgentArg(weaverFile)
         jvmArgs(
-            agentArg,
             "-Xshare:off" // ok, optional
         )
 

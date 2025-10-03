@@ -2,12 +2,8 @@ package de.burger.forensics.plugin.btmgen.gradle;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
-import org.gradle.api.file.RegularFile;
-import org.gradle.api.file.Directory;
 import org.gradle.api.tasks.TaskProvider;
 import org.jetbrains.annotations.NotNull;
-
-import java.io.File;
 
 /**
  * Compatible wiring when the extension exposes Property<File> rather than DirectoryProperty/RegularFileProperty.
@@ -17,11 +13,11 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
 
     @Override
     public void apply(Project project) {
-        final BtmGenLegacyFileExtension ext = project.getExtensions()
-                .create("btmGen", BtmGenLegacyFileExtension.class);
+        final BtmGenExtension ext = project.getExtensions()
+                .create("btmGen", BtmGenExtension.class);
 
         // Register task
-        TaskProvider<@NotNull GenerateBtmTask> task = project.getTasks().register(
+        TaskProvider<@NotNull GenerateBtmTask> taskProvider = project.getTasks().register(
                 "generateBtmRules",
                 GenerateBtmTask.class,
                 t -> {
@@ -59,10 +55,10 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
                     }
                 }
         );
-
-                    task.getSourceRoot().finalizeValueOnRead();
-                    task.getOutputFile().finalizeValueOnRead();
-                });
+        taskProvider.configure(task -> {
+            task.getSourceRoot().finalizeValueOnRead();
+            task.getOutputFile().finalizeValueOnRead();
+        });
 
         project.getTasks().matching(t -> t.getName().equals("build"))
                 .configureEach(t -> t.dependsOn(taskProvider));

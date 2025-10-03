@@ -18,12 +18,16 @@ public abstract class BtmGenExtension {
     private final Property<@NotNull File> sourceRoot;
     private final Property<@NotNull File> outputFile;
     private final Property<@NotNull String> includes;
+    private final Property<@NotNull File> sourceRootFile;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
         this.sourceRoot = objects.property(File.class);
         this.outputFile = objects.property(File.class);
         this.includes = objects.property(String.class);
+        this.sourceRootFile = objects.property(File.class);
+        this.sourceRoot.convention(new File("src/main/java"));
+        this.outputFile.convention(new File("build/forensics/forensics.btm"));
     }
 
     /** Strategy registry used by tasks to render rules. */
@@ -37,4 +41,6 @@ public abstract class BtmGenExtension {
     public Property<@NotNull File> getOutputFile() { return outputFile; }
 
     public Property<@NotNull String> getIncludes() { return includes; }
+
+    public Property<@NotNull File> getSourceRootFile() { return sourceRootFile; }
 }
