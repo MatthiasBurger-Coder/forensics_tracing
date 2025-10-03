@@ -150,13 +150,19 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
     private void applyDefaultConventions() {
         ProjectLayout layout = getProject().getLayout();
-        getSourceRoot().convention(layout.getProjectDirectory().dir("src/main/java"));
-        getOutputFile().convention(
-                layout.getBuildDirectory().file("forensics/forensics.btm")
-        );
-        getOutputDir().convention(
-                layout.getBuildDirectory().dir("forensics")
-        );
+        if (!getSourceRoot().isPresent()) {
+            getSourceRoot().convention(layout.getProjectDirectory().dir("src/main/java"));
+        }
+        if (!getOutputFile().isPresent()) {
+            getOutputFile().convention(
+                    layout.getBuildDirectory().file("forensics/forensics.btm")
+            );
+        }
+        if (!getOutputDir().isPresent()) {
+            getOutputDir().convention(
+                    layout.getBuildDirectory().dir("forensics")
+            );
+        }
     }
 
     private boolean hasMinimalInputs() {
