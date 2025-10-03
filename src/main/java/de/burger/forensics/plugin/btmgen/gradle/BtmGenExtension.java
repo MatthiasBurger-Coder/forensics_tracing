@@ -1,35 +1,36 @@
 package de.burger.forensics.plugin.btmgen.gradle;
 
+import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
+import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
 import org.gradle.api.model.ObjectFactory;
-import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
-import org.gradle.api.file.DirectoryProperty;
+import org.jetbrains.annotations.NotNull;
 
 import javax.inject.Inject;
-import java.util.List;
+import java.io.File;
 
-public class BtmGenExtension {
-    public final ListProperty<String> srcDirs;
-    public final DirectoryProperty outputDir;
-    public final Property<Boolean> includeJava;
-    public final Property<Boolean> useAstScanner;
-    public final Property<String>  helperFqn;
-    public final Property<Boolean> entryExit;
-    public final Property<Integer> minBranchesPerMethod;
-    public final Property<Boolean> logToFile;
-    public final Property<String>  logFilePath;
+/**
+ * Extension to configure sourceRoot, outputFile and provide a StrategyRegistry.
+ */
+public abstract class BtmGenExtension {
+
+    private StrategyRegistry registry = StrategyRegistries.defaultRegistry();
+    private final Property<@NotNull File> sourceRoot;
+    private final Property<@NotNull File> outputFile;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
-        this.srcDirs = objects.listProperty(String.class);
-        this.outputDir = objects.directoryProperty();
-        this.includeJava = objects.property(Boolean.class).convention(true);
-        this.useAstScanner = objects.property(Boolean.class).convention(true);
-        this.helperFqn = objects.property(String.class).convention("de.burger.forensics.ForensicsHelper");
-        this.entryExit = objects.property(Boolean.class).convention(true);
-        this.minBranchesPerMethod = objects.property(Integer.class).convention(0);
-        this.logToFile = objects.property(Boolean.class).convention(true);
-        this.logFilePath = objects.property(String.class).convention("logs/forensics-btmgen.log");
-        this.srcDirs.convention(List.of("src/main/java"));
+        this.sourceRoot = objects.property(File.class);
+        this.outputFile = objects.property(File.class);
     }
+
+    /** Strategy registry used by tasks to render rules. */
+    public StrategyRegistry getRegistry() { return registry; }
+    public void setRegistry(StrategyRegistry registry) { this.registry = registry; }
+
+    /** Where to scan sources (root folder). */
+    public Property<@NotNull File> getSourceRoot() { return sourceRoot; }
+
+    /** Output .btm file location. */
+    public Property<@NotNull File> getOutputFile() { return outputFile; }
 }

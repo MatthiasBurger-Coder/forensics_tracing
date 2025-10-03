@@ -2,35 +2,51 @@ package de.burger.forensics.plugin.btmgen.gradle;
 
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.tasks.TaskProvider;
+import org.jetbrains.annotations.NotNull;
 
-public class BtmGenPlugin implements Plugin<Project> {
+/**
+ * Registers the extension and the generateBtmRules task.
+ * Defaults are applied safely during task registration (no Provider lambdas).
+ */
+public class BtmGenPlugin implements Plugin<@NotNull Project> {
     @Override
     public void apply(Project project) {
         // Create extension
-        BtmGenExtension ext = project.getExtensions()
-                .create("forensicsBtmGen", BtmGenExtension.class);
+        BtmGenExtension ext = project.getExtensions().create("btmGen", BtmGenExtension.class);
 
-        // Register a task with a STABILER NAME:
-        project.getTasks().register("generateBtmRules", GenerateBtmTask.class, t -> {
-            t.setGroup("forensics");
-            t.setDescription("Generate Byteman rules into build/forensics");
+        // Register task
+        TaskProvider<@NotNull GenerateBtmTask> task = project.getTasks().register(
+                "generateBtmRules",
+                GenerateBtmTask.class,
+                t -> {
+                    t.setGroup("forensics");
+                    t.setDescription("Generates Byteman (.btm) rules by scanning Java sources.");
+                    t.setExtension(ext);
 
-            // Wire task inputs from extension
-            t.getIncludeJava().convention(ext.includeJava);
-            t.getUseAstScanner().convention(ext.useAstScanner);
-            t.getHelperFqn().convention(ext.helperFqn);
-            t.getEntryExit().convention(ext.entryExit);
-            t.getMinBranchesPerMethod().convention(ext.minBranchesPerMethod);
-            t.getLogToFile().convention(ext.logToFile);
-            t.getLogFilePath().convention(ext.logFilePath);
-            t.getOutputDir().convention(ext.outputDir);
+                    // --- Conventions/Defaults ---
+                    // If extension provides explicit values -> set them directly (no providers)
+                    if (ext.getSourceRoot().isPresent()) {
+                        t.getSourceRoot().set(ext.getSourceRoot().get());
+                    } else {
+                        // Otherwise use a safe default provider from the layout
+                        t.getSourceRoot().convention(
+                                project.getLayout().getProjectDirectory().dir("src/main/java")
+                        );
+                    }
 
-            // Collect sources from srcDirs
-            t.getSourceFiles().from(
-                    ext.srcDirs.map(list -> list.stream().map(p ->
-                            project.fileTree(p, cfg -> cfg.include("**/*.java","**/*.kt"))
-                    ).toList())
-            );
-        });
+                    if (ext.getOutputFile().isPresent()) {
+                        t.getOutputFile().fileValue(ext.getOutputFile().get());
+                    } else {
+                        t.getOutputFile().convention(
+                                project.getLayout().getBuildDirectory().file("forensics/forensics.btm")
+                        );
+                    }
+                }
+        );
+
+        // Optional: hook into build lifecycle
+        project.getTasks().matching(it -> it.getName().equals("build"))
+                .configureEach(it -> it.dependsOn(task));
     }
 }
