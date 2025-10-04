@@ -12,17 +12,19 @@ public final class MethodEnterRuleStrategy extends AbstractBytemanStrategy imple
             RULE %s : enter %s#%s
             CLASS %s
             METHOD %s
+            HELPER %s
             AT ENTRY
             %s
             DO
-                %s.onEnter(%s.class, "%s", $* );
+                helper().onEnter(%s.class, "%s", $* );
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
+                p.helperFqn(),
                 ifClause(p.condition()),
-                p.helperFqn(), p.className(), p.methodName()
+                p.className(), p.methodName()
         );
     }
 }

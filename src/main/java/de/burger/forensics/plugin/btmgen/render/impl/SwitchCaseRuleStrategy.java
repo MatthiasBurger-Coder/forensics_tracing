@@ -14,16 +14,18 @@ public final class SwitchCaseRuleStrategy extends AbstractBytemanStrategy implem
             RULE %s : switch-case %s#%s
             CLASS %s
             METHOD %s
+            HELPER %s
             AT ENTRY
             IF true
             DO
-                %s.onCase(%s.class, "%s", "%s");
+                helper().onCase(%s.class, "%s", "%s");
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
-                p.helperFqn(), p.className(), p.methodName(), label
+                p.helperFqn(),
+                p.className(), p.methodName(), label
         );
     }
 }

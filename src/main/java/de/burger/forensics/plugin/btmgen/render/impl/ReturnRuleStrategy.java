@@ -12,17 +12,19 @@ public final class ReturnRuleStrategy extends AbstractBytemanStrategy implements
             RULE %s : return %s#%s
             CLASS %s
             METHOD %s
+            HELPER %s
             AT EXIT
             %s
             DO
-                %s.onExit(%s.class, "%s", $! );
+                helper().onExit(%s.class, "%s", $! );
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
+                p.helperFqn(),
                 ifClause(p.condition()),
-                p.helperFqn(), p.className(), p.methodName()
+                p.className(), p.methodName()
         );
     }
 }

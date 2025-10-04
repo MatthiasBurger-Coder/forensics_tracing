@@ -13,19 +13,21 @@ public final class ThreadLifecycleRuleStrategy extends AbstractBytemanStrategy i
             RULE %s-start : thread start
             CLASS java.lang.Thread
             METHOD start()
+            HELPER %s
             AT ENTRY
             IF true
             DO
-                %s.threadFork($0.getName());
+                helper().threadFork($0.getName());
             ENDRULE
 
             RULE %s-join : thread join
             CLASS java.lang.Thread
             METHOD join(..)
+            HELPER %s
             AT ENTRY
             IF true
             DO
-                %s.threadJoin($0.getName());
+                helper().threadJoin($0.getName());
             ENDRULE
             """.formatted(id, p.helperFqn(), id, p.helperFqn());
     }

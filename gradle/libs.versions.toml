@@ -9,6 +9,7 @@ bytebuddy = "1.14.12"
 slf4j    = "2.0.17"
 logback  = "1.5.18"
 mockito = "5.13.0"
+byteman = "4.0.23"
 
 # Gradle plugins
 #gradle-plugin-publish = "2.0.0"
@@ -53,3 +54,4 @@ byte-buddy-agent = { module = "net.bytebuddy:byte-buddy-agent", version.ref = "b
 
 # Assertions
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+byteman = { module = "org.jboss.byteman:byteman", version.ref = "byteman" }

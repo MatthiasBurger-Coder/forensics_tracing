@@ -14,17 +14,19 @@ public final class IfTrueRuleStrategy extends AbstractBytemanStrategy implements
             RULE %s : if-true %s#%s
             CLASS %s
             METHOD %s
+            HELPER %s
             AT ENTRY
             IF %s
             DO
-                %s.onBranch(%s.class, "%s", "IF_TRUE");
+                helper().onBranch(%s.class, "%s", "IF_TRUE");
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
+                p.helperFqn(),
                 cond,
-                p.helperFqn(), p.className(), p.methodName()
+                p.className(), p.methodName()
         );
     }
 }

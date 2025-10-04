@@ -11,7 +11,7 @@ public record RuleParams(
         String sqlHint,      // optional SQL preview for JDBC template
         String helperFqn     // helper implementation invoked from the rule
 ) {
-    public static final String DEFAULT_HELPER_FQN = "de.burger.forensics.infrastructure.rt.RtTrace";
+    public static final String DEFAULT_HELPER_FQN = "de.burger.forensics.infrastructure.rt.RtTraceHelper";
 
     public RuleParams {
         if (helperFqn == null || helperFqn.isBlank()) {

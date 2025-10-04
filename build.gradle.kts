@@ -10,6 +10,7 @@ dependencies {
 
     // Runtime
     compileOnly(libs.slf4j.api)
+    compileOnly(libs.byteman)
 
     aspectjAgent(libs.aspectj.weaver)
     implementation(libs.aspectj.rt)
