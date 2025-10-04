@@ -1,9 +1,15 @@
 package de.burger.forensics.plugin.btmgen.gradle;
 
+import de.burger.forensics.plugin.btmgen.gradle.internal.PluginRuntimeLocator;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
+import org.gradle.api.file.FileCollection;
+import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.tasks.TaskProvider;
 import org.jetbrains.annotations.NotNull;
+
+import java.io.File;
+import java.util.Optional;
 
 /**
  * Compatible wiring when the extension exposes Property<File> rather than DirectoryProperty/RegularFileProperty.
@@ -60,7 +66,27 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
             task.getOutputFile().finalizeValueOnRead();
         });
 
+        project.getPlugins().withType(JavaPlugin.class, ignored -> attachRuntimeHelper(project));
+
         project.getTasks().matching(t -> t.getName().equals("build"))
                 .configureEach(t -> t.dependsOn(taskProvider));
+    }
+
+    private void attachRuntimeHelper(Project project) {
+        Optional<File> runtimeArtifact = PluginRuntimeLocator.locateFor(BtmGenPlugin.class);
+        if (runtimeArtifact.isEmpty()) {
+            project.getLogger().warn("forensics-btmgen: Unable to locate runtime helper artifact; helper will not be added to classpath.");
+            return;
+        }
+
+        FileCollection helperFiles = project.files(runtimeArtifact.get());
+        addDependencyIfPresent(project, "runtimeOnly", helperFiles);
+        addDependencyIfPresent(project, "testRuntimeOnly", helperFiles);
+    }
+
+    private void addDependencyIfPresent(Project project, String configurationName, FileCollection files) {
+        if (project.getConfigurations().findByName(configurationName) != null) {
+            project.getDependencies().add(configurationName, files);
+        }
     }
 }
