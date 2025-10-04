@@ -1,13 +1,15 @@
 # Forensics Tracing Toolkit
 
-This project provides everything needed to generate and consume Byteman rules for low-overhead forensic tracing:
+**Forensics Tracing Toolkit** is a developer-friendly instrumentation stack that turns existing Java services into fully observable systems without invasive code changes. It scans your source code, generates Byteman rules on the fly, and streams structured runtime events so you can investigate production incidents, validate new rollouts, or collect audit trails with minimal overhead.
 
-* **Gradle plugin (`de.burger.forensics.btmgen`)** – scans Java sources and renders Byteman rules for method entry/exit, branch decisions, returns, throws, thread lifecycle events, and JDBC calls. The plugin ships with a lightweight parser, file writer, and rendering strategies so you can stay inside Gradle without additional tooling. 【F:src/main/java/de/burger/forensics/plugin/btmgen/gradle/GenerateBtmTask.java†L1-L136】【F:src/main/java/de/burger/forensics/domain/model/RuleTemplate.java†L1-L15】
-* **Application service (`GenerateRulesUseCase`)** – orchestrates port adapters to collect scan events, derive rules, deduplicate them, and hand the rendered script back to callers. Use this directly if you want to integrate with a custom build system. 【F:src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java†L23-L159】
-* **Runtime helper (`RtTrace` / `RtTraceHelper`)** – emits single-line JSON trace events with correlation IDs and spans when rules are triggered. A dedicated helper bridges Byteman rules to the runtime API. 【F:src/main/java/de/burger/forensics/infrastructure/rt/RtTrace.java†L1-L205】【F:src/main/java/de/burger/forensics/infrastructure/rt/RtTraceHelper.java†L1-L38】
-* **Optional logging aspect (`MethodLoggingAspect`)** – records method entry/exit timings and failures directly through SLF4J, and can mirror the output into a file for later analysis. 【F:src/main/java/de/burger/forensics/infrastructure/logging/MethodLoggingAspect.java†L1-L120】
+Whether you are debugging a stubborn race condition or capturing business KPIs for compliance, the toolkit gives you an end-to-end pipeline:
 
-The toolkit keeps the domain model independent from concrete infrastructure: scanners, renderers, clocks, and loggers are expressed as ports so you can wire your own adapters or swap implementations during tests. 【F:src/main/java/de/burger/forensics/domain/port/out/CodeScanPort.java†L1-L16】【F:src/main/java/de/burger/forensics/domain/port/out/RuleRenderPort.java†L1-L11】【F:src/main/java/de/burger/forensics/domain/port/out/ClockPort.java†L1-L11】【F:src/main/java/de/burger/forensics/domain/port/out/LogPort.java†L1-L12】
+* **Generate** – A Gradle plugin (`de.burger.forensics.btmgen`) walks your sources and renders Byteman rules for method entry/exit, branches, returns, exceptions, thread lifecycle events, JDBC calls, and more. The bundled parser, registry, and file writer keep everything inside your build.
+* **Orchestrate** – The application service (`GenerateRulesUseCase`) coordinates scanners, renderers, and deduplication so alternative build systems or custom pipelines can reuse the rule generation logic without Gradle.
+* **Trace** – The runtime helper (`RtTrace` with `RtTraceHelper`) emits compact JSON lines enriched with correlation IDs and spans whenever a rule fires, giving you ready-to-ingest telemetry for SIEMs or observability platforms.
+* **Audit** – An optional logging aspect (`MethodLoggingAspect`) mirrors method entry/exit details through SLF4J and into a dedicated log file, providing a lightweight forensic trail even when the runtime tracer is disabled.
+
+All components share a clean, hexagonal architecture: scanners, renderers, clocks, and loggers are defined as ports so you can drop in your own adapters, swap implementations during tests, or extend the toolkit with domain-specific instrumentation strategies.
 
 ## Gradle plugin quick start
 
