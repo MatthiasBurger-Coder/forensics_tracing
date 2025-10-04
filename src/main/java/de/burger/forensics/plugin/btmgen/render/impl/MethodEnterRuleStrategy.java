@@ -16,7 +16,7 @@ public final class MethodEnterRuleStrategy extends AbstractBytemanStrategy imple
             AT ENTRY
             %s
             DO
-                helper().onEnter(%s.class, "%s", $* );
+                onEnter(%s.class, "%s", $* );
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),

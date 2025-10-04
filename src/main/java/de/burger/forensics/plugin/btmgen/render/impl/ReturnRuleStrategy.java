@@ -16,7 +16,7 @@ public final class ReturnRuleStrategy extends AbstractBytemanStrategy implements
             AT EXIT
             %s
             DO
-                helper().onExit(%s.class, "%s", $! );
+                onExit(%s.class, "%s", $! );
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),

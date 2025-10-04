@@ -16,7 +16,7 @@ public final class ThrowRuleStrategy extends AbstractBytemanStrategy implements 
             AT THROW
             %s
             DO
-                helper().onException($^);
+                onException($^);
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),

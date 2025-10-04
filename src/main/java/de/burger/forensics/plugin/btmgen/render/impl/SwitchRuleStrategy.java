@@ -17,7 +17,7 @@ public final class SwitchRuleStrategy extends AbstractBytemanStrategy implements
             AT ENTRY
             IF true
             DO
-                helper().onSwitch(%s.class, "%s", %s );
+                onSwitch(%s.class, "%s", %s );
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),

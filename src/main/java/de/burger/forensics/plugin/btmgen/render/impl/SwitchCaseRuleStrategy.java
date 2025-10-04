@@ -18,7 +18,7 @@ public final class SwitchCaseRuleStrategy extends AbstractBytemanStrategy implem
             AT ENTRY
             IF true
             DO
-                helper().onCase(%s.class, "%s", "%s");
+                onCase(%s.class, "%s", "%s");
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),

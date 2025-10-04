@@ -18,7 +18,7 @@ public final class IfTrueRuleStrategy extends AbstractBytemanStrategy implements
             AT ENTRY
             IF %s
             DO
-                helper().onBranch(%s.class, "%s", "IF_TRUE");
+                onBranch(%s.class, "%s", "IF_TRUE");
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),

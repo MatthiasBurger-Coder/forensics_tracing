@@ -20,7 +20,7 @@ public final class JdbcExecuteRuleStrategy extends AbstractBytemanStrategy imple
             AT ENTRY
             IF true
             DO
-                helper().ioBegin("JDBC", "%s#%s%s");
+                ioBegin("JDBC", "%s#%s%s");
             ENDRULE
 
             RULE %s-end : jdbc io end
@@ -30,7 +30,7 @@ public final class JdbcExecuteRuleStrategy extends AbstractBytemanStrategy imple
             AT EXIT
             IF true
             DO
-                helper().ioEnd("JDBC", "%s#%s%s");
+                ioEnd("JDBC", "%s#%s%s");
             ENDRULE
             """.formatted(
                 id, target, methods, p.helperFqn(), target, methods, hint,
