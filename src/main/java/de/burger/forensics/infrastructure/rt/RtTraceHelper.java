@@ -6,7 +6,7 @@ import org.jboss.byteman.rule.helper.Helper;
 /**
  * Lightweight Byteman helper delegating to {@link RtTrace}.
  */
-public final class RtTraceHelper extends Helper {
+public class RtTraceHelper extends Helper {
 
     public RtTraceHelper(Rule rule) {
         super(rule);
