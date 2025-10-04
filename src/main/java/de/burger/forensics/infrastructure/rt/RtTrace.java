@@ -108,6 +108,39 @@ public final class RtTrace {
         ), null);
     }
 
+    /** Convenience: record an if/else branch hit. */
+    public static void onBranch(Class<?> clazz, String method, String branch) {
+        if (!ENABLED) return;
+        emit(RtEvent.BRANCH_TAKEN, Map.of(
+                "class", safeClass(clazz),
+                "method", method,
+                "kind", "if",
+                "branch", branch
+        ), null);
+    }
+
+    /** Convenience: record entering a switch statement. */
+    public static void onSwitch(Class<?> clazz, String method, String displayName) {
+        if (!ENABLED) return;
+        emit(RtEvent.BRANCH_TAKEN, Map.of(
+                "class", safeClass(clazz),
+                "method", method,
+                "kind", "switch",
+                "label", Objects.toString(displayName, "")
+        ), null);
+    }
+
+    /** Convenience: record which switch case matched. */
+    public static void onCase(Class<?> clazz, String method, String label) {
+        if (!ENABLED) return;
+        emit(RtEvent.BRANCH_TAKEN, Map.of(
+                "class", safeClass(clazz),
+                "method", method,
+                "kind", "case",
+                "label", Objects.toString(label, "")
+        ), null);
+    }
+
     /** Convenience: variable set. */
     public static void varSet(String name, Object value) {
         if (!ENABLED) return;

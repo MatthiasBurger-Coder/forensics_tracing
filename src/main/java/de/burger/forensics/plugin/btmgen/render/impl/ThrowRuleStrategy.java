@@ -12,17 +12,18 @@ public final class ThrowRuleStrategy extends AbstractBytemanStrategy implements 
             RULE %s : throw %s#%s
             CLASS %s
             METHOD %s
+            HELPER %s
             AT THROW
             %s
             DO
-                %s.onException($^);
+                helper().onException($^);
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
-                ifClause(p.condition()),
-                p.helperFqn()
+                p.helperFqn(),
+                ifClause(p.condition())
         );
     }
 }

@@ -13,17 +13,19 @@ public final class IfFalseRuleStrategy extends AbstractBytemanStrategy implement
             RULE %s : if-false %s#%s
             CLASS %s
             METHOD %s
+            HELPER %s
             AT ENTRY
             IF %s
             DO
-                %s.onBranch(%s.class, "%s", "IF_FALSE");
+                helper().onBranch(%s.class, "%s", "IF_FALSE");
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
+                p.helperFqn(),
                 cond,
-                p.helperFqn(), p.className(), p.methodName()
+                p.className(), p.methodName()
         );
     }
 }

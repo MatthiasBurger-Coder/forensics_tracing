@@ -16,19 +16,21 @@ public final class JdbcExecuteRuleStrategy extends AbstractBytemanStrategy imple
             RULE %s-begin : jdbc io begin
             CLASS %s
             METHOD %s(..)
+            HELPER %s
             AT ENTRY
             IF true
             DO
-                %s.ioBegin("JDBC", "%s#%s%s");
+                helper().ioBegin("JDBC", "%s#%s%s");
             ENDRULE
 
             RULE %s-end : jdbc io end
             CLASS %s
             METHOD %s(..)
+            HELPER %s
             AT EXIT
             IF true
             DO
-                %s.ioEnd("JDBC", "%s#%s%s");
+                helper().ioEnd("JDBC", "%s#%s%s");
             ENDRULE
             """.formatted(
                 id, target, methods, p.helperFqn(), target, methods, hint,

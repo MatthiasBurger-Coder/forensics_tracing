@@ -23,7 +23,8 @@ class MethodExitRuleStrategyTest {
         String rule = new MethodExitRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("de.burger.forensics.infrastructure.rt.RtTrace.onExit(com.example.Foo.class, \"doWork\", null);")
+                .contains("HELPER de.burger.forensics.infrastructure.rt.RtTraceHelper")
+                .contains("helper().onExit(com.example.Foo.class, \"doWork\", null);")
                 .doesNotContain("onExitVoid");
     }
 
@@ -43,6 +44,7 @@ class MethodExitRuleStrategyTest {
         String rule = new MethodExitRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("com.example.Helper.onExit(com.example.Foo.class, \"doWork\", null);");
+                .contains("HELPER com.example.Helper")
+                .contains("helper().onExit(com.example.Foo.class, \"doWork\", null);");
     }
 }
