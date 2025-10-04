@@ -129,6 +129,84 @@ class GenerateBtmTaskTest {
     }
 
     @Test
+    void generatedRulesInvokeHelpersDirectly(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Path javaFile = srcDir.resolve("Sample.java");
+        Files.writeString(javaFile, """
+                package com.example;
+                public class Sample {
+                  public int alpha() {
+                    if (true) { }
+                    switch (1) { case 1 -> {} }
+                    return 1;
+                  }
+                  public void beta() {
+                    if (false) { }
+                    switch (2) { case 2 -> {} }
+                    throw new IllegalStateException();
+                  }
+                }
+                """);
+
+        Path scanOutput = tempDir.resolve("build/forensics/helpers-scan.btm");
+        var scanTask = project.getTasks().register("generateBtmHelpersScan", GenerateBtmTask.class).get();
+        var scanExtension = project.getObjects().newInstance(BtmGenExtension.class);
+        scanExtension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        scanExtension.getOutputFile().set(scanOutput.toFile());
+        scanTask.setExtension(scanExtension);
+
+        scanTask.generate();
+
+        assertTrue(Files.exists(scanOutput));
+        String scanContent = Files.readString(scanOutput);
+        assertFalse(scanContent.contains("helper()."));
+        assertTrue(scanContent.contains("onEnter("));
+        assertTrue(scanContent.contains("onExit("));
+        assertTrue(scanContent.contains("onBranch("));
+        assertTrue(scanContent.contains("onSwitch("));
+        assertTrue(scanContent.contains("onCase("));
+        assertTrue(scanContent.contains("onException("));
+
+        Path jdbcOutput = tempDir.resolve("build/forensics/helpers-jdbc.btm");
+        var jdbcTask = project.getTasks().register("generateBtmHelpersJdbc", GenerateBtmTask.class).get();
+        var jdbcExtension = project.getObjects().newInstance(BtmGenExtension.class);
+        jdbcExtension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        jdbcExtension.getOutputFile().set(jdbcOutput.toFile());
+        jdbcTask.setExtension(jdbcExtension);
+        jdbcTask.getTemplateId().set("JDBC_EXECUTE");
+        jdbcTask.getClassName().set("java.sql.Statement");
+        jdbcTask.getMethodName().set("execute");
+
+        jdbcTask.generate();
+
+        assertTrue(Files.exists(jdbcOutput));
+        String jdbcContent = Files.readString(jdbcOutput);
+        assertFalse(jdbcContent.contains("helper()."));
+        assertTrue(jdbcContent.contains("ioBegin("));
+        assertTrue(jdbcContent.contains("ioEnd("));
+
+        Path threadOutput = tempDir.resolve("build/forensics/helpers-thread.btm");
+        var threadTask = project.getTasks().register("generateBtmHelpersThread", GenerateBtmTask.class).get();
+        var threadExtension = project.getObjects().newInstance(BtmGenExtension.class);
+        threadExtension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        threadExtension.getOutputFile().set(threadOutput.toFile());
+        threadTask.setExtension(threadExtension);
+        threadTask.getTemplateId().set("THREAD_LIFECYCLE");
+        threadTask.getClassName().set("java.lang.Thread");
+        threadTask.getMethodName().set("start");
+
+        threadTask.generate();
+
+        assertTrue(Files.exists(threadOutput));
+        String threadContent = Files.readString(threadOutput);
+        assertFalse(threadContent.contains("helper()."));
+        assertTrue(threadContent.contains("threadFork("));
+        assertTrue(threadContent.contains("threadJoin("));
+    }
+
+    @Test
     void generateRespectsCustomHelperFqn(@TempDir Path tempDir) throws IOException {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
         Files.createDirectories(tempDir.resolve("src/main/java"));

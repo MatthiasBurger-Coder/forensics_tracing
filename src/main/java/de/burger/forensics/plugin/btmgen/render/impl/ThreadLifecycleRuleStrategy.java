@@ -17,7 +17,7 @@ public final class ThreadLifecycleRuleStrategy extends AbstractBytemanStrategy i
             AT ENTRY
             IF true
             DO
-                helper().threadFork($0.getName());
+                threadFork($0.getName());
             ENDRULE
 
             RULE %s-join : thread join
@@ -27,7 +27,7 @@ public final class ThreadLifecycleRuleStrategy extends AbstractBytemanStrategy i
             AT ENTRY
             IF true
             DO
-                helper().threadJoin($0.getName());
+                threadJoin($0.getName());
             ENDRULE
             """.formatted(id, p.helperFqn(), id, p.helperFqn());
     }

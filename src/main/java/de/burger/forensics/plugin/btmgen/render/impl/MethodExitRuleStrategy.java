@@ -16,7 +16,7 @@ public final class MethodExitRuleStrategy extends AbstractBytemanStrategy implem
             AT EXIT
             %s
             DO
-                helper().onExit(%s.class, "%s", null);
+                onExit(%s.class, "%s", null);
             ENDRULE
             """.formatted(
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),

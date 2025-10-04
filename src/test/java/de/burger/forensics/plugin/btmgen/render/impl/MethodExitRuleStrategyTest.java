@@ -24,7 +24,8 @@ class MethodExitRuleStrategyTest {
 
         assertThat(rule)
                 .contains("HELPER de.burger.forensics.infrastructure.rt.RtTraceHelper")
-                .contains("helper().onExit(com.example.Foo.class, \"doWork\", null);")
+                .contains("onExit(com.example.Foo.class, \"doWork\", null);")
+                .doesNotContain("helper().")
                 .doesNotContain("onExitVoid");
     }
 
@@ -45,6 +46,7 @@ class MethodExitRuleStrategyTest {
 
         assertThat(rule)
                 .contains("HELPER com.example.Helper")
-                .contains("helper().onExit(com.example.Foo.class, \"doWork\", null);");
+                .contains("onExit(com.example.Foo.class, \"doWork\", null);")
+                .doesNotContain("helper().");
     }
 }
