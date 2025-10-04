@@ -43,6 +43,21 @@ class GenerationRequestTest {
     }
 
     @Test
+    void replacesBlankHelperWithDefault() {
+        GenerationRequest request = new GenerationRequest(
+            Path.of("src"),
+            "  ",
+            true,
+            true,
+            List.of(),
+            0,
+            List.of()
+        );
+
+        assertThat(request.helperFqcn()).isEqualTo(GenerationRequest.DEFAULT_HELPER_FQCN);
+    }
+
+    @Test
     void requiresMandatoryFields() {
         assertThatThrownBy(() -> new GenerationRequest(
             null,

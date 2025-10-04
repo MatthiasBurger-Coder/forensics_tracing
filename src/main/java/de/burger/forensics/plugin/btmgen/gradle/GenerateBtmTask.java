@@ -233,7 +233,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
     }
 
     private String resolveHelperFqn() {
-        return getHelperFqn().getOrElse(RuleParams.DEFAULT_HELPER_FQN);
+        String helper = getHelperFqn().getOrElse(RuleParams.DEFAULT_HELPER_FQN);
+        return (helper == null || helper.isBlank()) ? RuleParams.DEFAULT_HELPER_FQN : helper;
     }
 
     private String findPackage(String code) {

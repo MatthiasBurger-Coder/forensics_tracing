@@ -153,6 +153,31 @@ class GenerateBtmTaskTest {
         assertEquals("com.example.Helper", strategy.calls.getFirst().helperFqn());
     }
 
+    @Test
+    void generateNormalizesBlankHelperFqn(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Files.createDirectories(tempDir.resolve("src/main/java"));
+
+        var task = project.getTasks().register("generateBtmBlankHelper", GenerateBtmTask.class).get();
+
+        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        var strategy = new RecordingStrategy("CUSTOM");
+        extension.setRegistry(StrategyRegistry.builder().register(strategy).build());
+        extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        Path outputFile = tempDir.resolve("build/forensics/blank-helper.btm");
+        extension.getOutputFile().set(outputFile.toFile());
+        extension.getHelperFqn().set("   ");
+
+        task.setExtension(extension);
+        task.getTemplateId().set("CUSTOM");
+        task.getClassName().set("com.example.Foo");
+        task.getMethodName().set("bar");
+
+        task.generate();
+
+        assertEquals(RuleParams.DEFAULT_HELPER_FQN, strategy.calls.getFirst().helperFqn());
+    }
+
     private static Map<String, RecordingStrategy> registerDefaultStrategies(BtmGenExtension extension) {
         Map<String, RecordingStrategy> strategies = new HashMap<>();
         var builder = StrategyRegistry.builder();
