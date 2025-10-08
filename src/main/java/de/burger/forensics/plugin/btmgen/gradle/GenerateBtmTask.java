@@ -1,5 +1,13 @@
 package de.burger.forensics.plugin.btmgen.gradle;
 
+import de.burger.forensics.adapters.javaparser.JavaParserScanner;
+import de.burger.forensics.application.service.GenerateRulesUseCase;
+import de.burger.forensics.application.service.GenerationRequest;
+import de.burger.forensics.application.service.RuleGenerationResult;
+import de.burger.forensics.domain.strategy.DefaultStrategyFactory;
+import de.burger.forensics.plugin.adapters.GradleLogAdapter;
+import de.burger.forensics.plugin.adapters.SystemClockAdapter;
+import de.burger.forensics.plugin.btmgen.internal.BytemanRuleRenderAdapter;
 import de.burger.forensics.plugin.btmgen.render.BytemanRuleRenderer;
 import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
@@ -15,15 +23,17 @@ import org.gradle.api.tasks.Optional;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
 
 /**
- * Scans Java sources and renders Byteman rules using StrategyRegistry.
- * This task uses a lightweight heuristic parser (no external AST deps).
+ * Scans Java sources and renders Byteman rules using {@link GenerateRulesUseCase}.
  */
 public abstract class GenerateBtmTask extends DefaultTask {
 
@@ -107,21 +117,27 @@ public abstract class GenerateBtmTask extends DefaultTask {
             );
             allRules.add(renderer.render(templateIdOrDefault(), params));
         } else {
-            // Scan all .java files and derive rules via simple heuristics
             getLogger().lifecycle("Scanning sources in {}", srcRoot.toAbsolutePath());
-            try (var stream = Files.walk(srcRoot)) {
-                stream.filter(p -> Files.isRegularFile(p) && p.toString().endsWith(".java"))
-                        .forEach(javaFile -> {
-                            try {
-                                var fileRules = analyzeFileAndRender(javaFile, renderer);
-                                allRules.addAll(fileRules);
-                            } catch (Exception ex) {
-                                throw new RuntimeException("Failed analyzing " + javaFile, ex);
-                            }
-                        });
-            } catch (IOException e) {
-                throw new RuntimeException("Walking sourceRoot failed: " + srcRoot, e);
-            }
+            GenerateRulesUseCase useCase = new GenerateRulesUseCase(
+                    new JavaParserScanner(),
+                    new BytemanRuleRenderAdapter(renderer),
+                    new SystemClockAdapter(),
+                    new GradleLogAdapter(getLogger()),
+                    new DefaultStrategyFactory()
+            );
+
+            GenerationRequest request = new GenerationRequest(
+                    srcRoot,
+                    resolveHelperFqn(),
+                    false,
+                    includeEntryExit(),
+                    packagePrefixes(),
+                    minBranches(),
+                    Collections.emptyList()
+            );
+
+            RuleGenerationResult result = useCase.generate(request);
+            allRules.addAll(result.renderedRules());
         }
 
         // Write output once
@@ -166,6 +182,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
                     layout.getBuildDirectory().dir("forensics")
             );
         }
+        if (!getIncludeEntryExit().isPresent()) {
+            getIncludeEntryExit().convention(true);
+        }
     }
 
     private boolean hasMinimalInputs() {
@@ -177,129 +196,30 @@ public abstract class GenerateBtmTask extends DefaultTask {
         return (id == null || id.isBlank()) ? "METHOD_ENTER" : id;
     }
 
-    // ---- Heuristic parsing & rendering ----
-
-    private List<String> analyzeFileAndRender(Path javaFile, BytemanRuleRenderer renderer) throws IOException {
-        String code = Files.readString(javaFile);
-
-        String pkg = findPackage(code);
-        List<MethodSig> methods = findMethods(code, pkg);
-
-        List<String> rules = new ArrayList<>();
-        boolean hasSwitch = code.contains("switch");
-        boolean hasIf = code.contains("if");
-
-        for (MethodSig m : methods) {
-            // Always add method enter/exit
-            rules.add(renderer.render("METHOD_ENTER", new RuleParams(
-                    "METHOD_ENTER", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
-            )));
-            rules.add(renderer.render("METHOD_EXIT", new RuleParams(
-                    "METHOD_EXIT", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
-            )));
-
-            // Return / Throw
-            if (m.hasReturn) {
-                rules.add(renderer.render("RETURN", new RuleParams(
-                        "RETURN", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
-                )));
-            }
-            if (m.hasThrow) {
-                rules.add(renderer.render("THROW", new RuleParams(
-                        "THROW", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
-                )));
-            }
-
-            // If / Switch – map both branches & switch markers (coarse grained)
-            if (hasIf) {
-                rules.add(renderer.render("IF_TRUE", new RuleParams(
-                        "IF_TRUE", m.className, m.methodName, m.methodDesc, m.displayName(), "true", null, resolveHelperFqn()
-                )));
-                rules.add(renderer.render("IF_FALSE", new RuleParams(
-                        "IF_FALSE", m.className, m.methodName, m.methodDesc, m.displayName(), "false", null, resolveHelperFqn()
-                )));
-            }
-            if (hasSwitch) {
-                rules.add(renderer.render("SWITCH", new RuleParams(
-                        "SWITCH", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
-                )));
-                rules.add(renderer.render("SWITCH_CASE", new RuleParams(
-                        "SWITCH_CASE", m.className, m.methodName, m.methodDesc, m.displayName(), null, null, resolveHelperFqn()
-                )));
-            }
-        }
-
-        return rules;
-    }
-
     private String resolveHelperFqn() {
         String helper = getHelperFqn().getOrElse(RuleParams.DEFAULT_HELPER_FQN);
         return (helper == null || helper.isBlank()) ? RuleParams.DEFAULT_HELPER_FQN : helper;
     }
 
-    private String findPackage(String code) {
-        Matcher m = Pattern.compile("\\bpackage\\s+([a-zA-Z0-9_.]+)\\s*;").matcher(code);
-        if (m.find()) return m.group(1);
-        return null;
+    private boolean includeEntryExit() {
+        return getIncludeEntryExit().getOrElse(true);
     }
 
-    /** Very small method signature finder (no full parser, but robust enough for typical code). */
-    private List<MethodSig> findMethods(String code, String pkg) {
-        String className = null;
-        Matcher cls = Pattern.compile("(?:public\\s+)?class\\s+([A-Za-z0-9_]+)").matcher(code);
-        if (cls.find()) className = cls.group(1);
-
-        Pattern meth = Pattern.compile(
-                "([\\w<>\\[\\]]+\\s+)*([A-Za-z_][A-Za-z0-9_<>\\[\\]]*)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(");
-        Matcher mm = meth.matcher(code);
-
-        List<MethodSig> out = new ArrayList<>();
-        while (mm.find()) {
-            String method = mm.group(3);
-            int start = code.indexOf('{', mm.end());
-            if (start < 0) continue;
-            int end = findMatchingBrace(code, start);
-            if (end < 0) end = Math.min(code.length(), start + 2000);
-
-            String body = code.substring(start, end);
-            boolean hasReturn = body.contains("return ");
-            boolean hasThrow = body.contains("throw ");
-
-            String fqcn = (pkg != null && className != null) ? (pkg + "." + className) : className;
-            out.add(new MethodSig(fqcn != null ? fqcn : "Unknown", method, null, hasReturn, hasThrow));
-        }
-        return out;
+    private int minBranches() {
+        return getMinBranchesPerMethod().getOrElse(0);
     }
 
-    private int findMatchingBrace(String code, int openPos) {
-        int depth = 0;
-        for (int i = openPos; i < code.length(); i++) {
-            char c = code.charAt(i);
-            if (c == '{') depth++;
-            else if (c == '}') {
-                depth--;
-                if (depth == 0) return i + 1;
-            }
+    private List<String> packagePrefixes() {
+        if (extension == null) {
+            return Collections.emptyList();
         }
-        return -1;
-    }
-
-    /** Minimal method model for heuristic scanning. */
-    private static final class MethodSig {
-        final String className;
-        final String methodName;
-        final String methodDesc; // left null (no asm desc here)
-        final boolean hasReturn;
-        final boolean hasThrow;
-
-        MethodSig(String className, String methodName, String methodDesc, boolean hasReturn, boolean hasThrow) {
-            this.className = className;
-            this.methodName = methodName;
-            this.methodDesc = methodDesc;
-            this.hasReturn = hasReturn;
-            this.hasThrow = hasThrow;
+        String includes = extension.getIncludes().getOrNull();
+        if (includes == null || includes.isBlank()) {
+            return Collections.emptyList();
         }
-
-        String displayName() { return className + "#" + methodName; }
+        return Arrays.stream(includes.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 }

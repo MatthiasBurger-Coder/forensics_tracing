@@ -32,12 +32,11 @@ class JavaParserScannerTest {
         );
 
         List<ScanEvent> events = scanner.scan(tempDir).toList();
-        assertThat(events)
-            .singleElement()
-            .satisfies(event -> {
-                assertThat(event.kind()).isEqualTo(RuleTemplate.IF_TRUE);
-                assertThat(event.location().fqcn()).isEqualTo("example.Sample");
-            });
+        assertThat(events).hasSize(2);
+        assertThat(events).extracting(ScanEvent::kind)
+                .containsExactlyInAnyOrder(RuleTemplate.IF_TRUE, RuleTemplate.IF_FALSE);
+        assertThat(events).allSatisfy(event ->
+                assertThat(event.location().fqcn()).isEqualTo("example.Sample"));
     }
 
     @Test
