@@ -119,6 +119,7 @@ public final class JavaParserScanner implements CodeScanPort {
         String returnType = declaration.getType().asString();
 
         Map<String, Integer> parameterIndexes = parameterIndexes(declaration);
+        Set<String> localVariables = localVariableNames(declaration);
 
         declaration.findAll(IfStmt.class).forEach(ifStmt -> {
             IfStmt current = ifStmt;
@@ -126,7 +127,7 @@ public final class JavaParserScanner implements CodeScanPort {
                 var condition = current.getCondition();
                 int line = condition.getBegin().map(p -> p.line).orElse(-1);
                 SourceLocation location = new SourceLocation(fqcn, methodName, line);
-                String renderedCondition = renderCondition(condition, parameterIndexes);
+                String renderedCondition = renderCondition(condition, parameterIndexes, localVariables);
                 events.add(new ScanEvent(location, signature, RuleTemplate.IF_TRUE, renderedCondition, "java", returnType));
                 events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, renderedCondition, "java", returnType));
                 var elseStmt = current.getElseStmt().orElse(null);
@@ -141,13 +142,13 @@ public final class JavaParserScanner implements CodeScanPort {
         declaration.findAll(SwitchStmt.class).forEach(sw -> {
             int line = sw.getSelector().getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            String selector = renderCondition(sw.getSelector(), parameterIndexes);
+            String selector = renderCondition(sw.getSelector(), parameterIndexes, localVariables);
             events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH, selector, "java", returnType));
         });
 
         declaration.findAll(SwitchEntry.class).forEach(entry -> {
             int line = entry.getBegin().map(p -> p.line).orElse(-1);
-            String label = renderSwitchLabel(entry, parameterIndexes);
+            String label = renderSwitchLabel(entry, parameterIndexes, localVariables);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
             events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH_CASE, label, "java", returnType));
         });
@@ -155,14 +156,14 @@ public final class JavaParserScanner implements CodeScanPort {
         declaration.findAll(ReturnStmt.class).forEach(ret -> {
             int line = ret.getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            String renderedReturn = renderReturn(ret, parameterIndexes);
+            String renderedReturn = renderReturn(ret, parameterIndexes, localVariables);
             events.add(new ScanEvent(location, signature, RuleTemplate.RETURN, renderedReturn, "java", returnType));
         });
 
         declaration.findAll(ThrowStmt.class).forEach(th -> {
             int line = th.getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            String renderedThrow = renderCondition(th.getExpression(), parameterIndexes);
+            String renderedThrow = renderCondition(th.getExpression(), parameterIndexes, localVariables);
             events.add(new ScanEvent(location, signature, RuleTemplate.THROW, renderedThrow, "java", returnType));
         });
     }
@@ -194,21 +195,27 @@ public final class JavaParserScanner implements CodeScanPort {
         return indexes;
     }
 
-    private String renderCondition(Expression expression, Map<String, Integer> parameterIndexes) {
-        return sanitizeExpression(expression, parameterIndexes).toString();
+    private String renderCondition(Expression expression,
+                                   Map<String, Integer> parameterIndexes,
+                                   Set<String> localVariables) {
+        return sanitizeExpression(expression, parameterIndexes, localVariables).toString();
     }
 
-    private String renderReturn(ReturnStmt stmt, Map<String, Integer> parameterIndexes) {
+    private String renderReturn(ReturnStmt stmt,
+                                Map<String, Integer> parameterIndexes,
+                                Set<String> localVariables) {
         ReturnStmt clone = stmt.clone();
-        clone.getExpression().ifPresent(expr -> clone.setExpression(sanitizeExpression(expr, parameterIndexes)));
+        clone.getExpression().ifPresent(expr -> clone.setExpression(sanitizeExpression(expr, parameterIndexes, localVariables)));
         return clone.toString();
     }
 
-    private String renderSwitchLabel(SwitchEntry entry, Map<String, Integer> parameterIndexes) {
+    private String renderSwitchLabel(SwitchEntry entry,
+                                     Map<String, Integer> parameterIndexes,
+                                     Set<String> localVariables) {
         SwitchEntry clone = entry.clone();
         for (int i = 0; i < clone.getLabels().size(); i++) {
             Expression label = clone.getLabels().get(i);
-            clone.getLabels().set(i, sanitizeExpression(label, parameterIndexes));
+            clone.getLabels().set(i, sanitizeExpression(label, parameterIndexes, localVariables));
         }
         if (clone.getLabels().isEmpty()) {
             return "default";
@@ -219,13 +226,19 @@ public final class JavaParserScanner implements CodeScanPort {
                 .collect(Collectors.joining(" | "));
     }
 
-    private Expression sanitizeExpression(Expression expression, Map<String, Integer> parameterIndexes) {
-        Set<Range> instanceFieldRanges = identifyInstanceFieldRanges(expression);
+    private Expression sanitizeExpression(Expression expression,
+                                          Map<String, Integer> parameterIndexes,
+                                          Set<String> localVariables) {
+        Set<Range> instanceFieldRanges = identifyInstanceFieldRanges(expression, localVariables);
         Expression clone = expression.clone();
         clone.walk(NameExpr.class, name -> {
             Integer index = parameterIndexes.get(name.getNameAsString());
             if (index != null) {
                 name.setName("$" + index);
+                return;
+            }
+            if (isLocalVariable(name, localVariables)) {
+                name.setName("$" + name.getNameAsString());
                 return;
             }
             promoteInstanceFieldAccess(name, instanceFieldRanges);
@@ -240,10 +253,10 @@ public final class JavaParserScanner implements CodeScanPort {
         }
     }
 
-    private Set<Range> identifyInstanceFieldRanges(Expression expression) {
+    private Set<Range> identifyInstanceFieldRanges(Expression expression, Set<String> localVariables) {
         Set<Range> ranges = new LinkedHashSet<>();
         expression.walk(NameExpr.class, name -> {
-            if (resolvesToInstanceField(name) || isLikelyInstanceField(name, name.getNameAsString())) {
+            if (resolvesToInstanceField(name) || isLikelyInstanceField(name, name.getNameAsString(), localVariables)) {
                 name.getRange().ifPresent(ranges::add);
             }
         });
@@ -259,7 +272,7 @@ public final class JavaParserScanner implements CodeScanPort {
         }
     }
 
-    private boolean isLikelyInstanceField(NameExpr name, String identifier) {
+    private boolean isLikelyInstanceField(NameExpr name, String identifier, Set<String> localVariables) {
         if (identifier.isEmpty()) {
             return false;
         }
@@ -275,7 +288,7 @@ public final class JavaParserScanner implements CodeScanPort {
         if (shadowsCatchParameter(name, identifier)) {
             return false;
         }
-        if (hasLocalVariable(name, identifier)) {
+        if (localVariables.contains(identifier)) {
             return false;
         }
         return declaresInstanceField(name, identifier);
@@ -302,13 +315,21 @@ public final class JavaParserScanner implements CodeScanPort {
             .orElse(false);
     }
 
-    private boolean hasLocalVariable(NameExpr name, String identifier) {
-        return findAncestor(name, MethodDeclaration.class)
-            .map(method -> method.findAll(VariableDeclarator.class, var ->
-                var.getNameAsString().equals(identifier)
-                    && var.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true)))
-            .map(list -> !list.isEmpty())
-            .orElse(false);
+    private boolean isLocalVariable(NameExpr name, Set<String> localVariables) {
+        String identifier = name.getNameAsString();
+        if (identifier.isEmpty()) {
+            return false;
+        }
+        return localVariables.contains(identifier);
+    }
+
+    private Set<String> localVariableNames(MethodDeclaration declaration) {
+        return declaration.findAll(VariableDeclarator.class, var ->
+                    var.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true))
+                .stream()
+                .map(VariableDeclarator::getNameAsString)
+                .filter(name -> !name.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private boolean declaresInstanceField(NameExpr name, String identifier) {
