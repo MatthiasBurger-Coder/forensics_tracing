@@ -23,6 +23,9 @@ public final class SafeModeDecorator implements ConditionStrategy {
         // Calls SafeEval.eval(ruleId, originalExpressionAsString, delegateExpressionBoolean)
         // The Byteman condition becomes: SafeEval.eval("ruleId","expr", (original))
         final String inner = delegate.toBytemanIf();
+        if (inner == null || inner.isBlank()) {
+            return inner;
+        }
         final String escaped = inner.replace("\\", "\\\\").replace("\"", "\\\"");
         return helperFqcn + ".eval(\"" + ruleId + "\",\"" + escaped + "\"," + "(" + inner + "))";
     }
