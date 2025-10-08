@@ -116,3 +116,24 @@ The project targets Java 21 and ships with Gradle tasks configured for AspectJ w
 This executes the unit tests, architecture rules, and Gradle TestKit scenarios that verify the plugin behaviour. 【F:build.gradle.kts†L1-L132】
 
 For deeper Byteman usage details, consult the official documentation at [https://byteman.jboss.org/](https://byteman.jboss.org/).
+
+## Troubleshooting predicate-based policies in Spock
+
+When you mock a `TogglePolicy` (or any component that exposes a `Predicate`), make sure the mock returns a functional predicate instead of a bare boolean. Spock happily casts closures to SAM types, so you can configure the mock like this:
+
+```groovy
+def policy = Mock(TogglePolicy)
+policy.newEnabled() >> true
+policy.routePredicate() >> ({ String id -> true } as Predicate<String>)
+```
+
+If you prefer `Stub` semantics for the policy you need to perform the same cast, otherwise Spock will return the boolean value produced by the closure and Byteman (or your production code) will choke when it tries to call `Predicate#test` on it:
+
+```groovy
+def policy = Stub(TogglePolicy) {
+  newEnabled() >> true
+  routePredicate() >> ({ String id -> true } as Predicate<String>)
+}
+```
+
+This ensures runtime helpers and Byteman conditions can safely call `policy.routePredicate().test(orderId)` without tripping over a `GroovyCastException` from `Boolean` to `Predicate`. The same approach works for any mocked method that should expose a functional interface.
