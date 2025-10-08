@@ -10,7 +10,7 @@ class RuleIdFactoryTest {
 
     @Test
     void createsDeterministicIdFromScanEvent() {
-        ScanEvent event = new ScanEvent(location, "test()", RuleTemplate.IF_TRUE, "value > 0", "java");
+        ScanEvent event = new ScanEvent(location, "test()", RuleTemplate.IF_TRUE, "value > 0", "java", null);
 
         RuleId id1 = RuleIdFactory.from(event, "value > 0");
         RuleId id2 = RuleIdFactory.from(event, "value > 0");
@@ -27,7 +27,7 @@ class RuleIdFactoryTest {
 
     @Test
     void rejectsNullArguments() {
-        ScanEvent event = new ScanEvent(location, "test()", RuleTemplate.IF_TRUE, "value > 0", "java");
+        ScanEvent event = new ScanEvent(location, "test()", RuleTemplate.IF_TRUE, "value > 0", "java", null);
 
         assertThatThrownBy(() -> RuleIdFactory.from(null, "foo"))
             .isInstanceOf(NullPointerException.class);

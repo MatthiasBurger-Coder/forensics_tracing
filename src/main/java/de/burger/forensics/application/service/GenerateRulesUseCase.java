@@ -192,7 +192,7 @@ public final class GenerateRulesUseCase {
                           boolean safeMode,
                           boolean positive,
                           RuleTemplate overrideType) {
-        ConditionStrategy base = strategyFactory.from(event.conditionText());
+        ConditionStrategy base = strategyFactory.from(event.conditionText(), overrideType, event.returnType());
         String baseRendered = base.toBytemanIf();
         RuleId ruleId = RuleIdFactory.from(event, baseRendered);
         ConditionStrategy effective = safeMode

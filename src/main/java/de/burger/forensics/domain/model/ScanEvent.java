@@ -7,5 +7,6 @@ public record ScanEvent(SourceLocation location,
                         String signature,
                         RuleTemplate kind,
                         String conditionText,
-                        String language) {
+                        String language,
+                        String returnType) {
 }
