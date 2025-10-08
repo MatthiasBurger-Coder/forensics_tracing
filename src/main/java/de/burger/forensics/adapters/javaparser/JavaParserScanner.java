@@ -22,7 +22,6 @@ import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.SourceLocation;
 import de.burger.forensics.domain.port.out.CodeScanPort;
-import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.file.FileVisitOption;
@@ -37,6 +36,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import jakarta.annotation.Nonnull;
 
 /**
  * JavaParser-backed implementation of {@link CodeScanPort}.
@@ -62,7 +63,7 @@ public final class JavaParserScanner implements CodeScanPort {
         try {
             Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), 64, new SimpleFileVisitor<>() {
                 @Override
-                public @NotNull FileVisitResult preVisitDirectory(@NotNull Path dir, @NotNull BasicFileAttributes attrs) {
+                public @Nonnull FileVisitResult preVisitDirectory(@Nonnull Path dir, @Nonnull BasicFileAttributes attrs) {
                     if (Files.isSymbolicLink(dir)) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
@@ -70,7 +71,7 @@ public final class JavaParserScanner implements CodeScanPort {
                 }
 
                 @Override
-                public @NotNull FileVisitResult visitFile(@NotNull Path file, @NotNull BasicFileAttributes attrs) {
+                public @Nonnull FileVisitResult visitFile(@Nonnull Path file, @Nonnull BasicFileAttributes attrs) {
                     String name = file.getFileName().toString();
                     if (!name.endsWith(".java")) {
                         return FileVisitResult.CONTINUE;
