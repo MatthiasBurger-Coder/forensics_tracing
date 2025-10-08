@@ -14,5 +14,6 @@ public enum RtEvent {
     TIMER_END,
     IO_BEGIN,
     IO_END,
+    CONDITION_ERROR,
     CUSTOM
 }

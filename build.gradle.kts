@@ -21,6 +21,7 @@ dependencies {
 
     // Logging
     testImplementation(libs.slf4j.api)
+    testImplementation(libs.byteman)
 
     // AspectJ
     testRuntimeOnly(libs.aspectj.weaver)
