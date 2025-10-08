@@ -97,4 +97,33 @@ class JavaParserScannerTest {
             .extracting(ScanEvent::conditionText)
             .contains("$this.policy.newEnabled() && $this.policy.routePredicate().test($1)");
     }
+
+    @Test
+    void prefixesLocalVariableAccessWithDollarPlaceholder() throws IOException {
+        Path tempDir = Files.createTempDirectory("scanner-test-local");
+        Path source = tempDir.resolve("PolicyService.java");
+        Files.writeString(source, """
+            package example;
+            import java.util.function.Predicate;
+            public class PolicyService {
+              public boolean process(String orderId) {
+                Policy policy = new Policy();
+                if (policy.routePredicate().test(orderId)) {
+                  return true;
+                }
+                return false;
+              }
+              static final class Policy {
+                Predicate<String> routePredicate() { return value -> value.startsWith("A"); }
+              }
+            }
+            """);
+
+        List<ScanEvent> events = scanner.scan(tempDir).toList();
+
+        assertThat(events)
+            .filteredOn(event -> event.kind() == RuleTemplate.IF_TRUE || event.kind() == RuleTemplate.IF_FALSE)
+            .extracting(ScanEvent::conditionText)
+            .contains("$policy.routePredicate().test($1)");
+    }
 }
