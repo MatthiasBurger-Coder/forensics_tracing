@@ -106,6 +106,7 @@ public final class JavaParserScanner implements CodeScanPort {
         String fqcn = pkg.isEmpty() ? typeName : pkg + "." + typeName;
         String methodName = declaration.getNameAsString();
         String signature = declaration.getSignature().asString();
+        String returnType = declaration.getType().asString();
 
         Map<String, Integer> parameterIndexes = parameterIndexes(declaration);
 
@@ -116,8 +117,8 @@ public final class JavaParserScanner implements CodeScanPort {
                 int line = condition.getBegin().map(p -> p.line).orElse(-1);
                 SourceLocation location = new SourceLocation(fqcn, methodName, line);
                 String renderedCondition = renderCondition(condition, parameterIndexes);
-                events.add(new ScanEvent(location, signature, RuleTemplate.IF_TRUE, renderedCondition, "java"));
-                events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, renderedCondition, "java"));
+                events.add(new ScanEvent(location, signature, RuleTemplate.IF_TRUE, renderedCondition, "java", returnType));
+                events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, renderedCondition, "java", returnType));
                 var elseStmt = current.getElseStmt().orElse(null);
                 if (elseStmt instanceof IfStmt next) {
                     current = next;
@@ -131,28 +132,28 @@ public final class JavaParserScanner implements CodeScanPort {
             int line = sw.getSelector().getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
             String selector = renderCondition(sw.getSelector(), parameterIndexes);
-            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH, selector, "java"));
+            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH, selector, "java", returnType));
         });
 
         declaration.findAll(SwitchEntry.class).forEach(entry -> {
             int line = entry.getBegin().map(p -> p.line).orElse(-1);
             String label = renderSwitchLabel(entry, parameterIndexes);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH_CASE, label, "java"));
+            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH_CASE, label, "java", returnType));
         });
 
         declaration.findAll(ReturnStmt.class).forEach(ret -> {
             int line = ret.getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
             String renderedReturn = renderReturn(ret, parameterIndexes);
-            events.add(new ScanEvent(location, signature, RuleTemplate.RETURN, renderedReturn, "java"));
+            events.add(new ScanEvent(location, signature, RuleTemplate.RETURN, renderedReturn, "java", returnType));
         });
 
         declaration.findAll(ThrowStmt.class).forEach(th -> {
             int line = th.getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
             String renderedThrow = renderCondition(th.getExpression(), parameterIndexes);
-            events.add(new ScanEvent(location, signature, RuleTemplate.THROW, renderedThrow, "java"));
+            events.add(new ScanEvent(location, signature, RuleTemplate.THROW, renderedThrow, "java", returnType));
         });
     }
 
