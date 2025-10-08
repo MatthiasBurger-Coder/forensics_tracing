@@ -8,6 +8,8 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithName;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -32,8 +34,10 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -103,14 +107,17 @@ public final class JavaParserScanner implements CodeScanPort {
         String methodName = declaration.getNameAsString();
         String signature = declaration.getSignature().asString();
 
+        Map<String, Integer> parameterIndexes = parameterIndexes(declaration);
+
         declaration.findAll(IfStmt.class).forEach(ifStmt -> {
             IfStmt current = ifStmt;
             while (current != null) {
                 var condition = current.getCondition();
                 int line = condition.getBegin().map(p -> p.line).orElse(-1);
                 SourceLocation location = new SourceLocation(fqcn, methodName, line);
-                events.add(new ScanEvent(location, signature, RuleTemplate.IF_TRUE, condition.toString(), "java"));
-                events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, condition.toString(), "java"));
+                String renderedCondition = renderCondition(condition, parameterIndexes);
+                events.add(new ScanEvent(location, signature, RuleTemplate.IF_TRUE, renderedCondition, "java"));
+                events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, renderedCondition, "java"));
                 var elseStmt = current.getElseStmt().orElse(null);
                 if (elseStmt instanceof IfStmt next) {
                     current = next;
@@ -123,17 +130,13 @@ public final class JavaParserScanner implements CodeScanPort {
         declaration.findAll(SwitchStmt.class).forEach(sw -> {
             int line = sw.getSelector().getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH, sw.getSelector().toString(), "java"));
+            String selector = renderCondition(sw.getSelector(), parameterIndexes);
+            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH, selector, "java"));
         });
 
         declaration.findAll(SwitchEntry.class).forEach(entry -> {
             int line = entry.getBegin().map(p -> p.line).orElse(-1);
-            String label = entry.getLabels().isEmpty()
-                ? "default"
-                : entry.getLabels().stream()
-                    .map(Node::toString)
-                    .map(String::trim)
-                    .collect(Collectors.joining(" | "));
+            String label = renderSwitchLabel(entry, parameterIndexes);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
             events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH_CASE, label, "java"));
         });
@@ -141,13 +144,15 @@ public final class JavaParserScanner implements CodeScanPort {
         declaration.findAll(ReturnStmt.class).forEach(ret -> {
             int line = ret.getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            events.add(new ScanEvent(location, signature, RuleTemplate.RETURN, ret.toString(), "java"));
+            String renderedReturn = renderReturn(ret, parameterIndexes);
+            events.add(new ScanEvent(location, signature, RuleTemplate.RETURN, renderedReturn, "java"));
         });
 
         declaration.findAll(ThrowStmt.class).forEach(th -> {
             int line = th.getBegin().map(p -> p.line).orElse(-1);
             SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            events.add(new ScanEvent(location, signature, RuleTemplate.THROW, th.getExpression().toString(), "java"));
+            String renderedThrow = renderCondition(th.getExpression(), parameterIndexes);
+            events.add(new ScanEvent(location, signature, RuleTemplate.THROW, renderedThrow, "java"));
         });
     }
 
@@ -165,5 +170,52 @@ public final class JavaParserScanner implements CodeScanPort {
             current = current.getParentNode().orElse(null);
         }
         return String.join("$", parts);
+    }
+
+    private Map<String, Integer> parameterIndexes(MethodDeclaration declaration) {
+        Map<String, Integer> indexes = new LinkedHashMap<>();
+        for (int i = 0; i < declaration.getParameters().size(); i++) {
+            String name = declaration.getParameter(i).getNameAsString();
+            if (!name.isBlank()) {
+                indexes.put(name, i + 1);
+            }
+        }
+        return indexes;
+    }
+
+    private String renderCondition(Expression expression, Map<String, Integer> parameterIndexes) {
+        return sanitizeExpression(expression, parameterIndexes).toString();
+    }
+
+    private String renderReturn(ReturnStmt stmt, Map<String, Integer> parameterIndexes) {
+        ReturnStmt clone = stmt.clone();
+        clone.getExpression().ifPresent(expr -> clone.setExpression(sanitizeExpression(expr, parameterIndexes)));
+        return clone.toString();
+    }
+
+    private String renderSwitchLabel(SwitchEntry entry, Map<String, Integer> parameterIndexes) {
+        SwitchEntry clone = entry.clone();
+        for (int i = 0; i < clone.getLabels().size(); i++) {
+            Expression label = clone.getLabels().get(i);
+            clone.getLabels().set(i, sanitizeExpression(label, parameterIndexes));
+        }
+        if (clone.getLabels().isEmpty()) {
+            return "default";
+        }
+        return clone.getLabels().stream()
+                .map(Node::toString)
+                .map(String::trim)
+                .collect(Collectors.joining(" | "));
+    }
+
+    private Expression sanitizeExpression(Expression expression, Map<String, Integer> parameterIndexes) {
+        Expression clone = expression.clone();
+        clone.walk(NameExpr.class, name -> {
+            Integer index = parameterIndexes.get(name.getNameAsString());
+            if (index != null) {
+                name.setName("$" + index);
+            }
+        });
+        return clone;
     }
 }
