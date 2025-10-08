@@ -46,6 +46,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -281,14 +282,14 @@ public final class JavaParserScanner implements CodeScanPort {
     }
 
     private boolean shadowsParameter(NameExpr name, String identifier) {
-        return name.findAncestor(MethodDeclaration.class)
+        return findAncestor(name, MethodDeclaration.class)
             .map(MethodDeclaration::getParameters)
             .map(params -> params.stream().map(Parameter::getNameAsString).anyMatch(identifier::equals))
             .orElse(false);
     }
 
     private boolean shadowsLambdaParameter(NameExpr name, String identifier) {
-        return name.findAncestor(LambdaExpr.class)
+        return findAncestor(name, LambdaExpr.class)
             .map(lambda -> lambda.getParameters().stream()
                 .map(Parameter::getNameAsString)
                 .anyMatch(identifier::equals))
@@ -296,13 +297,13 @@ public final class JavaParserScanner implements CodeScanPort {
     }
 
     private boolean shadowsCatchParameter(NameExpr name, String identifier) {
-        return name.findAncestor(CatchClause.class)
+        return findAncestor(name, CatchClause.class)
             .map(catchClause -> catchClause.getParameter().getNameAsString().equals(identifier))
             .orElse(false);
     }
 
     private boolean hasLocalVariable(NameExpr name, String identifier) {
-        return name.findAncestor(MethodDeclaration.class)
+        return findAncestor(name, MethodDeclaration.class)
             .map(method -> method.findAll(VariableDeclarator.class, var ->
                 var.getNameAsString().equals(identifier)
                     && var.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true)))
@@ -314,23 +315,30 @@ public final class JavaParserScanner implements CodeScanPort {
         if (identifier.isEmpty()) {
             return false;
         }
-        return name.findAncestor(ClassOrInterfaceDeclaration.class)
+        return findAncestor(name, ClassOrInterfaceDeclaration.class)
             .map(decl -> decl.getFields().stream()
                 .filter(field -> !field.isStatic())
                 .flatMap(field -> field.getVariables().stream())
                 .map(VariableDeclarator::getNameAsString)
                 .anyMatch(identifier::equals))
-            .or(() -> name.findAncestor(EnumDeclaration.class)
+            .or(() -> findAncestor(name, EnumDeclaration.class)
                 .map(decl -> decl.getFields().stream()
                     .filter(field -> !field.isStatic())
                     .flatMap(field -> field.getVariables().stream())
                     .map(VariableDeclarator::getNameAsString)
                     .anyMatch(identifier::equals)))
-            .or(() -> name.findAncestor(RecordDeclaration.class)
+            .or(() -> findAncestor(name, RecordDeclaration.class)
                 .map(decl -> decl.getFields().stream()
                     .flatMap(field -> field.getVariables().stream())
                     .map(VariableDeclarator::getNameAsString)
                     .anyMatch(identifier::equals)))
             .orElse(false);
+    }
+
+    private <T extends Node> Optional<T> findAncestor(NameExpr name, Class<T> type) {
+        return name.stream(Node.TreeTraversal.PARENTS)
+            .filter(type::isInstance)
+            .map(type::cast)
+            .findFirst();
     }
 }
