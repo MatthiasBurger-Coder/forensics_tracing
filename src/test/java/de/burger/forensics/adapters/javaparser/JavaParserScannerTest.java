@@ -67,4 +67,34 @@ class JavaParserScannerTest {
         assertThat(events).extracting(ScanEvent::kind)
             .contains(RuleTemplate.IF_TRUE, RuleTemplate.IF_FALSE, RuleTemplate.SWITCH, RuleTemplate.SWITCH_CASE, RuleTemplate.RETURN, RuleTemplate.THROW);
     }
+
+    @Test
+    void prefixesInstanceFieldAccessWithThisPlaceholder() throws IOException {
+        Path tempDir = Files.createTempDirectory("scanner-test-field");
+        Path source = tempDir.resolve("SwitchingOrderApi.java");
+        Files.writeString(source, """
+            package example;
+            import java.util.function.Predicate;
+            public class SwitchingOrderApi {
+              private final Policy policy = new Policy();
+              public boolean sumGross(String orderId) {
+                if (policy.newEnabled() && policy.routePredicate().test(orderId)) {
+                  return true;
+                }
+                return false;
+              }
+              static final class Policy {
+                boolean newEnabled() { return true; }
+                Predicate<String> routePredicate() { return value -> value.isEmpty(); }
+              }
+            }
+            """);
+
+        List<ScanEvent> events = scanner.scan(tempDir).toList();
+
+        assertThat(events)
+            .filteredOn(event -> event.kind() == RuleTemplate.IF_TRUE || event.kind() == RuleTemplate.IF_FALSE)
+            .extracting(ScanEvent::conditionText)
+            .contains("$this.policy.newEnabled() && $this.policy.routePredicate().test($1)");
+    }
 }
