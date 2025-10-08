@@ -66,4 +66,15 @@ class DefaultStrategyFactoryTest {
         assertThat(strategy).isInstanceOf(GenericUnsafeStrategy.class);
         assertThat(strategy.toBytemanIf()).isEqualTo("isEnabled()");
     }
+
+    @Test
+    void ignoresBooleanLiteralsInNonBooleanReturnExpressions() {
+        String expression = "return new EnvTogglePolicy(readBool(\"order.new.enabled\", \"ORDER_NEW_ENABLED\", false),"
+            + " readInt(\"order.new.percent\", \"ORDER_NEW_PERCENT\", 0));";
+
+        ConditionStrategy strategy = factory.from(expression, RuleTemplate.RETURN, "com.acme.EnvTogglePolicy");
+
+        assertThat(strategy).isInstanceOf(GenericUnsafeStrategy.class);
+        assertThat(strategy.toBytemanIf()).isEqualTo("true");
+    }
 }

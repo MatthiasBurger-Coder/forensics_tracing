@@ -3,7 +3,6 @@ package de.burger.forensics.domain.strategy;
 import de.burger.forensics.domain.model.RuleTemplate;
 
 import java.util.Locale;
-import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
@@ -33,9 +32,13 @@ public final class DefaultStrategyFactory implements StrategyFactory {
         sanitized = stripTrailingSemicolon(sanitized);
 
         boolean isReturnTemplate = template == RuleTemplate.RETURN;
+        boolean isBooleanReturn = isBooleanReturnType(returnType);
         if (isReturnTemplate) {
             sanitized = stripReturnKeyword(sanitized);
             if (sanitized.isBlank()) {
+                return new GenericUnsafeStrategy("true");
+            }
+            if (!isBooleanReturn) {
                 return new GenericUnsafeStrategy("true");
             }
         }
@@ -53,9 +56,6 @@ public final class DefaultStrategyFactory implements StrategyFactory {
         }
         if (COMPARISON.matcher(sanitized).find() || BOOLEAN_LITERAL.matcher(lower).find()) {
             return new GenericUnsafeStrategy(sanitized);
-        }
-        if (isReturnTemplate && !isBooleanReturnType(returnType) && !looksBooleanExpression(sanitized)) {
-            return new GenericUnsafeStrategy("true");
         }
         return new GenericUnsafeStrategy(sanitized);
     }
@@ -90,20 +90,4 @@ public final class DefaultStrategyFactory implements StrategyFactory {
             || normalized.endsWith(".boolean");
     }
 
-    private static boolean looksBooleanExpression(String expression) {
-        String trimmed = Objects.requireNonNull(expression).trim();
-        if (trimmed.isEmpty()) {
-            return false;
-        }
-        if (trimmed.startsWith("!")) {
-            return true;
-        }
-        if (BOOLEAN_LITERAL.matcher(trimmed).find()) {
-            return true;
-        }
-        if (COMPARISON.matcher(trimmed).find()) {
-            return true;
-        }
-        return false;
-    }
 }
