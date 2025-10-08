@@ -9,7 +9,9 @@ public final class IfTrueRuleStrategy extends AbstractBytemanStrategy implements
     @Override public String id() { return "IF_TRUE"; }
     @Override public String render(RuleParams p) {
         // condition in p.condition() – wenn leer, erzwingen wir true
-        String cond = (p.condition() == null || p.condition().isBlank()) ? "true" : p.condition();
+        String ruleId = safeId(p.id());
+        String evaluation = (p.condition() == null || p.condition().isBlank()) ? "true" : p.condition();
+        String cond = guardedCondition(ruleId, p.condition(), evaluation);
         return """
             RULE %s : if-true %s#%s
             CLASS %s
@@ -21,7 +23,7 @@ public final class IfTrueRuleStrategy extends AbstractBytemanStrategy implements
                 onBranch(%s.class, "%s", "IF_TRUE");
             ENDRULE
             """.formatted(
-                safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
+                ruleId, or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 p.helperFqn(),

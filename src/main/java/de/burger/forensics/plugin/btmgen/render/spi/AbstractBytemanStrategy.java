@@ -14,4 +14,11 @@ public abstract class AbstractBytemanStrategy {
     }
     protected static String esc(String s) { return s == null ? "" : s.replace("\"", "\\\""); }
     protected static String methodSig(String name, String desc) { return name + (desc != null ? desc : ""); }
+
+    protected static String guardedCondition(String ruleId, String expression, String evaluation) {
+        String expr = (expression == null || expression.isBlank()) ? evaluation : expression;
+        String escapedRuleId = esc(ruleId);
+        String escapedExpr = esc(expr);
+        return "eval(\"%s\", \"%s\", () -> %s)".formatted(escapedRuleId, escapedExpr, evaluation);
+    }
 }

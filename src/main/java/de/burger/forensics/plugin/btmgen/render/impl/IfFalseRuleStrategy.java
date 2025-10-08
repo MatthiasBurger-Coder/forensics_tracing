@@ -8,7 +8,9 @@ import de.burger.forensics.plugin.btmgen.render.spi.AbstractBytemanStrategy;
 public final class IfFalseRuleStrategy extends AbstractBytemanStrategy implements RuleRenderStrategy {
     @Override public String id() { return "IF_FALSE"; }
     @Override public String render(RuleParams p) {
-        String cond = (p.condition() == null || p.condition().isBlank()) ? "false" : "!(" + p.condition() + ")";
+        String ruleId = safeId(p.id());
+        String evaluation = (p.condition() == null || p.condition().isBlank()) ? "false" : "!(" + p.condition() + ")";
+        String cond = guardedCondition(ruleId, evaluation, evaluation);
         return """
             RULE %s : if-false %s#%s
             CLASS %s
@@ -20,7 +22,7 @@ public final class IfFalseRuleStrategy extends AbstractBytemanStrategy implement
                 onBranch(%s.class, "%s", "IF_FALSE");
             ENDRULE
             """.formatted(
-                safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
+                ruleId, or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 p.helperFqn(),
