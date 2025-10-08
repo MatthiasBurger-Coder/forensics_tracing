@@ -141,6 +141,15 @@ public final class RtTrace {
         ), null);
     }
 
+    /** Record that evaluating a condition failed in safe mode. */
+    public static void conditionError(String ruleId, String expression, Throwable error) {
+        if (!ENABLED) return;
+        emit(RtEvent.CONDITION_ERROR, Map.of(
+                "rule", Objects.toString(ruleId, ""),
+                "expression", Objects.toString(expression, "")
+        ), error);
+    }
+
     /** Convenience: variable set. */
     public static void varSet(String name, Object value) {
         if (!ENABLED) return;
