@@ -2,15 +2,22 @@ package de.burger.forensics.adapters.javaparser;
 
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.Range;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithName;
+import com.github.javaparser.ast.expr.LambdaExpr;
+import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
@@ -35,9 +42,11 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -210,13 +219,118 @@ public final class JavaParserScanner implements CodeScanPort {
     }
 
     private Expression sanitizeExpression(Expression expression, Map<String, Integer> parameterIndexes) {
+        Set<Range> instanceFieldRanges = identifyInstanceFieldRanges(expression);
         Expression clone = expression.clone();
         clone.walk(NameExpr.class, name -> {
             Integer index = parameterIndexes.get(name.getNameAsString());
             if (index != null) {
                 name.setName("$" + index);
+                return;
             }
+            promoteInstanceFieldAccess(name, instanceFieldRanges);
         });
         return clone;
+    }
+
+    private void promoteInstanceFieldAccess(NameExpr name, Set<Range> instanceFieldRanges) {
+        if (name.getRange().filter(instanceFieldRanges::contains).isPresent()) {
+            String identifier = name.getNameAsString();
+            name.replace(new FieldAccessExpr(new NameExpr("$this"), identifier));
+        }
+    }
+
+    private Set<Range> identifyInstanceFieldRanges(Expression expression) {
+        Set<Range> ranges = new LinkedHashSet<>();
+        expression.walk(NameExpr.class, name -> {
+            if (resolvesToInstanceField(name) || isLikelyInstanceField(name, name.getNameAsString())) {
+                name.getRange().ifPresent(ranges::add);
+            }
+        });
+        return ranges;
+    }
+
+    private boolean resolvesToInstanceField(NameExpr name) {
+        try {
+            var resolved = name.resolve();
+            return resolved.isField() && !resolved.asField().isStatic();
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private boolean isLikelyInstanceField(NameExpr name, String identifier) {
+        if (identifier.isEmpty()) {
+            return false;
+        }
+        if (name.getParentNode().filter(FieldAccessExpr.class::isInstance).isPresent()) {
+            return false;
+        }
+        if (shadowsParameter(name, identifier)) {
+            return false;
+        }
+        if (shadowsLambdaParameter(name, identifier)) {
+            return false;
+        }
+        if (shadowsCatchParameter(name, identifier)) {
+            return false;
+        }
+        if (hasLocalVariable(name, identifier)) {
+            return false;
+        }
+        return declaresInstanceField(name, identifier);
+    }
+
+    private boolean shadowsParameter(NameExpr name, String identifier) {
+        return name.findAncestor(MethodDeclaration.class)
+            .map(MethodDeclaration::getParameters)
+            .map(params -> params.stream().map(Parameter::getNameAsString).anyMatch(identifier::equals))
+            .orElse(false);
+    }
+
+    private boolean shadowsLambdaParameter(NameExpr name, String identifier) {
+        return name.findAncestor(LambdaExpr.class)
+            .map(lambda -> lambda.getParameters().stream()
+                .map(Parameter::getNameAsString)
+                .anyMatch(identifier::equals))
+            .orElse(false);
+    }
+
+    private boolean shadowsCatchParameter(NameExpr name, String identifier) {
+        return name.findAncestor(CatchClause.class)
+            .map(catchClause -> catchClause.getParameter().getNameAsString().equals(identifier))
+            .orElse(false);
+    }
+
+    private boolean hasLocalVariable(NameExpr name, String identifier) {
+        return name.findAncestor(MethodDeclaration.class)
+            .map(method -> method.findAll(VariableDeclarator.class, var ->
+                var.getNameAsString().equals(identifier)
+                    && var.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true)))
+            .map(list -> !list.isEmpty())
+            .orElse(false);
+    }
+
+    private boolean declaresInstanceField(NameExpr name, String identifier) {
+        if (identifier.isEmpty()) {
+            return false;
+        }
+        return name.findAncestor(ClassOrInterfaceDeclaration.class)
+            .map(decl -> decl.getFields().stream()
+                .filter(field -> !field.isStatic())
+                .flatMap(field -> field.getVariables().stream())
+                .map(VariableDeclarator::getNameAsString)
+                .anyMatch(identifier::equals))
+            .or(() -> name.findAncestor(EnumDeclaration.class)
+                .map(decl -> decl.getFields().stream()
+                    .filter(field -> !field.isStatic())
+                    .flatMap(field -> field.getVariables().stream())
+                    .map(VariableDeclarator::getNameAsString)
+                    .anyMatch(identifier::equals)))
+            .or(() -> name.findAncestor(RecordDeclaration.class)
+                .map(decl -> decl.getFields().stream()
+                    .flatMap(field -> field.getVariables().stream())
+                    .map(VariableDeclarator::getNameAsString)
+                    .anyMatch(identifier::equals)))
+            .orElse(false);
     }
 }
