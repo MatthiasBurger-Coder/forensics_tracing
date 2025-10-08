@@ -30,6 +30,13 @@ class DefaultStrategyFactoryTest {
     }
 
     @Test
+    void sanitizesPatternInstanceOfExpressions() {
+        ConditionStrategy strategy = factory.from("orderId instanceof OrderId orderId");
+        assertThat(strategy).isInstanceOf(InstanceOfStrategy.class);
+        assertThat(strategy.toBytemanIf()).isEqualTo("orderId instanceof OrderId");
+    }
+
+    @Test
     void returnsGenericStrategyForBlankExpressions() {
         ConditionStrategy strategy = factory.from("   ");
         assertThat(strategy).isInstanceOf(GenericUnsafeStrategy.class);
