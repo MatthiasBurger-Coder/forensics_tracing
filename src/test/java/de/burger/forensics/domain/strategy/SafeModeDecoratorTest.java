@@ -48,4 +48,15 @@ class SafeModeDecoratorTest {
             .contains("org.example.SafeEval.eval")
             .contains("abc");
     }
+
+    @Test
+    void returnsBlankWhenDelegateIsBlank() {
+        ConditionStrategy delegate = () -> "  ";
+        SafeModeDecorator decorator = new SafeModeDecorator(delegate, "org.example.SafeEval", "rule-blank");
+
+        assertThat(decorator.toBytemanIf()).isBlank();
+
+        ConditionStrategy wrapped = SafeMode.wrap(delegate, "org.example.SafeEval", new RuleId("rule-blank"));
+        assertThat(wrapped.toBytemanIf()).isBlank();
+    }
 }
