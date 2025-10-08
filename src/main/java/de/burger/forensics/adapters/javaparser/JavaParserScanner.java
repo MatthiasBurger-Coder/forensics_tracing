@@ -22,6 +22,8 @@ import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.SourceLocation;
 import de.burger.forensics.domain.port.out.CodeScanPort;
+import org.jetbrains.annotations.NotNull;
+
 import java.io.IOException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
@@ -60,7 +62,7 @@ public final class JavaParserScanner implements CodeScanPort {
         try {
             Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), 64, new SimpleFileVisitor<>() {
                 @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                public @NotNull FileVisitResult preVisitDirectory(@NotNull Path dir, @NotNull BasicFileAttributes attrs) {
                     if (Files.isSymbolicLink(dir)) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
@@ -68,7 +70,7 @@ public final class JavaParserScanner implements CodeScanPort {
                 }
 
                 @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                public @NotNull FileVisitResult visitFile(@NotNull Path file, @NotNull BasicFileAttributes attrs) {
                     String name = file.getFileName().toString();
                     if (!name.endsWith(".java")) {
                         return FileVisitResult.CONTINUE;
@@ -152,12 +154,12 @@ public final class JavaParserScanner implements CodeScanPort {
         LinkedList<String> parts = new LinkedList<>();
         Node current = declaration.getParentNode().orElse(null);
         while (current != null) {
-            if (current instanceof ClassOrInterfaceDeclaration cls) {
-                parts.addFirst(cls.getNameAsString());
-            } else if (current instanceof EnumDeclaration en) {
-                parts.addFirst(en.getNameAsString());
-            } else if (current instanceof RecordDeclaration rec) {
-                parts.addFirst(rec.getNameAsString());
+            switch (current) {
+                case ClassOrInterfaceDeclaration cls -> parts.addFirst(cls.getNameAsString());
+                case EnumDeclaration en -> parts.addFirst(en.getNameAsString());
+                case RecordDeclaration rec -> parts.addFirst(rec.getNameAsString());
+                default -> {
+                }
             }
             current = current.getParentNode().orElse(null);
         }
