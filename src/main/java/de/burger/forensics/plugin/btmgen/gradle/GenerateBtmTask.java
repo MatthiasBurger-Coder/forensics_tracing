@@ -193,12 +193,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
     private String templateIdOrDefault() {
         String id = getTemplateId().getOrElse("METHOD_ENTER");
-        return (id == null || id.isBlank()) ? "METHOD_ENTER" : id;
+        return id.isBlank() ? "METHOD_ENTER" : id;
     }
 
     private String resolveHelperFqn() {
         String helper = getHelperFqn().getOrElse(RuleParams.DEFAULT_HELPER_FQN);
-        return (helper == null || helper.isBlank()) ? RuleParams.DEFAULT_HELPER_FQN : helper;
+        return helper.isBlank() ? RuleParams.DEFAULT_HELPER_FQN : helper;
     }
 
     private boolean includeEntryExit() {

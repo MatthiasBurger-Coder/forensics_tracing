@@ -112,13 +112,6 @@ tasks.test {
         systemProperty("forensics.btmgen.logToFile", "true")
         systemProperty("forensics.btmgen.logFile", testLogFile.get().asFile.absolutePath)
 
-        // AspectJ Weaver lokalisieren
-        val weaverFile = configurations.testRuntimeClasspath.get()
-            .files.firstOrNull { it.name.startsWith("aspectjweaver") || it.name.contains("aspectjweaver") }
-            ?: error("AspectJ weaver not found on testRuntimeClasspath. Add testRuntimeOnly(\"org.aspectj:aspectjweaver:<ver>\").")
-
-
-        val agentArg = javaAgentArg(weaverFile)
         jvmArgs(
             "-Xshare:off" // ok, optional
         )
