@@ -21,18 +21,18 @@ public final class DefaultStrategyFactory implements StrategyFactory {
         if (rawExpression == null || rawExpression.isBlank()) {
             return new GenericUnsafeStrategy("true");
         }
-        final String s = rawExpression.trim();
-        final String l = s.toLowerCase(Locale.ROOT);
+        final String sanitized = InstanceOfPatternSanitizer.sanitize(rawExpression.trim());
+        final String lower = sanitized.toLowerCase(Locale.ROOT);
 
-        if (LOGICAL.matcher(s).find()) {
-            return new LogicalExprStrategy(s);
+        if (LOGICAL.matcher(sanitized).find()) {
+            return new LogicalExprStrategy(sanitized);
         }
-        if (NULL_CHECK.matcher(l).find()) {
-            return new NullCheckStrategy(s);
+        if (NULL_CHECK.matcher(lower).find()) {
+            return new NullCheckStrategy(sanitized);
         }
-        if (INSTANCE_OF.matcher(l).find()) {
-            return new InstanceOfStrategy(s);
+        if (INSTANCE_OF.matcher(lower).find()) {
+            return new InstanceOfStrategy(sanitized);
         }
-        return new GenericUnsafeStrategy(s);
+        return new GenericUnsafeStrategy(sanitized);
     }
 }
