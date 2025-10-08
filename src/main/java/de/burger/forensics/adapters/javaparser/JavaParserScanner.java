@@ -107,9 +107,7 @@ public final class JavaParserScanner implements CodeScanPort {
                 int line = condition.getBegin().map(p -> p.line).orElse(-1);
                 SourceLocation location = new SourceLocation(fqcn, methodName, line);
                 events.add(new ScanEvent(location, signature, RuleTemplate.IF_TRUE, condition.toString(), "java"));
-                if (current.getElseStmt().isPresent()) {
-                    events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, condition.toString(), "java"));
-                }
+                events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, condition.toString(), "java"));
                 var elseStmt = current.getElseStmt().orElse(null);
                 if (elseStmt instanceof IfStmt next) {
                     current = next;

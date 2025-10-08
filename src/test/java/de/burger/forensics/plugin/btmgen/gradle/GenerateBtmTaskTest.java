@@ -99,13 +99,13 @@ class GenerateBtmTaskTest {
         assertTrue(content.contains("RETURN:com.example.Sample#alpha"));
         assertTrue(content.contains("THROW:com.example.Sample#beta"));
         assertTrue(content.contains("IF_TRUE:com.example.Sample#alpha:true"));
-        assertTrue(content.contains("IF_FALSE:com.example.Sample#alpha:false"));
-        assertTrue(content.contains("IF_TRUE:com.example.Sample#beta:true"));
+        assertTrue(content.contains("IF_FALSE:com.example.Sample#alpha:true"));
+        assertTrue(content.contains("IF_TRUE:com.example.Sample#beta:false"));
         assertTrue(content.contains("IF_FALSE:com.example.Sample#beta:false"));
-        assertTrue(content.contains("SWITCH:com.example.Sample#alpha"));
-        assertTrue(content.contains("SWITCH:com.example.Sample#beta"));
-        assertTrue(content.contains("SWITCH_CASE:com.example.Sample#alpha"));
-        assertTrue(content.contains("SWITCH_CASE:com.example.Sample#beta"));
+        assertTrue(content.contains("SWITCH:com.example.Sample#alpha:1"));
+        assertTrue(content.contains("SWITCH:com.example.Sample#beta:2"));
+        assertTrue(content.contains("SWITCH_CASE:1"));
+        assertTrue(content.contains("SWITCH_CASE:2"));
 
         assertEquals(2, strategies.get("METHOD_ENTER").calls.size());
         assertEquals(2, strategies.get("METHOD_EXIT").calls.size());
@@ -116,12 +116,14 @@ class GenerateBtmTaskTest {
 
         assertEquals(Set.of("alpha", "beta"),
                 strategies.get("IF_TRUE").calls.stream().map(RuleParams::methodName).collect(Collectors.toSet()));
-        assertEquals(List.of("true", "true"),
+        assertEquals(List.of("true", "false"),
                 strategies.get("IF_TRUE").calls.stream().map(RuleParams::condition).toList());
-        assertEquals(List.of("false", "false"),
+        assertEquals(List.of("true", "false"),
                 strategies.get("IF_FALSE").calls.stream().map(RuleParams::condition).toList());
         assertEquals(2, strategies.get("SWITCH").calls.size());
         assertEquals(2, strategies.get("SWITCH_CASE").calls.size());
+        assertEquals(List.of("1", "2"),
+                strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::displayName).toList());
 
         strategies.values().forEach(recording ->
                 recording.calls.forEach(params ->
