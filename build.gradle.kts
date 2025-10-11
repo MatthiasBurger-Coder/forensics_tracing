@@ -277,7 +277,7 @@ tasks.check {
     dependsOn("jacocoTestCoverageVerification")
 }
 
-sonarqube {
+sonar {
     properties {
         property("sonar.projectKey", "MatthiasBurger-Coder_forensics_tracing")
         property("sonar.organization", "matthiasburger-coder")
