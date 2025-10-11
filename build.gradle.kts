@@ -1,7 +1,10 @@
+import kotlin.text.isNotBlank
+
 plugins {
     `java-library`
     `java-gradle-plugin`
     id("com.gradle.plugin-publish") version "2.0.0"
+    id("jacoco")
 }
 
 val aspectjAgent by configurations.creating
@@ -188,4 +191,86 @@ gradlePlugin {
             tags.set(pluginTags)
         }
     }
+}
+
+// Resolve Mockito agent jar path from the test runtime classpath lazily
+val mockitoAgentJar: Provider<String> = configurations.named("testRuntimeClasspath").map { cfg ->
+    cfg.files.firstOrNull { it.name.startsWith("mockito-core") && it.name.endsWith(".jar") }?.absolutePath ?: ""
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+
+    // Prefer passing Mockito as a javaagent instead of relying on self-attachment (future-JDK-safe)
+    val agentPath = mockitoAgentJar.get()
+    if (agentPath.isNotBlank()) {
+        jvmArgs("-javaagent:$agentPath")
+    }
+
+    // Disabling CDS avoids noisy warnings when agents append to bootstrap classpath on some JDKs
+    jvmArgs("-Xshare:off")
+    finalizedBy(tasks.jacocoTestReport)
+
+    // Use a Provider-based build directory (Gradle 7+; recommended for 8/9+)
+    val reportsDir = layout.buildDirectory.dir("reports/spock")
+
+    // Pass absolute path lazily to the test JVM
+    systemProperty(
+        "com.athaydes.spockframework.report.outputDir",
+        reportsDir.map { it.asFile.absolutePath }.get()
+    )
+
+    // Optional extras
+    systemProperty("com.athaydes.spockframework.report.projectName", "Customer Service Specs")
+    systemProperty("com.athaydes.spockframework.report.projectVersion", "2.0-SNAPSHOT")
+    systemProperty("com.athaydes.spockframework.report.outputFormats", "html")
+    systemProperty("com.athaydes.spockframework.report.showCodeBlocks", "true")
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required.set(true)
+        xml.outputLocation.set(layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml"))
+        csv.required.set(false)
+        html.required.set(true)
+    }
+    // Exclude the application entry point from coverage reports
+    classDirectories.setFrom(
+        files(
+            classDirectories.files.map {
+                fileTree(it) {
+                    exclude("de/burger/it/Main*")
+                }
+            }
+        )
+    )
+}
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    // Fail the build if coverage is below 86%
+    violationRules {
+        rule {
+            limit {
+                // enforce 86% line coverage
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.86".toBigDecimal()
+            }
+        }
+    }
+    // Exclude the application entry point from coverage verification
+    classDirectories.setFrom(
+        files(
+            classDirectories.files.map {
+                fileTree(it) {
+                    exclude("de/burger/it/Main*")
+                }
+            }
+        )
+    )
+    dependsOn(tasks.test)
+}
+
+tasks.check {
+    dependsOn("jacocoTestCoverageVerification")
 }
