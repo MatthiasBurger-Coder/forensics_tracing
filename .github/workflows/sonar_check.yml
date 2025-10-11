@@ -33,18 +33,13 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build & Test
-        run: ./gradlew build jacocoTestReport
+        run: ./gradlew clean test jacocoTestReport
 
-      - name: SonarCloud
-        uses: SonarSource/sonarcloud-github-action@4006f663ecaf1f8093e8e4abb9227f6041f52216
+      - name: SonarCloud Scan#
         env:
-           SONAR_TOKEN: ${{ secrets.SONAR_CLOUD_TOKEN }}
-        with:
-           args: >
-             -Dsonar.organization=matthiasburger-coder
-             -Dsonar.projectKey=MatthiasBurger-Coder_forensics_tracing
-             -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
-             -Dsonar.scanner.force-deprecated-java-version-fallback=true
+          SONAR_TOKEN: ${{ secrets.SONAR_CLOUD_TOKEN }}
+        run: |
+          ./gradlew --no-daemon sonar
 
 
 
