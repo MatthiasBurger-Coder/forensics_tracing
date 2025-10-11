@@ -42,7 +42,7 @@ jobs:
            args: >
              -Dsonar.organization=matthiasburger-coder
              -Dsonar.projectKey=MatthiasBurger-Coder_forensics_tracing
-             -Dsonar.coverage.jacoco.xmlReportPaths=reports/jacoco/test/jacocoTestReport.xml
+             -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
              -Dsonar.scanner.force-deprecated-java-version-fallback=true
 
 
