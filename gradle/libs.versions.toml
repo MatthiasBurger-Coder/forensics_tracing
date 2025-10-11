@@ -7,18 +7,20 @@ javaparser = "3.27.0"
 aspectj  = "1.9.24"
 bytebuddy = "1.14.12"
 slf4j    = "2.0.17"
-logback  = "1.5.18"
 mockito = "5.13.0"
 byteman = "4.0.23"
 jakarta-annotation = "2.1.1"
+sonar_cloud = "6.3.1.5724"
+jacoco = "0.8.13"
 
 # Gradle plugins
 #gradle-plugin-publish = "2.0.0"
 #nexus-publish         = "2.0.0"
 
 [plugins]
-#gradle-plugin-publish = { id = "com.gradle.plugin-publish", version.ref = "gradle-plugin-publish" }
-#nexus-publish         = { id = "io.github.gradle-nexus.publish-plugin", version.ref = "nexus-publish" }
+#gradle-plugin-publish   = { id = "com.gradle.plugin-publish", version.ref = "gradle-plugin-publish" }
+#nexus-publish           = { id = "io.github.gradle-nexus.publish-plugin", version.ref = "nexus-publish" }
+sonar_qube_gradle_plugin = { id = "org.sonarqube", version.ref ="sonar_cloud"}
 
 [libraries]
 
@@ -31,9 +33,9 @@ aspectj-weaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj"
 
 # Logging
 slf4j-api       = { module = "org.slf4j:slf4j-api",        version.ref = "slf4j" }
-slf4j-simple    = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
-jul-to-slf4j    = { module = "org.slf4j:jul-to-slf4j",     version.ref = "slf4j" }
-jcl-over-slf4j  = { module = "org.slf4j:jcl-over-slf4j",   version.ref = "slf4j" }
+#slf4j-simple    = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+#jul-to-slf4j    = { module = "org.slf4j:jul-to-slf4j",     version.ref = "slf4j" }
+#jcl-over-slf4j  = { module = "org.slf4j:jcl-over-slf4j",   version.ref = "slf4j" }
 
 # Testing (JUnit 5 via BOM + Jupiter)
 # BOM
@@ -48,7 +50,7 @@ archunit-junit          = { module = "com.tngtech.archunit:archunit-junit5", ver
 mockito-bom           = { module = "org.mockito:mockito-bom", version.ref = "mockito" }
 mockito-core          = { module = "org.mockito:mockito-core" }
 mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter" }
-mockito-inline        = { module = "org.mockito:mockito-inline" }
+#mockito-inline        = { module = "org.mockito:mockito-inline" }
 
 # ByteBuddy agent
 byte-buddy-agent = { module = "net.bytebuddy:byte-buddy-agent", version.ref = "bytebuddy" }

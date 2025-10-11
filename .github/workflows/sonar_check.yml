@@ -1,0 +1,26 @@
+name: sonar_check.yml
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Build & Test
+        run: ./gradlew build
+
+      - name: SonarCloud
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_CLOUD_TOKEN }}
+        run: ./gradlew jacocoTestReport sonarqube -Dsonar.login=$SONAR_TOKEN

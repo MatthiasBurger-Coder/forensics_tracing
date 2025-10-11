@@ -1,10 +1,9 @@
-import kotlin.text.isNotBlank
-
 plugins {
     `java-library`
     `java-gradle-plugin`
     id("com.gradle.plugin-publish") version "2.0.0"
     id("jacoco")
+    alias(libs.plugins.sonar.qube.gradle.plugin)
 }
 
 val aspectjAgent by configurations.creating
@@ -79,7 +78,7 @@ tasks.withType<Javadoc>().configureEach {
 
 val testLogFile = layout.buildDirectory.file("test-logs/forensics-btmgen.log")
 
-fun javaAgentArg(file: java.io.File): String {
+fun javaAgentArg(file: File): String {
     val p = file.absolutePath
     // Falls Leerzeichen/Sonderzeichen: komplett in Anführungszeichen setzen
     val quoted = if (p.any { it.isWhitespace() }) "\"$p\"" else p
@@ -195,7 +194,7 @@ gradlePlugin {
 
 // Resolve Mockito/ByteBuddy agent jar path from the test runtime classpath lazily
 val mockitoAgentJar: Provider<String> = configurations.named("testRuntimeClasspath").map { cfg ->
-    fun java.io.File.isJarNamed(prefix: String) = name.startsWith(prefix) && name.endsWith(".jar")
+    fun File.isJarNamed(prefix: String) = name.startsWith(prefix) && name.endsWith(".jar")
 
     val jar = cfg.files.firstOrNull { it.isJarNamed("mockito-inline") }
         ?: cfg.files.firstOrNull { it.isJarNamed("byte-buddy-agent") }
@@ -224,6 +223,10 @@ tasks.withType<Test>().configureEach {
     systemProperty("com.athaydes.spockframework.report.projectVersion", "2.0-SNAPSHOT")
     systemProperty("com.athaydes.spockframework.report.outputFormats", "html")
     systemProperty("com.athaydes.spockframework.report.showCodeBlocks", "true")
+}
+
+jacoco {
+    toolVersion = libs.versions.jacoco.get()
 }
 
 tasks.jacocoTestReport {
@@ -272,4 +275,17 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
 
 tasks.check {
     dependsOn("jacocoTestCoverageVerification")
+}
+
+sonarqube {
+    properties {
+        property("sonar.projectKey", "MatthiasBurger-Coder_forensics_tracing")
+        property("sonar.organization", "matthiasburger-coder")
+        property("sonar.host.url", "https://sonarcloud.io")
+        // Coverage-Report-Pfad:
+        property(
+            "sonar.coverage.jacoco.xmlReportPaths",
+            layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml").get().asFile.absolutePath
+        )
+    }
 }
