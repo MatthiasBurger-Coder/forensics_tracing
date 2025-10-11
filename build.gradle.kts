@@ -206,12 +206,6 @@ val mockitoAgentJar: Provider<String> = configurations.named("testRuntimeClasspa
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 
-    // Prefer passing Mockito as a javaagent instead of relying on self-attachment (future-JDK-safe)
-    val agentPath = mockitoAgentJar.get()
-    if (agentPath.isNotBlank()) {
-        jvmArgs("-javaagent:$agentPath")
-    }
-
     // Disabling CDS avoids noisy warnings when agents append to bootstrap classpath on some JDKs
     jvmArgs("-Xshare:off")
     finalizedBy(tasks.jacocoTestReport)
