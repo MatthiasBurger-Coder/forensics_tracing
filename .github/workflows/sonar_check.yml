@@ -23,4 +23,4 @@ jobs:
       - name: SonarCloud
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_CLOUD_TOKEN }}
-        run: ./gradlew jacocoTestReport sonarqube -Dsonar.login=$SONAR_TOKEN
+        run: ./gradlew jacocoTestReport sonar
