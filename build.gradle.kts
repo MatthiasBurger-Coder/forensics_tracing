@@ -193,19 +193,8 @@ gradlePlugin {
     }
 }
 
-// Resolve Mockito agent jar path from the test runtime classpath lazily
-val mockitoAgentJar: Provider<String> = configurations.named("testRuntimeClasspath").map { cfg ->
-    cfg.files.firstOrNull { it.name.startsWith("mockito-core") && it.name.endsWith(".jar") }?.absolutePath ?: ""
-}
-
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
-
-    // Prefer passing Mockito as a javaagent instead of relying on self-attachment (future-JDK-safe)
-    val agentPath = mockitoAgentJar.get()
-    if (agentPath.isNotBlank()) {
-        jvmArgs("-javaagent:$agentPath")
-    }
 
     // Disabling CDS avoids noisy warnings when agents append to bootstrap classpath on some JDKs
     jvmArgs("-Xshare:off")
