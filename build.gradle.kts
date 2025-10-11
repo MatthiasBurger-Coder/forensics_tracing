@@ -193,9 +193,14 @@ gradlePlugin {
     }
 }
 
-// Resolve Mockito agent jar path from the test runtime classpath lazily
+// Resolve Mockito/ByteBuddy agent jar path from the test runtime classpath lazily
 val mockitoAgentJar: Provider<String> = configurations.named("testRuntimeClasspath").map { cfg ->
-    cfg.files.firstOrNull { it.name.startsWith("mockito-core") && it.name.endsWith(".jar") }?.absolutePath ?: ""
+    fun java.io.File.isJarNamed(prefix: String) = name.startsWith(prefix) && name.endsWith(".jar")
+
+    val jar = cfg.files.firstOrNull { it.isJarNamed("mockito-inline") }
+        ?: cfg.files.firstOrNull { it.isJarNamed("byte-buddy-agent") }
+
+    jar?.absolutePath ?: ""
 }
 
 tasks.withType<Test>().configureEach {
