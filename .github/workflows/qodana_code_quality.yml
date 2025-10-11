@@ -66,6 +66,6 @@ jobs:
           upload-result: true
           args: --config,qodana.yaml
         env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_2116466718 }}
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_1815737186 }}
           QODANA_ENDPOINT: https://qodana.cloud
 
