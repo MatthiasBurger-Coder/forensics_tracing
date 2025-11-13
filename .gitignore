@@ -5,3 +5,4 @@ build/
 **/gradle/wrapper/gradle-wrapper.jar
 /forensics-btmgen/.kotlin/
 /forensics-btmgen/logs/
+/.idea/dictionaries/project.xml
