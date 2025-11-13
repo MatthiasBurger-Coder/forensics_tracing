@@ -2,34 +2,17 @@ package de.burger.forensics.adapters.javaparser;
 
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.Range;
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.RecordDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.FieldAccessExpr;
-import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithName;
-import com.github.javaparser.ast.expr.LambdaExpr;
-import com.github.javaparser.ast.stmt.CatchClause;
-import com.github.javaparser.ast.stmt.IfStmt;
-import com.github.javaparser.ast.stmt.ReturnStmt;
-import com.github.javaparser.ast.stmt.SwitchEntry;
-import com.github.javaparser.ast.stmt.SwitchStmt;
-import com.github.javaparser.ast.stmt.ThrowStmt;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
-import de.burger.forensics.domain.model.RuleTemplate;
+import de.burger.forensics.adaptersupport.javaparser.DefaultConditionRenderingStrategy;
+import de.burger.forensics.adaptersupport.javaparser.InstanceFieldNormalizer;
+import de.burger.forensics.adaptersupport.javaparser.MethodEventExtractor;
 import de.burger.forensics.domain.model.ScanEvent;
-import de.burger.forensics.domain.model.SourceLocation;
 import de.burger.forensics.domain.port.out.CodeScanPort;
 
 import java.io.IOException;
@@ -41,14 +24,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import jakarta.annotation.Nonnull;
@@ -57,6 +33,16 @@ import jakarta.annotation.Nonnull;
  * JavaParser-backed implementation of {@link CodeScanPort}.
  */
 public final class JavaParserScanner implements CodeScanPort {
+
+    private final MethodEventExtractor methodEventExtractor;
+
+    public JavaParserScanner() {
+        this(new MethodEventExtractor(new DefaultConditionRenderingStrategy(new InstanceFieldNormalizer())));
+    }
+
+    public JavaParserScanner(MethodEventExtractor methodEventExtractor) {
+        this.methodEventExtractor = methodEventExtractor;
+    }
 
     @Override
     public Stream<ScanEvent> scan(Path root) {
@@ -93,7 +79,10 @@ public final class JavaParserScanner implements CodeScanPort {
                     try {
                         CompilationUnit cu = StaticJavaParser.parse(file);
                         String pkg = cu.getPackageDeclaration().map(NodeWithName::getNameAsString).orElse("");
-                        cu.findAll(MethodDeclaration.class).forEach(md -> collectMethodEvents(md, pkg, events));
+                        cu.findAll(MethodDeclaration.class)
+                            .stream()
+                            .map(md -> methodEventExtractor.collectMethodEvents(md, pkg))
+                            .forEach(events::addAll);
                     } catch (IOException | RuntimeException ignored) {
                         // Ignore parsing issues to keep scanning resilient.
                     }
@@ -104,262 +93,5 @@ public final class JavaParserScanner implements CodeScanPort {
             // Ignore traversal failures to avoid failing the build on single-file issues.
         }
         return events.stream();
-    }
-
-    private void collectMethodEvents(MethodDeclaration declaration,
-                                     String pkg,
-                                     List<ScanEvent> events) {
-        String typeName = resolveEnclosingType(declaration);
-        if (typeName.isEmpty()) {
-            return;
-        }
-        String fqcn = pkg.isEmpty() ? typeName : pkg + "." + typeName;
-        String methodName = declaration.getNameAsString();
-        String signature = declaration.getSignature().asString();
-        String returnType = declaration.getType().asString();
-
-        Map<String, Integer> parameterIndexes = parameterIndexes(declaration);
-        Set<String> localVariables = localVariableNames(declaration);
-
-        declaration.findAll(IfStmt.class).forEach(ifStmt -> {
-            IfStmt current = ifStmt;
-            while (current != null) {
-                var condition = current.getCondition();
-                int line = condition.getBegin().map(p -> p.line).orElse(-1);
-                SourceLocation location = new SourceLocation(fqcn, methodName, line);
-                String renderedCondition = renderCondition(condition, parameterIndexes, localVariables);
-                events.add(new ScanEvent(location, signature, RuleTemplate.IF_TRUE, renderedCondition, "java", returnType));
-                events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, renderedCondition, "java", returnType));
-                var elseStmt = current.getElseStmt().orElse(null);
-                if (elseStmt instanceof IfStmt next) {
-                    current = next;
-                } else {
-                    current = null;
-                }
-            }
-        });
-
-        declaration.findAll(SwitchStmt.class).forEach(sw -> {
-            int line = sw.getSelector().getBegin().map(p -> p.line).orElse(-1);
-            SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            String selector = renderCondition(sw.getSelector(), parameterIndexes, localVariables);
-            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH, selector, "java", returnType));
-        });
-
-        declaration.findAll(SwitchEntry.class).forEach(entry -> {
-            int line = entry.getBegin().map(p -> p.line).orElse(-1);
-            String label = renderSwitchLabel(entry, parameterIndexes, localVariables);
-            SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            events.add(new ScanEvent(location, signature, RuleTemplate.SWITCH_CASE, label, "java", returnType));
-        });
-
-        declaration.findAll(ReturnStmt.class).forEach(ret -> {
-            int line = ret.getBegin().map(p -> p.line).orElse(-1);
-            SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            String renderedReturn = renderReturn(ret, parameterIndexes, localVariables);
-            events.add(new ScanEvent(location, signature, RuleTemplate.RETURN, renderedReturn, "java", returnType));
-        });
-
-        declaration.findAll(ThrowStmt.class).forEach(th -> {
-            int line = th.getBegin().map(p -> p.line).orElse(-1);
-            SourceLocation location = new SourceLocation(fqcn, methodName, line);
-            String renderedThrow = renderCondition(th.getExpression(), parameterIndexes, localVariables);
-            events.add(new ScanEvent(location, signature, RuleTemplate.THROW, renderedThrow, "java", returnType));
-        });
-    }
-
-    private String resolveEnclosingType(MethodDeclaration declaration) {
-        LinkedList<String> parts = new LinkedList<>();
-        Node current = declaration.getParentNode().orElse(null);
-        while (current != null) {
-            switch (current) {
-                case ClassOrInterfaceDeclaration cls -> parts.addFirst(cls.getNameAsString());
-                case EnumDeclaration en -> parts.addFirst(en.getNameAsString());
-                case RecordDeclaration rec -> parts.addFirst(rec.getNameAsString());
-                default -> {
-                }
-            }
-            current = current.getParentNode().orElse(null);
-        }
-        return String.join("$", parts);
-    }
-
-    private Map<String, Integer> parameterIndexes(MethodDeclaration declaration) {
-        Map<String, Integer> indexes = new LinkedHashMap<>();
-        for (int i = 0; i < declaration.getParameters().size(); i++) {
-            String name = declaration.getParameter(i).getNameAsString();
-            if (!name.isBlank()) {
-                indexes.put(name, i + 1);
-            }
-        }
-        return indexes;
-    }
-
-    private String renderCondition(Expression expression,
-                                   Map<String, Integer> parameterIndexes,
-                                   Set<String> localVariables) {
-        return sanitizeExpression(expression, parameterIndexes, localVariables).toString();
-    }
-
-    private String renderReturn(ReturnStmt stmt,
-                                Map<String, Integer> parameterIndexes,
-                                Set<String> localVariables) {
-        ReturnStmt clone = stmt.clone();
-        clone.getExpression().ifPresent(expr -> clone.setExpression(sanitizeExpression(expr, parameterIndexes, localVariables)));
-        return clone.toString();
-    }
-
-    private String renderSwitchLabel(SwitchEntry entry,
-                                     Map<String, Integer> parameterIndexes,
-                                     Set<String> localVariables) {
-        SwitchEntry clone = entry.clone();
-        for (int i = 0; i < clone.getLabels().size(); i++) {
-            Expression label = clone.getLabels().get(i);
-            clone.getLabels().set(i, sanitizeExpression(label, parameterIndexes, localVariables));
-        }
-        if (clone.getLabels().isEmpty()) {
-            return "default";
-        }
-        return clone.getLabels().stream()
-                .map(Node::toString)
-                .map(String::trim)
-                .collect(Collectors.joining(" | "));
-    }
-
-    private Expression sanitizeExpression(Expression expression,
-                                          Map<String, Integer> parameterIndexes,
-                                          Set<String> localVariables) {
-        Set<Range> instanceFieldRanges = identifyInstanceFieldRanges(expression, localVariables);
-        Expression clone = expression.clone();
-        clone.walk(NameExpr.class, name -> {
-            Integer index = parameterIndexes.get(name.getNameAsString());
-            if (index != null) {
-                name.setName("$" + index);
-                return;
-            }
-            if (isLocalVariable(name, localVariables)) {
-                name.setName("$" + name.getNameAsString());
-                return;
-            }
-            promoteInstanceFieldAccess(name, instanceFieldRanges);
-        });
-        return clone;
-    }
-
-    private void promoteInstanceFieldAccess(NameExpr name, Set<Range> instanceFieldRanges) {
-        if (name.getRange().filter(instanceFieldRanges::contains).isPresent()) {
-            String identifier = name.getNameAsString();
-            name.replace(new FieldAccessExpr(new NameExpr("$this"), identifier));
-        }
-    }
-
-    private Set<Range> identifyInstanceFieldRanges(Expression expression, Set<String> localVariables) {
-        Set<Range> ranges = new LinkedHashSet<>();
-        expression.walk(NameExpr.class, name -> {
-            if (resolvesToInstanceField(name) || isLikelyInstanceField(name, name.getNameAsString(), localVariables)) {
-                name.getRange().ifPresent(ranges::add);
-            }
-        });
-        return ranges;
-    }
-
-    private boolean resolvesToInstanceField(NameExpr name) {
-        try {
-            var resolved = name.resolve();
-            return resolved.isField() && !resolved.asField().isStatic();
-        } catch (RuntimeException ignored) {
-            return false;
-        }
-    }
-
-    private boolean isLikelyInstanceField(NameExpr name, String identifier, Set<String> localVariables) {
-        if (identifier.isEmpty()) {
-            return false;
-        }
-        if (name.getParentNode().filter(FieldAccessExpr.class::isInstance).isPresent()) {
-            return false;
-        }
-        if (shadowsParameter(name, identifier)) {
-            return false;
-        }
-        if (shadowsLambdaParameter(name, identifier)) {
-            return false;
-        }
-        if (shadowsCatchParameter(name, identifier)) {
-            return false;
-        }
-        if (localVariables.contains(identifier)) {
-            return false;
-        }
-        return declaresInstanceField(name, identifier);
-    }
-
-    private boolean shadowsParameter(NameExpr name, String identifier) {
-        return findAncestor(name, MethodDeclaration.class)
-            .map(MethodDeclaration::getParameters)
-            .map(params -> params.stream().map(Parameter::getNameAsString).anyMatch(identifier::equals))
-            .orElse(false);
-    }
-
-    private boolean shadowsLambdaParameter(NameExpr name, String identifier) {
-        return findAncestor(name, LambdaExpr.class)
-            .map(lambda -> lambda.getParameters().stream()
-                .map(Parameter::getNameAsString)
-                .anyMatch(identifier::equals))
-            .orElse(false);
-    }
-
-    private boolean shadowsCatchParameter(NameExpr name, String identifier) {
-        return findAncestor(name, CatchClause.class)
-            .map(catchClause -> catchClause.getParameter().getNameAsString().equals(identifier))
-            .orElse(false);
-    }
-
-    private boolean isLocalVariable(NameExpr name, Set<String> localVariables) {
-        String identifier = name.getNameAsString();
-        if (identifier.isEmpty()) {
-            return false;
-        }
-        return localVariables.contains(identifier);
-    }
-
-    private Set<String> localVariableNames(MethodDeclaration declaration) {
-        return declaration.findAll(VariableDeclarator.class, var ->
-                    var.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true))
-                .stream()
-                .map(VariableDeclarator::getNameAsString)
-                .filter(name -> !name.isBlank())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-    }
-
-    private boolean declaresInstanceField(NameExpr name, String identifier) {
-        if (identifier.isEmpty()) {
-            return false;
-        }
-        return findAncestor(name, ClassOrInterfaceDeclaration.class)
-            .map(decl -> decl.getFields().stream()
-                .filter(field -> !field.isStatic())
-                .flatMap(field -> field.getVariables().stream())
-                .map(VariableDeclarator::getNameAsString)
-                .anyMatch(identifier::equals))
-            .or(() -> findAncestor(name, EnumDeclaration.class)
-                .map(decl -> decl.getFields().stream()
-                    .filter(field -> !field.isStatic())
-                    .flatMap(field -> field.getVariables().stream())
-                    .map(VariableDeclarator::getNameAsString)
-                    .anyMatch(identifier::equals)))
-            .or(() -> findAncestor(name, RecordDeclaration.class)
-                .map(decl -> decl.getFields().stream()
-                    .flatMap(field -> field.getVariables().stream())
-                    .map(VariableDeclarator::getNameAsString)
-                    .anyMatch(identifier::equals)))
-            .orElse(false);
-    }
-
-    private <T extends Node> Optional<T> findAncestor(NameExpr name, Class<T> type) {
-        return name.stream(Node.TreeTraversal.PARENTS)
-            .filter(type::isInstance)
-            .map(type::cast)
-            .findFirst();
     }
 }

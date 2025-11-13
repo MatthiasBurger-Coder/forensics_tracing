@@ -43,6 +43,7 @@ public class HexagonRulesTest {
                             "com.github.javaparser..",
                             "org.springframework..",
                             "de.burger.forensics.adapters..",
+                            "de.burger.forensics.adaptersupport..",
                             "de.burger.forensics.application..",
                             "de.burger.forensics.domain..",
                             "de.burger.forensics.infrastructure..");
