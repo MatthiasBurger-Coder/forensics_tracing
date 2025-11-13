@@ -1,10 +1,5 @@
 package de.burger.forensics.plugin.btmgen.writer;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -17,11 +12,15 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Stream;
+
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class BtmFileWriterTest {
 
@@ -38,7 +37,7 @@ class BtmFileWriterTest {
         return Stream.of(
                 new WriterVariant(
                         "Explicit clock constructor",
-                        (clock, output) -> new BtmFileWriter(clock, output),
+                        BtmFileWriter::new,
                         true),
                 new WriterVariant(
                         "System clock constructor",
@@ -80,7 +79,7 @@ class BtmFileWriterTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("writerVariants")
-    void writeCreatesMissingDirectories(WriterVariant writerVariant) throws IOException {
+    void writeCreatesMissingDirectories(WriterVariant writerVariant) {
         Path nestedFile = tempDir.resolve("deep/nested/dir/rules.btm");
         var writer = writerVariant.factory().create(fixedClock(), nestedFile);
 
@@ -110,7 +109,7 @@ class BtmFileWriterTest {
         var writer = writerVariant.factory().create(fixedClock(), output);
 
         UncheckedIOException exception = assertThrows(UncheckedIOException.class, () -> writer.write(List.of("RULE test")));
-        assertTrue(exception.getCause() instanceof IOException, "The original IOException should be preserved as cause");
+        assertNotNull(exception.getCause(), "The original IOException should be preserved as cause");
     }
 
     @Test
@@ -213,14 +212,14 @@ class BtmFileWriterTest {
 
     private record WriterVariant(String name, WriterFactory factory, boolean deterministicTimestamp) {
         @Override
-        public String toString() {
+        public @NotNull String toString() {
             return name;
         }
     }
 
     private record RuleVariant(String name, List<String> rules, List<String> expectedSuffix) {
         @Override
-        public String toString() {
+        public @NotNull String toString() {
             return name;
         }
     }

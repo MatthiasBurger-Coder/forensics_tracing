@@ -16,7 +16,7 @@ import java.util.Objects;
 public final class BtmFileWriter {
 
     private final Path output;
-    private final Clock clock; // may be null if ctor without clock is used
+    private final Clock clock; // may be null if ctor without a clock is used
 
     /** Preferred constructor keeping time explicit. */
     public BtmFileWriter(Clock clock, Path output) {
@@ -24,7 +24,7 @@ public final class BtmFileWriter {
         this.output = Objects.requireNonNull(output, "output");
     }
 
-    /** Backward-compatible constructor (uses system clock). */
+    /** Backward-compatible constructor (uses a system clock). */
     public BtmFileWriter(Path output) {
         this(Clock.systemDefaultZone(), output);
     }
