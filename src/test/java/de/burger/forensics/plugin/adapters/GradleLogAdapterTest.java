@@ -29,4 +29,39 @@ class GradleLogAdapterTest {
         verify(loggerMock, times(1)).lifecycle(testMessage);
         verifyNoMoreInteractions(loggerMock);
     }
+
+    @Test
+    void testWarn_logsMessageWithWarnLevel() {
+        Logger loggerMock = Mockito.mock(Logger.class);
+        GradleLogAdapter gradleLogAdapter = new GradleLogAdapter(loggerMock);
+        String testMessage = "This is a warn message";
+
+        gradleLogAdapter.warn(testMessage);
+
+        verify(loggerMock, times(1)).warn(testMessage);
+        verifyNoMoreInteractions(loggerMock);
+    }
+
+    @Test
+    void testWarn_handlesNullMessageGracefully() {
+        Logger loggerMock = Mockito.mock(Logger.class);
+        GradleLogAdapter gradleLogAdapter = new GradleLogAdapter(loggerMock);
+
+        gradleLogAdapter.warn(null);
+
+        verify(loggerMock).warn(null);
+        verifyNoMoreInteractions(loggerMock);
+    }
+
+    @Test
+    void testDebug_logsMessageWithDebugLevel() {
+        Logger loggerMock = Mockito.mock(Logger.class);
+        GradleLogAdapter gradleLogAdapter = new GradleLogAdapter(loggerMock);
+        String testMessage = "This is a debug message";
+
+        gradleLogAdapter.debug(testMessage);
+
+        verify(loggerMock, times(1)).debug(testMessage);
+        verifyNoMoreInteractions(loggerMock);
+    }
 }
