@@ -88,6 +88,20 @@ class BtmFileWriterTest {
         assertTrue(Files.exists(nestedFile), "Writer should create parent directories on demand");
     }
 
+    @Test
+    void writeCreatesFileIfMissing() throws IOException {
+        Clock clock = Clock.systemUTC();
+        Path outFile = tempDir.resolve("newfile.btm");
+
+        assertFalse(Files.exists(outFile));
+
+        BtmFileWriter writer = new BtmFileWriter(clock, outFile);
+        writer.write(List.of());
+
+        assertTrue(Files.exists(outFile), "Writer must create file automatically");
+        assertHeaderSection(Files.readAllLines(outFile));
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("deterministicVariants")
     void writeUsesProvidedClockForTimestamp(WriterVariant writerVariant) throws IOException {
@@ -110,6 +124,37 @@ class BtmFileWriterTest {
 
         UncheckedIOException exception = assertThrows(UncheckedIOException.class, () -> writer.write(List.of("RULE test")));
         assertNotNull(exception.getCause(), "The original IOException should be preserved as cause");
+    }
+
+    @Test
+    void writeTruncatesExistingContentBeforeWriting() throws IOException {
+        Path output = tempDir.resolve("truncate/rules.btm");
+        Files.createDirectories(output.getParent());
+        Files.writeString(output, "OUTDATED CONTENT");
+
+        var writer = new BtmFileWriter(fixedClock(), output);
+        writer.write(List.of("RULE overwritten"));
+
+        List<String> lines = Files.readAllLines(output);
+        assertHeaderSection(lines);
+        assertFalse(lines.stream().anyMatch(line -> line.contains("OUTDATED")),
+                "TRUNCATE_EXISTING should remove the previous file content");
+        assertEquals("RULE overwritten", lines.get(3));
+    }
+
+    @Test
+    void writeSeparatesRuleBlocksWithBlankLines() throws IOException {
+        Path output = tempDir.resolve("ruleSpacing/rules.btm");
+        var writer = new BtmFileWriter(fixedClock(), output);
+
+        writer.write(List.of("RULE alpha", "RULE beta"));
+
+        List<String> lines = Files.readAllLines(output);
+        assertHeaderSection(lines);
+        assertEquals("RULE alpha", lines.get(3));
+        assertEquals("", lines.get(4));
+        assertEquals("RULE beta", lines.get(5));
+        assertEquals("", lines.get(6));
     }
 
     @Test
