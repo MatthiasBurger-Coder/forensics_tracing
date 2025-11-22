@@ -7,7 +7,6 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
@@ -29,13 +28,7 @@ import java.util.stream.Collectors;
 /**
  * Extracts {@link ScanEvent}s from JavaParser AST nodes.
  */
-public final class MethodEventExtractor {
-
-    private final ConditionRenderingStrategy renderingStrategy;
-
-    public MethodEventExtractor(ConditionRenderingStrategy renderingStrategy) {
-        this.renderingStrategy = renderingStrategy;
-    }
+public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy) {
 
     public List<ScanEvent> collectMethodEvents(MethodDeclaration declaration, String pkg) {
         List<ScanEvent> events = new ArrayList<>();
@@ -112,11 +105,11 @@ public final class MethodEventExtractor {
 
     Set<String> localVariableNames(MethodDeclaration declaration) {
         return declaration.findAll(VariableDeclarator.class, var ->
-                var.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true))
-            .stream()
-            .map(VariableDeclarator::getNameAsString)
-            .filter(name -> !name.isBlank())
-            .collect(Collectors.toCollection(LinkedHashSet::new));
+                        var.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true))
+                .stream()
+                .map(VariableDeclarator::getNameAsString)
+                .filter(name -> !name.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     String resolveEnclosingType(MethodDeclaration declaration) {

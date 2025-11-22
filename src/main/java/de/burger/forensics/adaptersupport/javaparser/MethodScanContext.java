@@ -9,11 +9,8 @@ import java.util.Set;
 /**
  * Contextual information shared across rendering operations for a method.
  */
-public final class MethodScanContext {
-
-    private final MethodDeclaration declaration;
-    private final Map<String, Integer> parameterIndexes;
-    private final Set<String> localVariables;
+public record MethodScanContext(MethodDeclaration declaration, Map<String, Integer> parameterIndexes,
+                                Set<String> localVariables) {
 
     public MethodScanContext(MethodDeclaration declaration,
                              Map<String, Integer> parameterIndexes,
@@ -21,18 +18,6 @@ public final class MethodScanContext {
         this.declaration = Objects.requireNonNull(declaration, "declaration");
         this.parameterIndexes = Map.copyOf(parameterIndexes);
         this.localVariables = Set.copyOf(localVariables);
-    }
-
-    public MethodDeclaration declaration() {
-        return declaration;
-    }
-
-    public Map<String, Integer> parameterIndexes() {
-        return parameterIndexes;
-    }
-
-    public Set<String> localVariables() {
-        return localVariables;
     }
 
     public Integer parameterIndex(String name) {

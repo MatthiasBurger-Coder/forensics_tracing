@@ -22,11 +22,11 @@ public final class SafeModeDecorator implements ConditionStrategy {
     public String toBytemanIf() {
         // Calls SafeEval.eval(ruleId, originalExpressionAsString, delegateExpressionBoolean)
         // The Byteman condition becomes: SafeEval.eval("ruleId","expr", (original))
-        final String inner = delegate.toBytemanIf();
+        final var inner = delegate.toBytemanIf();
         if (inner == null || inner.isBlank()) {
             return inner;
         }
-        final String escaped = inner.replace("\\", "\\\\").replace("\"", "\\\"");
+        final var escaped = inner.replace("\\", "\\\\").replace("\"", "\\\"");
         return helperFqcn
                 + ".eval(\"" + ruleId + "\",\"" + escaped + "\"," +
                 "new java.util.function.BooleanSupplier(){public boolean getAsBoolean(){return (" + inner + ");}})";

@@ -11,10 +11,8 @@ import java.util.Objects;
 /**
  * Decorator for {@link ConditionRenderingStrategy} that collects rendered fragments for debugging.
  */
-public final class TracingConditionRenderingStrategy implements ConditionRenderingStrategy {
-
-    private final ConditionRenderingStrategy delegate;
-    private final List<String> traces;
+public record TracingConditionRenderingStrategy(ConditionRenderingStrategy delegate,
+                                                List<String> traces) implements ConditionRenderingStrategy {
 
     public TracingConditionRenderingStrategy(ConditionRenderingStrategy delegate) {
         this(delegate, new ArrayList<>());
@@ -44,10 +42,6 @@ public final class TracingConditionRenderingStrategy implements ConditionRenderi
         String rendered = delegate.renderSwitchLabel(entry, context);
         record("switch", rendered);
         return rendered;
-    }
-
-    public List<String> traces() {
-        return traces;
     }
 
     void record(String kind, String renderedValue) {

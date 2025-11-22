@@ -13,13 +13,8 @@ import java.util.stream.Collectors;
 /**
  * Default rendering strategy replicating the legacy scanner behaviour.
  */
-public final class DefaultConditionRenderingStrategy implements ConditionRenderingStrategy {
-
-    private final InstanceFieldNormalizer instanceFieldNormalizer;
-
-    public DefaultConditionRenderingStrategy(InstanceFieldNormalizer instanceFieldNormalizer) {
-        this.instanceFieldNormalizer = instanceFieldNormalizer;
-    }
+public record DefaultConditionRenderingStrategy(
+        InstanceFieldNormalizer instanceFieldNormalizer) implements ConditionRenderingStrategy {
 
     @Override
     public String renderCondition(Expression condition, MethodScanContext context) {
@@ -44,9 +39,9 @@ public final class DefaultConditionRenderingStrategy implements ConditionRenderi
             return "default";
         }
         return clone.getLabels().stream()
-            .map(Node::toString)
-            .map(String::trim)
-            .collect(Collectors.joining(" | "));
+                .map(Node::toString)
+                .map(String::trim)
+                .collect(Collectors.joining(" | "));
     }
 
     Expression sanitizeExpression(Expression expression, MethodScanContext context) {
