@@ -23,7 +23,8 @@ class IfRuleStrategyTest {
         String rule = new IfTrueRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("IF eval(\"rule-1\", \"$this.policy.newEnabled() && $this.policy.routePredicate().test($1)\", () -> $this.policy.newEnabled() && $this.policy.routePredicate().test($1))");
+                .contains("IF eval(\"rule-1\", \"$this.policy.newEnabled() && $this.policy.routePredicate().test($1)\", $this.policy.newEnabled() && $this.policy.routePredicate().test($1))")
+                .doesNotContain("() ->");
     }
 
     @Test
@@ -42,6 +43,7 @@ class IfRuleStrategyTest {
         String rule = new IfFalseRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("IF eval(\"rule-2\", \"false\", () -> false)");
+                .contains("IF eval(\"rule-2\", \"false\", false)")
+                .doesNotContain("() ->");
     }
 }
