@@ -108,6 +108,7 @@ class IfRuleStrategyTest {
 
         assertThat(rule)
                 .contains("IF eval(\"rule-5\", \"false\", false)")
+
                 .doesNotContain("ENABLE_LOG")
                 .doesNotContain("() ->");
     }

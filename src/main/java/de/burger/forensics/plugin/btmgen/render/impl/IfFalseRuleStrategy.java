@@ -11,6 +11,7 @@ public final class IfFalseRuleStrategy extends AbstractBytemanStrategy implement
         String ruleId = safeId(p.id());
         String condition = sanitizeCondition(p.condition());
         String booleanExpr = (condition == null) ? "false" : "!(" + condition + ")";
+
         String exprString = booleanExpr;
         String cond = guardedCondition(ruleId, exprString, booleanExpr);
         return """
