@@ -15,7 +15,7 @@ class SafeModeDecoratorTest {
 
         assertThat(decorator.toBytemanIf())
             .isEqualTo(
-                "org.example.SafeEval.eval(\"rule-1\",\"value > 0\",(value > 0))"
+                "org.example.SafeEval.eval(\"rule-1\",\"value > 0\", () -> (value > 0))"
             );
     }
 

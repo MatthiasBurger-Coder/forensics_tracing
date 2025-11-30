@@ -20,15 +20,15 @@ public final class SafeModeDecorator implements ConditionStrategy {
 
     @Override
     public String toBytemanIf() {
-        // Calls SafeEval.eval(ruleId, originalExpressionAsString, delegateExpressionBoolean)
-        // The Byteman condition becomes: SafeEval.eval("ruleId","expr", (original))
+        // Calls SafeEval.eval(ruleId, originalExpressionAsString, () -> delegateExpressionBoolean)
+        // The Byteman condition becomes: SafeEval.eval("ruleId","expr", () -> (original))
         final var inner = delegate.toBytemanIf();
         if (inner == null || inner.isBlank()) {
             return inner;
         }
         final var escaped = inner.replace("\\", "\\\\").replace("\"", "\\\"");
         return helperFqcn
-                + ".eval(\"" + ruleId + "\",\"" + escaped + "\"," +
+                + ".eval(\"" + ruleId + "\",\"" + escaped + "\", () -> " +
                 "(" + inner + "))";
     }
 }
