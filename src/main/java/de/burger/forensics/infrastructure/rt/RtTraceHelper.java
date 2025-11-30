@@ -1,5 +1,7 @@
 package de.burger.forensics.infrastructure.rt;
 
+import java.util.Objects;
+
 import org.jboss.byteman.rule.Rule;
 import org.jboss.byteman.rule.helper.Helper;
 
@@ -53,6 +55,8 @@ public class RtTraceHelper extends Helper {
     }
 
     public static boolean eval(String ruleId, String expression, boolean value) {
+        String label = Objects.toString(ruleId, "") + ":" + Objects.toString(expression, "");
+        RtTrace.branch(label, value);
         return value;
     }
 }

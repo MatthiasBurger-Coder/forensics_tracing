@@ -24,6 +24,7 @@ class IfRuleStrategyTest {
 
         assertThat(rule)
                 .contains("IF eval(\"rule-1\", \"$this.policy.newEnabled() && $this.policy.routePredicate().test($1)\", $this.policy.newEnabled() && $this.policy.routePredicate().test($1))")
+                .doesNotContain("ENABLE_LOG")
                 .doesNotContain("() ->");
     }
 
@@ -44,6 +45,28 @@ class IfRuleStrategyTest {
 
         assertThat(rule)
                 .contains("IF eval(\"rule-2\", \"false\", false)")
+                .doesNotContain("ENABLE_LOG")
+                .doesNotContain("() ->");
+    }
+
+    @Test
+    void usesOriginalConditionStringForFalseBranchEval() {
+        RuleParams params = new RuleParams(
+                "rule-3",
+                "com.acme.SwitchingOrderApi",
+                "sumGross",
+                "(Ljava/lang/String;)D",
+                "SwitchingOrderApi#sumGross",
+                "$1 != null && $1 > 0",
+                null,
+                RuleParams.DEFAULT_HELPER_FQN
+        );
+
+        String rule = new IfFalseRuleStrategy().render(params);
+
+        assertThat(rule)
+                .contains("IF eval(\"rule-3\", \"$1 != null && $1 > 0\", !($1 != null && $1 > 0))")
+                .doesNotContain("ENABLE_LOG")
                 .doesNotContain("() ->");
     }
 }

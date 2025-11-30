@@ -12,7 +12,14 @@ public abstract class AbstractBytemanStrategy {
     protected static String or(String fallback, String value) {
         return (fallback != null && !fallback.isBlank()) ? fallback : value;
     }
-    protected static String esc(String s) { return s == null ? "" : s.replace("\"", "\\\""); }
+    protected static String esc(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
+    }
     protected static String methodSig(String name, String desc) { return name + (desc != null ? desc : ""); }
 
     protected static String guardedCondition(String ruleId, String expression, String evaluation) {
