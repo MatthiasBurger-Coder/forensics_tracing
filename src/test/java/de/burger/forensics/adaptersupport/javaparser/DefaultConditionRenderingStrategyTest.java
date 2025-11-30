@@ -93,6 +93,30 @@ class DefaultConditionRenderingStrategyTest {
         assertThat(rendered).isEqualTo("$1 > $this.threshold");
     }
 
+    @Test
+    void qualifiesStaticFieldAccess() {
+        MethodDeclaration declaration = parseMethod("""
+            class Sample {
+                private static Sample INSTANCE;
+                Sample getInstance() {
+                    if (INSTANCE == null) {
+                        INSTANCE = new Sample();
+                    }
+                    return INSTANCE;
+                }
+            }
+            """);
+        MethodScanContext context = new MethodScanContext(
+            declaration,
+            helperExtractor.parameterIndexes(declaration),
+            helperExtractor.localVariableNames(declaration));
+        Expression condition = declaration.findFirst(IfStmt.class).orElseThrow().getCondition();
+
+        String rendered = strategy.renderCondition(condition, context);
+
+        assertThat(rendered).isEqualTo("$CLASS.INSTANCE == null");
+    }
+
     private MethodDeclaration parseMethod(String source) {
         return StaticJavaParser.parse(source).findFirst(MethodDeclaration.class).orElseThrow();
     }

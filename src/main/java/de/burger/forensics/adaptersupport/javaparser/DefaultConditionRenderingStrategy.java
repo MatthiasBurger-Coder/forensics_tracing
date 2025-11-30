@@ -14,7 +14,12 @@ import java.util.stream.Collectors;
  * Default rendering strategy replicating the legacy scanner behaviour.
  */
 public record DefaultConditionRenderingStrategy(
-        InstanceFieldNormalizer instanceFieldNormalizer) implements ConditionRenderingStrategy {
+        InstanceFieldNormalizer instanceFieldNormalizer,
+        StaticFieldQualifier staticFieldQualifier) implements ConditionRenderingStrategy {
+
+    public DefaultConditionRenderingStrategy(InstanceFieldNormalizer instanceFieldNormalizer) {
+        this(instanceFieldNormalizer, new StaticFieldQualifier());
+    }
 
     @Override
     public String renderCondition(Expression condition, MethodScanContext context) {
@@ -46,6 +51,7 @@ public record DefaultConditionRenderingStrategy(
 
     Expression sanitizeExpression(Expression expression, MethodScanContext context) {
         Set<Range> instanceFieldRanges = instanceFieldNormalizer.identifyInstanceFieldRanges(expression, context.localVariables());
+        Set<Range> staticFieldRanges = staticFieldQualifier.identifyStaticFieldRanges(expression, context.localVariables());
         Expression clone = expression.clone();
         clone.walk(NameExpr.class, name -> {
             Integer index = context.parameterIndex(name.getNameAsString());
@@ -58,6 +64,7 @@ public record DefaultConditionRenderingStrategy(
                 return;
             }
             instanceFieldNormalizer.promoteInstanceFieldAccess(name, instanceFieldRanges);
+            staticFieldQualifier.qualifyStaticFieldAccess(name, staticFieldRanges);
         });
         return clone;
     }
