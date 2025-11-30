@@ -69,4 +69,47 @@ class IfRuleStrategyTest {
                 .doesNotContain("ENABLE_LOG")
                 .doesNotContain("() ->");
     }
+
+    @Test
+    void stripsEnableLogPlaceholderFromTrueBranch() {
+        RuleParams params = new RuleParams(
+                "rule-4",
+                "com.acme.SwitchingOrderApi",
+                "sumGross",
+                "(Ljava/lang/String;)D",
+                "SwitchingOrderApi#sumGross",
+                "ENABLE_LOG",
+                null,
+                RuleParams.DEFAULT_HELPER_FQN
+        );
+
+        String rule = new IfTrueRuleStrategy().render(params);
+
+        assertThat(rule)
+                .contains("IF eval(\"rule-4\", \"true\", true)")
+                .doesNotContain("ENABLE_LOG")
+                .doesNotContain("() ->");
+    }
+
+    @Test
+    void stripsEnableLogPlaceholderFromFalseBranch() {
+        RuleParams params = new RuleParams(
+                "rule-5",
+                "com.acme.SwitchingOrderApi",
+                "sumGross",
+                "(Ljava/lang/String;)D",
+                "SwitchingOrderApi#sumGross",
+                "!(ENABLE_LOG)",
+                null,
+                RuleParams.DEFAULT_HELPER_FQN
+        );
+
+        String rule = new IfFalseRuleStrategy().render(params);
+
+        assertThat(rule)
+                .contains("IF eval(\"rule-5\", \"false\", false)")
+
+                .doesNotContain("ENABLE_LOG")
+                .doesNotContain("() ->");
+    }
 }

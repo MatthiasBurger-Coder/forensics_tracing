@@ -9,7 +9,8 @@ public final class IfTrueRuleStrategy extends AbstractBytemanStrategy implements
     @Override public String id() { return "IF_TRUE"; }
     @Override public String render(RuleParams p) {
         String ruleId = safeId(p.id());
-        String booleanExpr = (p.condition() == null || p.condition().isBlank()) ? "true" : p.condition();
+        String condition = sanitizeCondition(p.condition());
+        String booleanExpr = (condition == null) ? "true" : condition;
         String exprString = booleanExpr;
         String cond = guardedCondition(ruleId, exprString, booleanExpr);
         return """
