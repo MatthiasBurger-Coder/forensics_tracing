@@ -23,7 +23,7 @@ class IfRuleStrategyTest {
         String rule = new IfTrueRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("IF eval(\"rule-1\", \"$this.policy.newEnabled() && $this.policy.routePredicate().test($1)\", () -> $this.policy.newEnabled() && $this.policy.routePredicate().test($1))")
+                .contains("IF eval(\"rule-1\", \"$this.policy.newEnabled() && $this.policy.routePredicate().test($1)\", $this.policy.newEnabled() && $this.policy.routePredicate().test($1))")
                 .doesNotContain("ENABLE_LOG");
     }
 
@@ -43,7 +43,7 @@ class IfRuleStrategyTest {
         String rule = new IfFalseRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("IF eval(\"rule-2\", \"false\", () -> false)")
+                .contains("IF eval(\"rule-2\", \"false\", false)")
                 .doesNotContain("ENABLE_LOG");
     }
 
@@ -63,7 +63,7 @@ class IfRuleStrategyTest {
         String rule = new IfFalseRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("IF eval(\"rule-3\", \"!($1 != null && $1 > 0)\", () -> !($1 != null && $1 > 0))")
+                .contains("IF eval(\"rule-3\", \"!($1 != null && $1 > 0)\", !($1 != null && $1 > 0))")
                 .doesNotContain("ENABLE_LOG");
     }
 
@@ -83,7 +83,7 @@ class IfRuleStrategyTest {
         String rule = new IfTrueRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("IF eval(\"rule-4\", \"true\", () -> true)")
+                .contains("IF eval(\"rule-4\", \"true\", true)")
                 .doesNotContain("ENABLE_LOG");
     }
 
@@ -103,7 +103,7 @@ class IfRuleStrategyTest {
         String rule = new IfFalseRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("IF eval(\"rule-5\", \"false\", () -> false)")
+                .contains("IF eval(\"rule-5\", \"false\", false)")
                 .doesNotContain("ENABLE_LOG");
     }
 
@@ -123,7 +123,7 @@ class IfRuleStrategyTest {
         String rule = new IfFalseRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("IF eval(\"rule-6\", \"!(com.acme.legacy.OrderRepository.INSTANCE == null)\", () -> !(com.acme.legacy.OrderRepository.INSTANCE == null))")
+                .contains("IF eval(\"rule-6\", \"!(com.acme.legacy.OrderRepository.INSTANCE == null)\", !(com.acme.legacy.OrderRepository.INSTANCE == null))")
                 .doesNotContain(" IF eval(\"rule-6\", \"!(INSTANCE == null)\"");
     }
 }

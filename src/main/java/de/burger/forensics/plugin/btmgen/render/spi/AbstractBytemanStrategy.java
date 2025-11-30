@@ -86,6 +86,7 @@ public abstract class AbstractBytemanStrategy {
         String expr = (expression == null || expression.isBlank()) ? evalExpression : expression;
         String escapedRuleId = esc(ruleId);
         String escapedExpr = esc(expr);
-        return "eval(\"%s\", \"%s\", () -> %s)".formatted(escapedRuleId, escapedExpr, evalExpression);
+        // third argument must be a plain boolean expression; Byteman does not support lambda syntax
+        return "eval(\"%s\", \"%s\", %s)".formatted(escapedRuleId, escapedExpr, evalExpression);
     }
 }
