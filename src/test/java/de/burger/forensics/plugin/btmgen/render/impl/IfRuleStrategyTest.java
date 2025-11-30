@@ -65,7 +65,7 @@ class IfRuleStrategyTest {
         String rule = new IfFalseRuleStrategy().render(params);
 
         assertThat(rule)
-                .contains("IF eval(\"rule-3\", \"$1 != null && $1 > 0\", !($1 != null && $1 > 0))")
+                .contains("IF eval(\"rule-3\", \"!($1 != null && $1 > 0)\", !($1 != null && $1 > 0))")
                 .doesNotContain("ENABLE_LOG")
                 .doesNotContain("() ->");
     }

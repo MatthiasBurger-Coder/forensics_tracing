@@ -9,8 +9,9 @@ public final class IfFalseRuleStrategy extends AbstractBytemanStrategy implement
     @Override public String id() { return "IF_FALSE"; }
     @Override public String render(RuleParams p) {
         String ruleId = safeId(p.id());
-        String evaluation = (p.condition() == null || p.condition().isBlank()) ? "false" : "!(" + p.condition() + ")";
-        String cond = guardedCondition(ruleId, p.condition(), evaluation);
+        String booleanExpr = (p.condition() == null || p.condition().isBlank()) ? "false" : "!(" + p.condition() + ")";
+        String exprString = booleanExpr;
+        String cond = guardedCondition(ruleId, exprString, booleanExpr);
         return """
             RULE %s : if-false %s#%s
             CLASS %s
