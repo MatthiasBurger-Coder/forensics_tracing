@@ -8,10 +8,10 @@ import de.burger.forensics.plugin.btmgen.render.spi.AbstractBytemanStrategy;
 public final class IfTrueRuleStrategy extends AbstractBytemanStrategy implements RuleRenderStrategy {
     @Override public String id() { return "IF_TRUE"; }
     @Override public String render(RuleParams p) {
-        // condition in p.condition() – wenn leer, erzwingen wir true
         String ruleId = safeId(p.id());
-        String evaluation = (p.condition() == null || p.condition().isBlank()) ? "true" : p.condition();
-        String cond = guardedCondition(ruleId, p.condition(), evaluation);
+        String booleanExpr = (p.condition() == null || p.condition().isBlank()) ? "true" : p.condition();
+        String exprString = booleanExpr;
+        String cond = guardedCondition(ruleId, exprString, booleanExpr);
         return """
             RULE %s : if-true %s#%s
             CLASS %s
