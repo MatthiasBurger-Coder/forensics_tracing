@@ -105,6 +105,31 @@ public class AnalysisContext {
         methodContexts.put(methodId, context);
     }
 
+    public void addMethodContext(String methodId,
+                                 String className,
+                                 String methodName,
+                                 List<String> parameterTypes,
+                                 String returnType,
+                                 List<ScanEvent> events) {
+        Objects.requireNonNull(methodId, "methodId must not be null");
+        Objects.requireNonNull(className, "className must not be null");
+        Objects.requireNonNull(methodName, "methodName must not be null");
+        Objects.requireNonNull(parameterTypes, "parameterTypes must not be null");
+        Objects.requireNonNull(events, "events must not be null");
+
+        MethodScanContext context = MethodScanContext.builder()
+            .methodId(methodId)
+            .className(className)
+            .methodName(methodName)
+            .parameterTypes(new ArrayList<>(parameterTypes))
+            .returnType(returnType)
+            .events(new ArrayList<>(events))
+            .build();
+
+        methodContexts.put(methodId, context);
+        methodEntries.add(new MethodEntry(methodId, className, methodName, List.copyOf(parameterTypes), returnType));
+    }
+
     public void addEvent(ScanEvent event) {
         Objects.requireNonNull(event, "event must not be null");
         events.add(event);
