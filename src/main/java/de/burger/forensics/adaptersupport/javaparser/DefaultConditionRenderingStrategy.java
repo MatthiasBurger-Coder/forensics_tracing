@@ -23,7 +23,12 @@ public record DefaultConditionRenderingStrategy(
 
     @Override
     public String renderCondition(Expression condition, MethodScanContext context) {
-        return sanitizeExpression(condition, context).toString();
+        Expression sanitized = sanitizeExpression(condition, context);
+        String rendered = sanitized.toString();
+        // rewrite static MDC access to helper method mdc(...)
+        rendered = rendered.replace("MDC.get(", "mdc(");
+        rendered = rendered.replace("org.slf4j.MDC.get(", "mdc(");
+        return rendered;
     }
 
     @Override
@@ -51,7 +56,6 @@ public record DefaultConditionRenderingStrategy(
 
     Expression sanitizeExpression(Expression expression, MethodScanContext context) {
         Set<Range> instanceFieldRanges = instanceFieldNormalizer.identifyInstanceFieldRanges(expression, context.localVariables());
-        Set<Range> staticFieldRanges = staticFieldQualifier.identifyStaticFieldRanges(expression, context.localVariables());
         Expression clone = expression.clone();
         clone.walk(NameExpr.class, name -> {
             Integer index = context.parameterIndex(name.getNameAsString());
@@ -64,7 +68,6 @@ public record DefaultConditionRenderingStrategy(
                 return;
             }
             instanceFieldNormalizer.promoteInstanceFieldAccess(name, instanceFieldRanges);
-            staticFieldQualifier.qualifyStaticFieldAccess(name, staticFieldRanges);
         });
         return clone;
     }

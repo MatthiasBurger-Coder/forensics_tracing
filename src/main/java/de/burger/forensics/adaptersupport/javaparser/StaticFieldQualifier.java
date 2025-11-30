@@ -31,13 +31,6 @@ public final class StaticFieldQualifier {
         return ranges;
     }
 
-    void qualifyStaticFieldAccess(NameExpr name, Set<Range> staticFieldRanges) {
-        if (name.getRange().filter(staticFieldRanges::contains).isPresent()) {
-            String identifier = name.getNameAsString();
-            name.replace(new FieldAccessExpr(new NameExpr("$CLASS"), identifier));
-        }
-    }
-
     boolean resolvesToStaticField(NameExpr name) {
         try {
             var resolved = name.resolve();
