@@ -15,19 +15,28 @@ class RtTraceHelperTest {
     }
 
     @Test
-    void evalReturnsProvidedValue() {
+    void evalReturnsValueFromSupplier() {
         RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
 
-        boolean result = RtTraceHelper.eval("rule-1", "flag", true);
+        boolean result = RtTraceHelper.eval("rule-1", "flag", () -> true);
 
         assertThat(result).isTrue();
     }
 
     @Test
-    void evalPropagatesFalseValue() {
+    void evalPropagatesFalseValueFromBooleanOverload() {
         RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
 
         boolean result = RtTraceHelper.eval("rule-2", "flag", false);
+
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void evalHandlesSupplierException() {
+        RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
+
+        boolean result = RtTraceHelper.eval("rule-3", "flag", () -> { throw new IllegalStateException("boom"); });
 
         assertThat(result).isFalse();
     }
