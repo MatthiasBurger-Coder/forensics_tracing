@@ -5,6 +5,7 @@ import java.util.function.BooleanSupplier;
 
 import org.jboss.byteman.rule.Rule;
 import org.jboss.byteman.rule.helper.Helper;
+import org.slf4j.MDC;
 
 /**
  * Lightweight Byteman helper delegating to {@link RtTrace}.
@@ -55,7 +56,7 @@ public class RtTraceHelper extends Helper {
         RtTrace.threadJoin(threadName);
     }
 
-    public static boolean eval(String ruleId, String expression, BooleanSupplier supplier) {
+    public boolean eval(String ruleId, String expression, BooleanSupplier supplier) {
         String label = Objects.toString(ruleId, "") + ":" + Objects.toString(expression, "");
         try {
             boolean value = supplier.getAsBoolean();
@@ -67,7 +68,21 @@ public class RtTraceHelper extends Helper {
         }
     }
 
-    public static boolean eval(String ruleId, String expression, boolean value) {
+    public boolean eval(String ruleId, String expression, boolean value) {
         return eval(ruleId, expression, () -> value);
+    }
+
+    /**
+     * Returns the current value stored in MDC for the given key.
+     */
+    public String mdc(String key) {
+        return MDC.get(key);
+    }
+
+    /**
+     * Convenience method for a standard correlation id key.
+     */
+    public String correlationId() {
+        return MDC.get("correlationId");
     }
 }
