@@ -4,6 +4,7 @@ plugins {
     id("com.gradle.plugin-publish") version "2.0.0"
     id("jacoco")
     alias(libs.plugins.sonar.qube.gradle.plugin)
+    alias(libs.plugins.freefair.lombok.plugin)
 }
 
 val aspectjAgent by configurations.creating
@@ -50,6 +51,13 @@ dependencies {
     testImplementation(libs.byte.buddy.agent)
 
     testImplementation(gradleTestKit())
+
+    //lombok
+    compileOnly(libs.lombok)
+    annotationProcessor(libs.lombok)
+
+    testCompileOnly(libs.lombok)
+    testAnnotationProcessor(libs.lombok)
 }
 
 configurations.all {
