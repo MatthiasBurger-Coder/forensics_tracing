@@ -112,4 +112,24 @@ class IfRuleStrategyTest {
                 .doesNotContain("ENABLE_LOG")
                 .doesNotContain("() ->");
     }
+
+    @Test
+    void qualifiesBareStaticSingletonFieldsToAvoidParserErrors() {
+        RuleParams params = new RuleParams(
+                "rule-6",
+                "com.acme.legacy.OrderRepository",
+                "getInstance",
+                "()Lcom/acme/legacy/OrderRepository;",
+                "OrderRepository#getInstance",
+                "INSTANCE == null",
+                null,
+                RuleParams.DEFAULT_HELPER_FQN
+        );
+
+        String rule = new IfFalseRuleStrategy().render(params);
+
+        assertThat(rule)
+                .contains("IF eval(\"rule-6\", \"!(com.acme.legacy.OrderRepository.INSTANCE == null)\", !(com.acme.legacy.OrderRepository.INSTANCE == null))")
+                .doesNotContain(" IF eval(\"rule-6\", \"!(INSTANCE == null)\"");
+    }
 }

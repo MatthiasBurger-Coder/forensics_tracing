@@ -10,6 +10,7 @@ public final class IfFalseRuleStrategy extends AbstractBytemanStrategy implement
     @Override public String render(RuleParams p) {
         String ruleId = safeId(p.id());
         String condition = sanitizeCondition(p.condition());
+        condition = qualifyStaticNullCheck(p.className(), condition);
         String booleanExpr = (condition == null) ? "false" : "!(" + condition + ")";
 
         String exprString = booleanExpr;
