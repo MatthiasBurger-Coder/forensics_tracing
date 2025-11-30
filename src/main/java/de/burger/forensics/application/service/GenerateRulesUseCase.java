@@ -1,5 +1,6 @@
 package de.burger.forensics.application.service;
 
+import de.burger.forensics.application.AnalysisContext;
 import de.burger.forensics.domain.model.Rule;
 import de.burger.forensics.domain.model.RuleId;
 import de.burger.forensics.domain.model.RuleIdFactory;
@@ -51,19 +52,24 @@ public final class GenerateRulesUseCase {
     public RuleGenerationResult generate(GenerationRequest request) {
         Objects.requireNonNull(request, "request");
         Path root = request.root();
+        AnalysisContext context = AnalysisContext.builder().build();
+        context.addSourceRoot(root);
         Instant start = clock.now();
         log.info("Starting rule generation at " + start + " for " + root);
 
         List<ScanEvent> events = collectScanEvents(request);
         log.debug("Scanned " + events.size() + " events");
+        events.forEach(context::addEvent);
 
         Map<String, List<ScanEvent>> byMethod = groupEventsByMethod(events);
+        populateMethodContexts(context, byMethod);
         List<Rule> rules = generateRules(byMethod, request);
         List<Rule> filtered = applyBranchFilter(rules, request.minBranches());
         List<String> rendered = renderRules(filtered);
 
         log.debug("Finished rule generation at " + clock.now() + " with " + rendered.size() + " rules");
-        return new RuleGenerationResult(rendered);
+        context.markFinished();
+        return new RuleGenerationResult(rendered, context);
     }
 
     private List<ScanEvent> collectScanEvents(GenerationRequest request) {
@@ -87,6 +93,61 @@ public final class GenerateRulesUseCase {
             byMethod.computeIfAbsent(key, k -> new ArrayList<>()).add(event);
         }
         return byMethod;
+    }
+
+    private List<String> parseParameterTypes(String signature) {
+        if (signature == null) {
+            return List.of();
+        }
+        int open = signature.indexOf('(');
+        int close = signature.lastIndexOf(')');
+        if (open < 0 || close < open) {
+            return List.of();
+        }
+        String params = signature.substring(open + 1, close).trim();
+        if (params.isEmpty()) {
+            return List.of();
+        }
+        String[] tokens = params.split(",");
+        List<String> types = new ArrayList<>();
+        for (String token : tokens) {
+            String candidate = token.trim();
+            if (candidate.isEmpty()) {
+                continue;
+            }
+            int lastSpace = candidate.lastIndexOf(' ');
+            String type = lastSpace >= 0 ? candidate.substring(0, lastSpace).trim() : candidate;
+            types.add(type);
+        }
+        return types;
+    }
+
+    private String simpleClassName(String fqcn) {
+        int idx = fqcn.lastIndexOf('.');
+        if (idx < 0) {
+            return fqcn;
+        }
+        return fqcn.substring(idx + 1);
+    }
+
+    private void populateMethodContexts(AnalysisContext context, Map<String, List<ScanEvent>> byMethod) {
+        for (Map.Entry<String, List<ScanEvent>> entry : byMethod.entrySet()) {
+            String methodId = entry.getKey();
+            List<ScanEvent> methodEvents = entry.getValue();
+            if (methodEvents.isEmpty()) {
+                continue;
+            }
+            ScanEvent first = methodEvents.getFirst();
+            SourceLocation location = first.location();
+            context.addMethodContext(
+                methodId,
+                simpleClassName(location.fqcn()),
+                location.method(),
+                parseParameterTypes(first.signature()),
+                first.returnType(),
+                methodEvents
+            );
+        }
     }
 
     private List<Rule> generateRules(Map<String, List<ScanEvent>> byMethod, GenerationRequest request) {
