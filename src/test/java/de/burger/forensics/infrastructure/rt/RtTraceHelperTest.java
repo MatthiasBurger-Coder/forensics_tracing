@@ -4,8 +4,6 @@ import org.jboss.byteman.rule.Rule;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
@@ -17,35 +15,19 @@ class RtTraceHelperTest {
     }
 
     @Test
-    void evalInvokesSupplierAndReturnsResult() {
+    void evalReturnsProvidedValue() {
         RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
-        AtomicBoolean invoked = new AtomicBoolean(false);
 
-        boolean result = helper.eval("rule-1", "flag", () -> {
-            invoked.set(true);
-            return true;
-        });
+        boolean result = RtTraceHelper.eval("rule-1", "flag", true);
 
-        assertThat(invoked).isTrue();
         assertThat(result).isTrue();
     }
 
     @Test
-    void evalReturnsFalseWhenSupplierIsNull() {
+    void evalPropagatesFalseValue() {
         RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
 
-        boolean result = helper.eval("rule-2", "flag", null);
-
-        assertThat(result).isFalse();
-    }
-
-    @Test
-    void evalSuppressesExceptionsAndReturnsFalse() {
-        RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
-
-        boolean result = helper.eval("rule-3", "flag", () -> {
-            throw new IllegalStateException("boom");
-        });
+        boolean result = RtTraceHelper.eval("rule-2", "flag", false);
 
         assertThat(result).isFalse();
     }

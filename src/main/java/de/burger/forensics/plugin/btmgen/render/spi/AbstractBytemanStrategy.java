@@ -16,9 +16,10 @@ public abstract class AbstractBytemanStrategy {
     protected static String methodSig(String name, String desc) { return name + (desc != null ? desc : ""); }
 
     protected static String guardedCondition(String ruleId, String expression, String evaluation) {
-        String expr = (expression == null || expression.isBlank()) ? evaluation : expression;
+        String evalExpression = (evaluation == null || evaluation.isBlank()) ? "false" : evaluation;
+        String expr = (expression == null || expression.isBlank()) ? evalExpression : expression;
         String escapedRuleId = esc(ruleId);
         String escapedExpr = esc(expr);
-        return "eval(\"%s\", \"%s\", () -> %s)".formatted(escapedRuleId, escapedExpr, evaluation);
+        return "eval(\"%s\", \"%s\", %s)".formatted(escapedRuleId, escapedExpr, evalExpression);
     }
 }

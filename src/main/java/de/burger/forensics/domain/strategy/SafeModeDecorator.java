@@ -29,6 +29,6 @@ public final class SafeModeDecorator implements ConditionStrategy {
         final var escaped = inner.replace("\\", "\\\\").replace("\"", "\\\"");
         return helperFqcn
                 + ".eval(\"" + ruleId + "\",\"" + escaped + "\"," +
-                "new java.util.function.BooleanSupplier(){public boolean getAsBoolean(){return (" + inner + ");}})";
+                "(" + inner + "))";
     }
 }
