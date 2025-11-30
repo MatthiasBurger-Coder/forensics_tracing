@@ -1,6 +1,8 @@
 package de.burger.forensics.plugin.btmgen.render.spi;
 
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public abstract class AbstractBytemanStrategy {
     protected static String safeId(String id) {
@@ -39,6 +41,24 @@ public abstract class AbstractBytemanStrategy {
         return trimmed;
     }
 
+    protected static String qualifyStaticNullCheck(String className, String condition) {
+        if (className == null || className.isBlank()) {
+            return condition;
+        }
+        if (condition == null) {
+            return null;
+        }
+
+        Matcher matcher = STATIC_NULL_CHECK.matcher(condition.trim());
+        if (!matcher.matches()) {
+            return condition;
+        }
+
+        String identifier = matcher.group("identifier");
+        String operator = matcher.group("operator");
+        return "%s.%s %s null".formatted(className, identifier, operator);
+    }
+
     private static boolean isEnableLogPlaceholder(String expression) {
         String candidate = unwrapParentheses(expression);
 
@@ -48,6 +68,10 @@ public abstract class AbstractBytemanStrategy {
 
         return "ENABLE_LOG".equals(candidate);
     }
+
+    private static final Pattern STATIC_NULL_CHECK = Pattern.compile(
+            "^\\(?\\s*(?<identifier>[A-Z][A-Z0-9_]*)\\s*(?<operator>==|!=)\\s*null\\s*\\)?$"
+    );
 
     private static String unwrapParentheses(String expression) {
         String result = expression;
