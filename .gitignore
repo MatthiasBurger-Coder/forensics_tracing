@@ -6,3 +6,6 @@ build/
 /forensics-btmgen/.kotlin/
 /forensics-btmgen/logs/
 /.idea/dictionaries/project.xml
+/.idea/modules.xml
+/.idea/modules/forensics-tracing.test.iml
+/.idea/modules/forensics-tracing.main.iml
