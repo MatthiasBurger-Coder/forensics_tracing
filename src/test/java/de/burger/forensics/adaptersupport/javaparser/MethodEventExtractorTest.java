@@ -78,6 +78,31 @@ class MethodEventExtractorTest {
         assertThat(locals).contains("suffix");
     }
 
+    @Test
+    void includesCatchParametersAsLocalVariables() {
+        MethodDeclaration declaration = parseMethod("""
+            class Sample {
+                void run() {
+                    try {
+                        risky();
+                    } catch (RuntimeException ex) {
+                        throw ex;
+                    }
+                }
+            }
+            """);
+
+        List<ScanEvent> events = extractor.collectMethodEvents(declaration, "example");
+
+        String throwCondition = events.stream()
+                .filter(event -> event.kind() == RuleTemplate.THROW)
+                .map(ScanEvent::conditionText)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(throwCondition).isEqualTo("$ex");
+    }
+
     private MethodDeclaration parseMethod(String source) {
         return StaticJavaParser.parse(source).findFirst(MethodDeclaration.class).orElseThrow();
     }

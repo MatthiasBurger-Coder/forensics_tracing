@@ -7,6 +7,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
@@ -104,12 +105,19 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
     }
 
     Set<String> localVariableNames(MethodDeclaration declaration) {
-        return declaration.findAll(VariableDeclarator.class, var ->
+        Set<String> locals = declaration.findAll(VariableDeclarator.class, var ->
                         var.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true))
                 .stream()
                 .map(VariableDeclarator::getNameAsString)
                 .filter(name -> !name.isBlank())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        declaration.findAll(CatchClause.class).stream()
+                .map(catchClause -> catchClause.getParameter().getNameAsString())
+                .filter(name -> !name.isBlank())
+                .forEach(locals::add);
+
+        return locals;
     }
 
     String resolveEnclosingType(MethodDeclaration declaration) {
