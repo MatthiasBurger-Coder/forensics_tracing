@@ -60,11 +60,11 @@ class DefaultStrategyFactoryTest {
     }
 
     @Test
-    void keepsBooleanReturnExpressionsWhenMethodReturnsBoolean() {
+    void usesReturnPlaceholderForBooleanReturnExpressions() {
         ConditionStrategy strategy = factory.from("return isEnabled();", RuleTemplate.RETURN, "boolean");
 
         assertThat(strategy).isInstanceOf(GenericUnsafeStrategy.class);
-        assertThat(strategy.toBytemanIf()).isEqualTo("isEnabled()");
+        assertThat(strategy.toBytemanIf()).isEqualTo("$!");
     }
 
     @Test

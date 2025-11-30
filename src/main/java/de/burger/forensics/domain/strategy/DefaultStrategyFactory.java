@@ -41,6 +41,7 @@ public final class DefaultStrategyFactory implements StrategyFactory {
             if (!isBooleanReturn) {
                 return new GenericUnsafeStrategy("true");
             }
+            return new GenericUnsafeStrategy("$!");
         }
 
         final String lower = sanitized.toLowerCase(Locale.ROOT);
