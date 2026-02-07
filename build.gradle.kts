@@ -1,3 +1,9 @@
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.io.StringReader
+import org.xml.sax.InputSource
+import javax.xml.parsers.DocumentBuilderFactory
+
 plugins {
     `java-library`
     `java-gradle-plugin`
@@ -255,6 +261,142 @@ tasks.jacocoTestReport {
             }
         )
     )
+}
+
+abstract class PackageCoverageReportTask : DefaultTask() {
+    @get:InputFile
+    abstract val jacocoXml: RegularFileProperty
+
+    @get:OutputFile
+    abstract val reportFile: RegularFileProperty
+
+    @get:Input
+    abstract val lineThreshold: Property<BigDecimal>
+
+    @get:Input
+    abstract val branchThreshold: Property<BigDecimal>
+
+    data class PackageCoverage(
+        val name: String,
+        val missedLines: Int,
+        val coveredLines: Int,
+        val missedBranches: Int,
+        val coveredBranches: Int,
+        val hasBranches: Boolean
+    ) {
+        val totalLines: Int = missedLines + coveredLines
+        val totalBranches: Int = missedBranches + coveredBranches
+        val lineCoverage: BigDecimal =
+            if (totalLines == 0) BigDecimal.ONE else coveredLines.toBigDecimal().divide(totalLines.toBigDecimal(), 4, RoundingMode.HALF_UP)
+        val branchCoverage: BigDecimal? =
+            if (!hasBranches || totalBranches == 0) null else coveredBranches.toBigDecimal().divide(totalBranches.toBigDecimal(), 4, RoundingMode.HALF_UP)
+
+        val impact: Int = missedLines + missedBranches
+    }
+
+    @TaskAction
+    fun generate() {
+        val xmlFile = jacocoXml.get().asFile
+        if (!xmlFile.exists()) {
+            throw GradleException("JaCoCo XML report not found at ${xmlFile.absolutePath}. Run jacocoTestReport first.")
+        }
+
+        val factory = DocumentBuilderFactory.newInstance().apply {
+            setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            setFeature("http://xml.org/sax/features/validation", false)
+        }
+        val documentBuilder = factory.newDocumentBuilder().apply {
+            setEntityResolver { _, _ -> InputSource(StringReader("")) }
+        }
+        val document = documentBuilder.parse(xmlFile)
+        val packageNodes = document.getElementsByTagName("package")
+
+        val packages = buildList {
+            for (index in 0 until packageNodes.length) {
+                val node = packageNodes.item(index)
+                val attrs = node.attributes
+                val name = attrs.getNamedItem("name")?.nodeValue ?: "unknown"
+                val counters = (0 until node.childNodes.length)
+                    .map { node.childNodes.item(it) }
+                    .filter { it.nodeName == "counter" }
+
+                val lineCounter = counters.firstOrNull { it.attributes.getNamedItem("type")?.nodeValue == "LINE" }
+                val branchCounter = counters.firstOrNull { it.attributes.getNamedItem("type")?.nodeValue == "BRANCH" }
+
+                val missedLines = lineCounter?.attributes?.getNamedItem("missed")?.nodeValue?.toIntOrNull() ?: 0
+                val coveredLines = lineCounter?.attributes?.getNamedItem("covered")?.nodeValue?.toIntOrNull() ?: 0
+                val missedBranches = branchCounter?.attributes?.getNamedItem("missed")?.nodeValue?.toIntOrNull() ?: 0
+                val coveredBranches = branchCounter?.attributes?.getNamedItem("covered")?.nodeValue?.toIntOrNull() ?: 0
+                val hasBranches = branchCounter != null
+
+                add(
+                    PackageCoverage(
+                        name = name.replace('/', '.'),
+                        missedLines = missedLines,
+                        coveredLines = coveredLines,
+                        missedBranches = missedBranches,
+                        coveredBranches = coveredBranches,
+                        hasBranches = hasBranches
+                    )
+                )
+            }
+        }.sortedWith(compareByDescending<PackageCoverage> { it.impact }.thenBy { it.name })
+
+        val report = reportFile.get().asFile
+        report.parentFile.mkdirs()
+
+        val lineThresholdValue = lineThreshold.get()
+        val branchThresholdValue = branchThreshold.get()
+
+        val failures = packages.filter { pkg ->
+            val lineFails = pkg.lineCoverage < lineThresholdValue
+            val branchFails = pkg.branchCoverage?.let { it < branchThresholdValue } ?: false
+            lineFails || branchFails
+        }
+
+        report.bufferedWriter().use { writer ->
+            writer.appendLine("Package coverage report")
+            writer.appendLine("Line threshold: ${(lineThresholdValue * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)}%")
+            writer.appendLine("Branch threshold: ${(branchThresholdValue * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)}%")
+            writer.appendLine(
+                "packageName\tlineCoverage\tbranchCoverage\tmissedLines\tmissedBranches\ttotalLines\ttotalBranches"
+            )
+            packages.forEach { pkg ->
+                val linePercent = (pkg.lineCoverage * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)
+                val branchPercent = pkg.branchCoverage?.let { (it * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP) }
+                writer.appendLine(
+                    listOf(
+                        pkg.name,
+                        "${linePercent}%",
+                        branchPercent?.let { "${it}%" } ?: "n/a",
+                        pkg.missedLines,
+                        pkg.missedBranches,
+                        pkg.totalLines,
+                        pkg.totalBranches
+                    ).joinToString(separator = "\t")
+                )
+            }
+        }
+
+        if (failures.isNotEmpty()) {
+            val summary = failures.joinToString(separator = System.lineSeparator()) { pkg ->
+                val linePercent = (pkg.lineCoverage * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)
+                val branchPercent = pkg.branchCoverage?.let { (it * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP) } ?: "n/a"
+                "- ${pkg.name}: line=${linePercent}% branch=${branchPercent}% (missedLines=${pkg.missedLines}, missedBranches=${pkg.missedBranches})"
+            }
+            throw GradleException(
+                "Package coverage below threshold:${System.lineSeparator()}${summary}${System.lineSeparator()}Report: ${report.absolutePath}"
+            )
+        }
+    }
+}
+
+tasks.register<PackageCoverageReportTask>("checkPackageCoverage") {
+    dependsOn(tasks.jacocoTestReport)
+    jacocoXml.set(layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml"))
+    reportFile.set(layout.buildDirectory.file("reports/coverage/package-coverage.txt"))
+    lineThreshold.set(BigDecimal("0.80"))
+    branchThreshold.set(BigDecimal("0.80"))
 }
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     // Fail the build if coverage is below 86%
