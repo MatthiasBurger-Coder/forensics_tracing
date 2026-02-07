@@ -3,6 +3,7 @@ package de.burger.forensics.adapters.javaparser;
 import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,8 +17,7 @@ class JavaParserScannerTest {
     private final JavaParserScanner scanner = new JavaParserScanner();
 
     @Test
-    void scansIfStatements() throws IOException {
-        Path tempDir = Files.createTempDirectory("scanner-test");
+    void scansIfStatements(@TempDir Path tempDir) throws IOException {
         Path source = tempDir.resolve("Sample.java");
         Files.writeString(source, """
             package example;
@@ -40,8 +40,7 @@ class JavaParserScannerTest {
     }
 
     @Test
-    void scansSwitchReturnAndThrowStatements() throws IOException {
-        Path tempDir = Files.createTempDirectory("scanner-test-2");
+    void scansSwitchReturnAndThrowStatements(@TempDir Path tempDir) throws IOException {
         Path source = tempDir.resolve("Advanced.java");
         Files.writeString(source, """
             package example;
@@ -69,8 +68,7 @@ class JavaParserScannerTest {
     }
 
     @Test
-    void prefixesInstanceFieldAccessWithThisPlaceholder() throws IOException {
-        Path tempDir = Files.createTempDirectory("scanner-test-field");
+    void prefixesInstanceFieldAccessWithThisPlaceholder(@TempDir Path tempDir) throws IOException {
         Path source = tempDir.resolve("SwitchingOrderApi.java");
         Files.writeString(source, """
             package example;
@@ -99,8 +97,7 @@ class JavaParserScannerTest {
     }
 
     @Test
-    void prefixesLocalVariableAccessWithDollarPlaceholder() throws IOException {
-        Path tempDir = Files.createTempDirectory("scanner-test-local");
+    void prefixesLocalVariableAccessWithDollarPlaceholder(@TempDir Path tempDir) throws IOException {
         Path source = tempDir.resolve("PolicyService.java");
         Files.writeString(source, """
             package example;
@@ -125,5 +122,96 @@ class JavaParserScannerTest {
             .filteredOn(event -> event.kind() == RuleTemplate.IF_TRUE || event.kind() == RuleTemplate.IF_FALSE)
             .extracting(ScanEvent::conditionText)
             .contains("$policy.routePredicate().test($1)");
+    }
+
+    @Test
+    void skipsSymbolicLinkDirectories(@TempDir Path tempDir) throws IOException {
+        Path realDir = Files.createDirectory(tempDir.resolve("real"));
+        Path linkedDir = tempDir.resolve("linked");
+        Files.createSymbolicLink(linkedDir, realDir);
+
+        Files.writeString(tempDir.resolve("Root.java"), """
+            package root;
+            public class Root {
+              public void run(int value) {
+                if (value > 1) {
+                  System.out.println(value);
+                }
+              }
+            }
+            """);
+
+        Files.writeString(realDir.resolve("Linked.java"), """
+            package linked;
+            public class Linked {
+              public void run(int value) {
+                if (value > 2) {
+                  System.out.println(value);
+                }
+              }
+            }
+            """);
+
+        List<ScanEvent> events = scanner.scan(tempDir).toList();
+
+        assertThat(events)
+            .extracting(event -> event.location().fqcn())
+            .contains("root.Root")
+            .doesNotContain("linked.Linked");
+    }
+
+    @Test
+    void ignoresNonJavaFiles(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve("notes.txt"), "not java");
+
+        List<ScanEvent> events = scanner.scan(tempDir).toList();
+
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    void ignoresParseErrors(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve("Broken.java"), "class {");
+
+        List<ScanEvent> events = scanner.scan(tempDir).toList();
+
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    void ignoresMissingRootPath() {
+        Path missing = Path.of("missing-source.java");
+
+        List<ScanEvent> events = scanner.scan(missing).toList();
+
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    void ignoresRootsWithMissingParentDirectory(@TempDir Path tempDir) {
+        Path missingChild = tempDir.resolve("missing").resolve("Sample.java");
+
+        List<ScanEvent> events = scanner.scan(missingChild).toList();
+
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    void scansWhenRootIsAFile(@TempDir Path tempDir) throws IOException {
+        Path source = tempDir.resolve("Single.java");
+        Files.writeString(source, """
+            package example;
+            public class Single {
+              public void run(int value) {
+                if (value > 0) {
+                  System.out.println(value);
+                }
+              }
+            }
+            """);
+
+        List<ScanEvent> events = scanner.scan(source).toList();
+
+        assertThat(events).hasSize(2);
     }
 }
