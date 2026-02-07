@@ -56,6 +56,7 @@ public record DefaultConditionRenderingStrategy(
 
     Expression sanitizeExpression(Expression expression, MethodScanContext context) {
         Set<Range> instanceFieldRanges = instanceFieldNormalizer.identifyInstanceFieldRanges(expression, context.localVariables());
+        Set<Range> staticFieldRanges = staticFieldQualifier.identifyStaticFieldRanges(expression, context.localVariables());
         Expression clone = expression.clone();
         clone.walk(NameExpr.class, name -> {
             Integer index = context.parameterIndex(name.getNameAsString());
@@ -65,6 +66,9 @@ public record DefaultConditionRenderingStrategy(
             }
             if (context.isLocalVariable(name.getNameAsString())) {
                 name.setName("$" + name.getNameAsString());
+                return;
+            }
+            if (staticFieldQualifier.qualifyStaticFieldAccess(name, staticFieldRanges)) {
                 return;
             }
             instanceFieldNormalizer.promoteInstanceFieldAccess(name, instanceFieldRanges);
