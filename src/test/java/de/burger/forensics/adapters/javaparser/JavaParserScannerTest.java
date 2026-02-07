@@ -4,6 +4,7 @@ import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.Assumptions;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -128,7 +129,12 @@ class JavaParserScannerTest {
     void skipsSymbolicLinkDirectories(@TempDir Path tempDir) throws IOException {
         Path realDir = Files.createDirectory(tempDir.resolve("real"));
         Path linkedDir = tempDir.resolve("linked");
-        Files.createSymbolicLink(linkedDir, realDir);
+        try {
+            Files.createSymbolicLink(linkedDir, realDir);
+        } catch (IOException | UnsupportedOperationException exception) {
+            // Skip when the environment does not allow creating symbolic links.
+            Assumptions.assumeTrue(false, "Symbolic links are not supported or permitted in this environment.");
+        }
 
         Files.writeString(tempDir.resolve("Root.java"), """
             package root;
