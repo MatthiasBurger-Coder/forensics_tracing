@@ -286,6 +286,13 @@ tasks.check {
 }
 
 sonar {
+    val sonarToken = providers.environmentVariable("SONAR_TOKEN").orNull
+        ?: providers.gradleProperty("sonar.token").orNull
+
+    if (sonarToken == null) {
+        // Skip Sonar when no token is configured to avoid failing local or CI builds.
+        tasks.named("sonar").configure { enabled = false }
+    }
     properties {
         property("sonar.projectKey", "MatthiasBurger-Coder_forensics_tracing")
         property("sonar.organization", "matthiasburger-coder")
