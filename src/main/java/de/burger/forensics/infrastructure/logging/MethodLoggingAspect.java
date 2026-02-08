@@ -34,7 +34,8 @@ public class MethodLoggingAspect {
      * Per-target logger cache to avoid repeated lookups.
      */
     private static final Map<Class<?>, Logger> PER_CLASS_LOGGERS = new ConcurrentHashMap<>();
-    private static final ThreadLocal<ArrayDeque<Long>> START_NS = new ThreadLocal<>();
+    private static final ThreadLocal<ArrayDeque<Long>> START_STACK =
+            ThreadLocal.withInitial(ArrayDeque::new);
     private static final String CID = "cid";
 
     // File logging mirror independent of SLF4J provider
@@ -56,12 +57,7 @@ public class MethodLoggingAspect {
                 .filter(s -> !s.isBlank())
                 .orElseGet(() -> UUID.randomUUID().toString()));
 
-        ArrayDeque<Long> stack = START_NS.get();
-        if (stack == null) {
-            stack = new ArrayDeque<>();
-            START_NS.set(stack);
-        }
-        stack.push(System.nanoTime());
+        START_STACK.get().push(System.nanoTime());
 
         final String msg = String.format("→ %s %s", shortSig(jp), argsOf(jp));
         loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
@@ -70,19 +66,22 @@ public class MethodLoggingAspect {
 
     @AfterReturning("appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)")
     public void onReturn(final JoinPoint jp) {
-        final ArrayDeque<Long> stack = START_NS.get();
-        if (stack == null || stack.isEmpty()) {
-            final String warnMsg = "Unbalanced timing stack";
+        final ArrayDeque<Long> stack = START_STACK.get();
+        final Long started = stack.poll();
+        final long elapsedMs;
+        if (started == null) {
+            final String warnMsg = "(unbalanced timing stack)";
             loggerFor(jp).warn(warnMsg);
             fileLog("WARN", warnMsg);
-            return;
+            START_STACK.remove();
+            elapsedMs = 0L;
+        } else {
+            if (stack.isEmpty()) {
+                START_STACK.remove();
+            }
+            final long elapsedNs = System.nanoTime() - started;
+            elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
         }
-        final long started = stack.pop();
-        if (stack.isEmpty()) {
-            START_NS.remove();
-        }
-        final long elapsedNs = System.nanoTime() - started;
-        final long elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
         final String msg = String.format("← %s OK in %d ms", shortSig(jp), elapsedMs);
         loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
         fileLog("WARN", msg);
@@ -90,19 +89,22 @@ public class MethodLoggingAspect {
 
     @AfterThrowing(pointcut = "appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)", throwing = "ex")
     public void onThrow(final JoinPoint jp, final Throwable ex) {
-        final ArrayDeque<Long> stack = START_NS.get();
-        if (stack == null || stack.isEmpty()) {
-            final String warnMsg = "Unbalanced timing stack";
+        final ArrayDeque<Long> stack = START_STACK.get();
+        final Long started = stack.poll();
+        final long elapsedMs;
+        if (started == null) {
+            final String warnMsg = "(unbalanced timing stack)";
             loggerFor(jp).warn(warnMsg);
             fileLog("WARN", warnMsg);
-            return;
+            START_STACK.remove();
+            elapsedMs = 0L;
+        } else {
+            if (stack.isEmpty()) {
+                START_STACK.remove();
+            }
+            final long elapsedNs = System.nanoTime() - started;
+            elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
         }
-        final long started = stack.pop();
-        if (stack.isEmpty()) {
-            START_NS.remove();
-        }
-        final long elapsedNs = System.nanoTime() - started;
-        final long elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
         final String msg = String.format("✖ %s failed in %d ms: %s", shortSig(jp), elapsedMs, ex.getMessage());
         loggerFor(jp).error(msg, ex);
         fileLog("ERROR", msg + " (see stacktrace in console)");
