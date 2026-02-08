@@ -1,16 +1,18 @@
 package de.burger.forensics.infrastructure.logging;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -32,7 +34,7 @@ public class MethodLoggingAspect {
      * Per-target logger cache to avoid repeated lookups.
      */
     private static final Map<Class<?>, Logger> PER_CLASS_LOGGERS = new ConcurrentHashMap<>();
-    private static final ThreadLocal<Long> START_NS = new ThreadLocal<>();
+    private static final ThreadLocal<ArrayDeque<Long>> START_NS = new ThreadLocal<>();
     private static final String CID = "cid";
 
     // File logging mirror independent of SLF4J provider
@@ -54,7 +56,12 @@ public class MethodLoggingAspect {
                 .filter(s -> !s.isBlank())
                 .orElseGet(() -> UUID.randomUUID().toString()));
 
-        START_NS.set(System.nanoTime());
+        ArrayDeque<Long> stack = START_NS.get();
+        if (stack == null) {
+            stack = new ArrayDeque<>();
+            START_NS.set(stack);
+        }
+        stack.push(System.nanoTime());
 
         final String msg = String.format("→ %s %s", shortSig(jp), argsOf(jp));
         loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
@@ -63,9 +70,19 @@ public class MethodLoggingAspect {
 
     @AfterReturning("appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)")
     public void onReturn(final JoinPoint jp) {
-        final Long started = START_NS.get();
-        final long elapsedMs = System.nanoTime() - (started != null ? started : System.nanoTime());
-        START_NS.set(0L);
+        final ArrayDeque<Long> stack = START_NS.get();
+        if (stack == null || stack.isEmpty()) {
+            final String warnMsg = "Unbalanced timing stack";
+            loggerFor(jp).warn(warnMsg);
+            fileLog("WARN", warnMsg);
+            return;
+        }
+        final long started = stack.pop();
+        if (stack.isEmpty()) {
+            START_NS.remove();
+        }
+        final long elapsedNs = System.nanoTime() - started;
+        final long elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
         final String msg = String.format("← %s OK in %d ms", shortSig(jp), elapsedMs);
         loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
         fileLog("WARN", msg);
@@ -73,9 +90,19 @@ public class MethodLoggingAspect {
 
     @AfterThrowing(pointcut = "appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)", throwing = "ex")
     public void onThrow(final JoinPoint jp, final Throwable ex) {
-        final Long started = START_NS.get();
-        final long elapsedMs = System.nanoTime() - (started != null ? started : System.nanoTime());
-        START_NS.set(0L);
+        final ArrayDeque<Long> stack = START_NS.get();
+        if (stack == null || stack.isEmpty()) {
+            final String warnMsg = "Unbalanced timing stack";
+            loggerFor(jp).warn(warnMsg);
+            fileLog("WARN", warnMsg);
+            return;
+        }
+        final long started = stack.pop();
+        if (stack.isEmpty()) {
+            START_NS.remove();
+        }
+        final long elapsedNs = System.nanoTime() - started;
+        final long elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
         final String msg = String.format("✖ %s failed in %d ms: %s", shortSig(jp), elapsedMs, ex.getMessage());
         loggerFor(jp).error(msg, ex);
         fileLog("ERROR", msg + " (see stacktrace in console)");
@@ -88,7 +115,7 @@ public class MethodLoggingAspect {
      */
     private Logger loggerFor(JoinPoint jp) {
         final Class<?> type = jp.getSignature().getDeclaringType();
-        return PER_CLASS_LOGGERS.computeIfAbsent(type, LoggerFactory::getLogger);
+        return PER_CLASS_LOGGERS.computeIfAbsent(type, LogManager::getLogger);
     }
 
     /**
