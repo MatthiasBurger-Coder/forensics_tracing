@@ -1,12 +1,5 @@
 package de.burger.forensics.infrastructure.logging;
 
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.Appender;
-import org.apache.logging.log4j.core.LoggerContext;
-import org.apache.logging.log4j.core.config.Configuration;
-import org.apache.logging.log4j.core.config.LoggerConfig;
-import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.Signature;
 import org.junit.jupiter.api.AfterEach;
@@ -14,9 +7,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,38 +24,24 @@ import static org.mockito.Mockito.when;
 class MethodLoggingAspectTest {
 
     private static final Pattern OK_PATTERN = Pattern.compile("OK in (\\d+) ms");
+    private static final Pattern MESSAGE_PATTERN = Pattern.compile("^.*\\] \\[cid=.*?\\] (.*)$");
 
-    private LoggerContext loggerContext;
-    private Configuration loggerConfig;
-    private ListAppender listAppender;
-    private String loggerName;
+    private Path logFile;
 
     @BeforeEach
-    void setUpLogging() {
-        loggerContext = (LoggerContext) LogManager.getContext(false);
-        loggerConfig = loggerContext.getConfiguration();
-        loggerName = TestTarget.class.getName();
-
-        listAppender = new ListAppender("list-" + UUID.randomUUID());
-        listAppender.start();
-        loggerConfig.addAppender(listAppender);
-
-        final LoggerConfig rootConfig = loggerConfig.getRootLogger();
-        rootConfig.addAppender(listAppender, Level.WARN, null);
-        rootConfig.setLevel(Level.WARN);
-
-        final LoggerConfig config = new LoggerConfig(loggerName, Level.WARN, false);
-        config.addAppender(listAppender, Level.WARN, null);
-        loggerConfig.addLogger(loggerName, config);
-        loggerContext.updateLoggers();
+    void setUpLogging() throws Exception {
+        logFile = Files.createTempFile("forensics-btmgen", "-" + UUID.randomUUID() + ".log");
+        System.setProperty("forensics.btmgen.logToFile", "true");
+        System.setProperty("forensics.btmgen.logFile", logFile.toString());
     }
 
     @AfterEach
-    void tearDownLogging() {
-        loggerConfig.getRootLogger().removeAppender(listAppender.getName());
-        loggerConfig.removeLogger(loggerName);
-        listAppender.stop();
-        loggerContext.updateLoggers();
+    void tearDownLogging() throws Exception {
+        System.clearProperty("forensics.btmgen.logToFile");
+        System.clearProperty("forensics.btmgen.logFile");
+        if (logFile != null) {
+            Files.deleteIfExists(logFile);
+        }
     }
 
     @Test
@@ -76,8 +58,7 @@ class MethodLoggingAspectTest {
         Thread.sleep(5);
         aspect.onReturn(outer);
 
-        final List<Long> durations = listAppender.getEvents().stream()
-                .map(event -> event.getMessage().getFormattedMessage())
+        final List<Long> durations = readMessages().stream()
                 .map(MethodLoggingAspectTest::extractDurationMs)
                 .flatMap(java.util.Optional::stream)
                 .toList();
@@ -105,8 +86,8 @@ class MethodLoggingAspectTest {
 
         aspect.onReturn(jp);
 
-        assertThat(listAppender.getEvents())
-                .anyMatch(event -> event.getMessage().getFormattedMessage().contains("(unbalanced timing stack)"));
+        assertThat(readMessages())
+                .anyMatch(message -> message.contains("(unbalanced timing stack)"));
     }
 
     private static JoinPoint joinPoint(String shortString, Object... args) {
@@ -133,6 +114,28 @@ class MethodLoggingAspectTest {
         @SuppressWarnings("unchecked")
         final ThreadLocal<ArrayDeque<Long>> threadLocal = (ThreadLocal<ArrayDeque<Long>>) field.get(null);
         return threadLocal;
+    }
+
+    private List<String> readMessages() {
+        if (logFile == null || !Files.exists(logFile)) {
+            return List.of();
+        }
+        try {
+            return Files.readAllLines(logFile).stream()
+                    .map(MethodLoggingAspectTest::extractMessage)
+                    .filter(Objects::nonNull)
+                    .toList();
+        } catch (Exception ignored) {
+            return List.of();
+        }
+    }
+
+    private static String extractMessage(String line) {
+        Matcher matcher = MESSAGE_PATTERN.matcher(line);
+        if (!matcher.matches()) {
+            return null;
+        }
+        return matcher.group(1);
     }
 
     private static final class TestTarget {

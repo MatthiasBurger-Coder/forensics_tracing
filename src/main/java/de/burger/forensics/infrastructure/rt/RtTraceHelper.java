@@ -17,53 +17,97 @@ public class RtTraceHelper extends Helper {
     }
 
     public void onEnter(Class<?> clazz, String method, Object... args) {
-        RtTrace.onEnter(clazz, method, args);
+        try {
+            RtTrace.onEnter(clazz, method, args);
+        } catch (Throwable t) {
+            swallow("Failed to trace method entry.", t);
+        }
     }
 
     public void onExit(Class<?> clazz, String method, Object result) {
-        RtTrace.onExit(clazz, method, result);
+        try {
+            RtTrace.onExit(clazz, method, result);
+        } catch (Throwable t) {
+            swallow("Failed to trace method exit.", t);
+        }
     }
 
     public void onBranch(Class<?> clazz, String method, String branchLabel) {
-        RtTrace.onBranch(clazz, method, branchLabel);
+        try {
+            RtTrace.onBranch(clazz, method, branchLabel);
+        } catch (Throwable t) {
+            swallow("Failed to trace branch.", t);
+        }
     }
 
     public void onSwitch(Class<?> clazz, String method, String displayName) {
-        RtTrace.onSwitch(clazz, method, displayName);
+        try {
+            RtTrace.onSwitch(clazz, method, displayName);
+        } catch (Throwable t) {
+            swallow("Failed to trace switch.", t);
+        }
     }
 
     public void onCase(Class<?> clazz, String method, String label) {
-        RtTrace.onCase(clazz, method, label);
+        try {
+            RtTrace.onCase(clazz, method, label);
+        } catch (Throwable t) {
+            swallow("Failed to trace case.", t);
+        }
     }
 
     public void onException(Throwable throwable) {
-        RtTrace.onException(throwable);
+        try {
+            RtTrace.onException(throwable);
+        } catch (Throwable t) {
+            swallow("Failed to trace exception.", t);
+        }
     }
 
     public void ioBegin(String op, String target) {
-        RtTrace.ioBegin(op, target);
+        try {
+            RtTrace.ioBegin(op, target);
+        } catch (Throwable t) {
+            swallow("Failed to trace io begin.", t);
+        }
     }
 
     public void ioEnd(String op, String target) {
-        RtTrace.ioEnd(op, target);
+        try {
+            RtTrace.ioEnd(op, target);
+        } catch (Throwable t) {
+            swallow("Failed to trace io end.", t);
+        }
     }
 
     public void threadFork(String threadName) {
-        RtTrace.threadFork(threadName);
+        try {
+            RtTrace.threadFork(threadName);
+        } catch (Throwable t) {
+            swallow("Failed to trace thread fork.", t);
+        }
     }
 
     public void threadJoin(String threadName) {
-        RtTrace.threadJoin(threadName);
+        try {
+            RtTrace.threadJoin(threadName);
+        } catch (Throwable t) {
+            swallow("Failed to trace thread join.", t);
+        }
     }
 
     public boolean eval(String ruleId, String expression, BooleanSupplier supplier) {
-        String label = Objects.toString(ruleId, "") + ":" + Objects.toString(expression, "");
         try {
+            String label = Objects.toString(ruleId, "") + ":" + Objects.toString(expression, "");
             boolean value = supplier.getAsBoolean();
             RtTrace.branch(label, value);
             return value;
         } catch (Throwable t) {
-            RtTrace.conditionError(ruleId, expression, t);
+            try {
+                RtTrace.conditionError(ruleId, expression, t);
+            } catch (Throwable ignored) {
+                // ignore
+            }
             return false;
         }
     }
@@ -84,5 +128,15 @@ public class RtTraceHelper extends Helper {
      */
     public String correlationId() {
         return MDC.get("correlationId");
+    }
+
+    private void swallow(String message, Throwable t) {
+        try {
+            de.burger.forensics.infrastructure.logging.PluginLogger
+                    .getLogger(RtTraceHelper.class)
+                    .debug(message, t);
+        } catch (Throwable ignored) {
+            // never fail application due to logging failures
+        }
     }
 }
