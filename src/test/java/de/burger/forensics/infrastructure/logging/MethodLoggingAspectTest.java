@@ -1,213 +1,139 @@
 package de.burger.forensics.infrastructure.logging;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.Appender;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.apache.logging.log4j.core.test.appender.ListAppender;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.Signature;
-import org.aspectj.lang.reflect.SourceLocation;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.slf4j.MDC;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.lang.reflect.Field;
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class MethodLoggingAspectTest {
 
-    @TempDir
-    Path tempDir;
+    private static final Pattern OK_PATTERN = Pattern.compile("OK in (\\d+) ms");
 
-    private final MethodLoggingAspect aspect = MethodLoggingAspect.aspectOf();
+    private LoggerContext loggerContext;
+    private Configuration loggerConfig;
+    private ListAppender listAppender;
+    private String loggerName;
+
+    @BeforeEach
+    void setUpLogging() {
+        loggerContext = (LoggerContext) LogManager.getContext(false);
+        loggerConfig = loggerContext.getConfiguration();
+        loggerName = TestTarget.class.getName();
+
+        listAppender = new ListAppender("list-" + UUID.randomUUID());
+        listAppender.start();
+        loggerConfig.addAppender(listAppender);
+
+        final LoggerConfig rootConfig = loggerConfig.getRootLogger();
+        rootConfig.addAppender(listAppender, Level.WARN, null);
+        rootConfig.setLevel(Level.WARN);
+
+        final LoggerConfig config = new LoggerConfig(loggerName, Level.WARN, false);
+        config.addAppender(listAppender, Level.WARN, null);
+        loggerConfig.addLogger(loggerName, config);
+        loggerContext.updateLoggers();
+    }
 
     @AfterEach
-    void tearDown() {
-        System.clearProperty("forensics.btmgen.logFile");
-        System.clearProperty("forensics.btmgen.logToFile");
-        MDC.clear();
+    void tearDownLogging() {
+        loggerConfig.getRootLogger().removeAppender(listAppender.getName());
+        loggerConfig.removeLogger(loggerName);
+        listAppender.stop();
+        loggerContext.updateLoggers();
     }
 
     @Test
-    void writesEntriesAndErrorsToLogFileWhenEnabled() throws IOException {
-        Path logFile = tempDir.resolve("aspect.log");
-        System.setProperty("forensics.btmgen.logFile", logFile.toString());
-        System.setProperty("forensics.btmgen.logToFile", "true");
+    void doesNotReportUptimeLikeDurationsForNestedCalls() throws Exception {
+        final MethodLoggingAspect aspect = new MethodLoggingAspect();
+        final JoinPoint outer = joinPoint("TestTarget.outer(..)");
+        final JoinPoint inner = joinPoint("TestTarget.inner(..)");
 
-        TestJoinPoint jp = new TestJoinPoint(SampleService.class, "doWork", new Object[] {"alpha", null});
+        aspect.onEnter(outer);
+        Thread.sleep(10);
+        aspect.onEnter(inner);
+        Thread.sleep(5);
+        aspect.onReturn(inner);
+        Thread.sleep(5);
+        aspect.onReturn(outer);
+
+        final List<Long> durations = listAppender.getEvents().stream()
+                .map(event -> event.getMessage().getFormattedMessage())
+                .map(MethodLoggingAspectTest::extractDurationMs)
+                .flatMap(java.util.Optional::stream)
+                .toList();
+
+        assertThat(durations).hasSize(2);
+        assertThat(durations).allMatch(value -> value >= 0 && value < Duration.ofMinutes(1).toMillis());
+    }
+
+    @Test
+    void cleansUpThreadLocalWhenStackIsEmpty() throws Exception {
+        final MethodLoggingAspect aspect = new MethodLoggingAspect();
+        final JoinPoint jp = joinPoint("TestTarget.single(..)");
 
         aspect.onEnter(jp);
         aspect.onReturn(jp);
 
-        // Catch the exception if onThrow rethrows it
-        try {
-            aspect.onThrow(jp, new IllegalStateException("boom"));
-        } catch (IllegalStateException expected) {
-            // Expected behavior - the aspect may rethrow the exception
-        }
-
-        String content = Files.readString(logFile);
-        assertThat(content)
-                .contains("→ SampleService.doWork(..)")
-                .contains("← SampleService.doWork(..) OK")
-                .contains("failed");
+        final ThreadLocal<?> threadLocal = getThreadLocal();
+        assertThat(threadLocal.get()).isNull();
     }
 
     @Test
-    void skipsFileLoggingWhenDisabled() {
-        Path logFile = tempDir.resolve("disabled.log");
-        System.setProperty("forensics.btmgen.logFile", logFile.toString());
-        System.setProperty("forensics.btmgen.logToFile", "false");
+    void warnsOnUnbalancedReturn() {
+        final MethodLoggingAspect aspect = new MethodLoggingAspect();
+        final JoinPoint jp = joinPoint("TestTarget.unbalanced(..)");
 
-        TestJoinPoint jp = new TestJoinPoint(SampleService.class, "noop", new Object[] {});
+        aspect.onReturn(jp);
 
-        aspect.onEnter(jp);
-
-        assertThat(Files.exists(logFile)).isFalse();
+        assertThat(listAppender.getEvents())
+                .anyMatch(event -> event.getMessage().getFormattedMessage().contains("Unbalanced timing stack"));
     }
 
-    private static final class SampleService {
-        void doWork() {
-        }
+    private static JoinPoint joinPoint(String shortString, Object... args) {
+        final JoinPoint jp = mock(JoinPoint.class);
+        final Signature signature = mock(Signature.class);
+        when(jp.getSignature()).thenReturn(signature);
+        when(signature.getDeclaringType()).thenReturn(TestTarget.class);
+        when(signature.toShortString()).thenReturn(shortString);
+        when(jp.getArgs()).thenReturn(args);
+        return jp;
     }
 
-    private static final class TestJoinPoint implements JoinPoint {
-        private final Object[] args;
-        private final Signature signature;
-
-        TestJoinPoint(Class<?> declaringType, String method, Object[] args) {
-            this.args = args;
-            this.signature = new SimpleSignature(declaringType, method);
+    private static java.util.Optional<Long> extractDurationMs(String message) {
+        final Matcher matcher = OK_PATTERN.matcher(message);
+        if (!matcher.find()) {
+            return java.util.Optional.empty();
         }
-
-        @Override
-        public Object[] getArgs() {
-            return args;
-        }
-
-        @Override
-        public Signature getSignature() {
-            return signature;
-        }
-
-        @Override
-        public Object getTarget() {
-            return null;
-        }
-
-        @Override
-        public Object getThis() {
-            return null;
-        }
-
-        @Override
-        public String getKind() {
-            return "method-execution";
-        }
-
-        @Override
-        public StaticPart getStaticPart() {
-            return new StaticPart() {
-                @Override
-                public int getId() {
-                    return 0;
-                }
-
-                @Override
-                public String getKind() {
-                    return "method-execution";
-                }
-
-                @Override
-                public Signature getSignature() {
-                    return signature;
-                }
-
-                @Override
-                public SourceLocation getSourceLocation() {
-                    return null;
-                }
-
-                @Override
-                public String toString() {
-                    return signature.toString();
-                }
-
-                @Override
-                public String toShortString() {
-                    return signature.toShortString();
-                }
-
-                @Override
-                public String toLongString() {
-                    return signature.toLongString();
-                }
-            };
-        }
-
-        @Override
-        public SourceLocation getSourceLocation() {
-            return null;
-        }
-
-        @Override
-        public String toShortString() {
-            return signature.toShortString();
-        }
-
-        @Override
-        public String toLongString() {
-            return signature.toLongString();
-        }
-
-        @Override
-        public String toString() {
-            return signature.toString();
-        }
+        return java.util.Optional.of(Long.parseLong(matcher.group(1)));
     }
 
-    private static final class SimpleSignature implements Signature {
-        private final Class<?> declaringType;
-        private final String method;
+    private static ThreadLocal<?> getThreadLocal() throws Exception {
+        final Field field = MethodLoggingAspect.class.getDeclaredField("START_NS");
+        field.setAccessible(true);
+        return (ThreadLocal<?>) field.get(null);
+    }
 
-        SimpleSignature(Class<?> declaringType, String method) {
-            this.declaringType = declaringType;
-            this.method = method;
-        }
-
-        @Override
-        public String toShortString() {
-            return declaringType.getSimpleName() + "." + method + "(..)";
-        }
-
-        @Override
-        public String toLongString() {
-            return toShortString();
-        }
-
-        @Override
-        public String toString() {
-            return toShortString();
-        }
-
-        @Override
-        public String getName() {
-            return method;
-        }
-
-        @Override
-        public int getModifiers() {
-            return 0;
-        }
-
-        @Override
-        public Class<?> getDeclaringType() {
-            return declaringType;
-        }
-
-        @Override
-        public String getDeclaringTypeName() {
-            return declaringType.getName();
+    private static final class TestTarget {
+        private TestTarget() {
         }
     }
 }

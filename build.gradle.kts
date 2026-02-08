@@ -27,10 +27,14 @@ dependencies {
     runtimeOnly(libs.aspectj.weaver)
 
     implementation(libs.javaparser.symbol.solver.core)
+    implementation(libs.log4j.api)
 
     // Logging
     testImplementation(libs.slf4j.api)
     testImplementation(libs.byteman)
+    testImplementation(libs.log4j.api)
+    testImplementation(libs.log4j.core)
+    testImplementation(libs.log4j.core.test)
 
     // AspectJ
     testRuntimeOnly(libs.aspectj.weaver)
