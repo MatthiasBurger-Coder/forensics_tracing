@@ -172,7 +172,7 @@ tasks.jar {
 // Project coordinates for publishing
 // Use Gradle properties if provided, otherwise fall back to sensible defaults
 group = providers.gradleProperty("GROUP").orNull ?: "de.burger.forensics"
-version = providers.gradleProperty("VERSION").orNull ?: "0.0.2-SNAPSHOT"
+version = providers.gradleProperty("VERSION").orNull ?: "0.0.3-SNAPSHOT"
 
 gradlePlugin {
     // Top-level metadata for the plugin bundle

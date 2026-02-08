@@ -14,7 +14,7 @@ The toolkit keeps the domain model independent from concrete infrastructure: sca
 1. **Apply the plugin** in your `build.gradle(.kts)`:
    ```kotlin
    plugins {
-       id("de.burger.forensics.btmgen") version "0.0.2-SNAPSHOT" // use the published version you need
+       id("de.burger.forensics.btmgen") version "0.0.3-SNAPSHOT" // use the published version you need
    }
    ```
 
