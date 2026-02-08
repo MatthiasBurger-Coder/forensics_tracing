@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -93,8 +94,8 @@ class MethodLoggingAspectTest {
         aspect.onEnter(jp);
         aspect.onReturn(jp);
 
-        final ThreadLocal<?> threadLocal = getThreadLocal();
-        assertThat(threadLocal.get()).isNull();
+        final ThreadLocal<ArrayDeque<Long>> threadLocal = getThreadLocal();
+        assertThat(threadLocal.get()).isEmpty();
     }
 
     @Test
@@ -105,7 +106,7 @@ class MethodLoggingAspectTest {
         aspect.onReturn(jp);
 
         assertThat(listAppender.getEvents())
-                .anyMatch(event -> event.getMessage().getFormattedMessage().contains("Unbalanced timing stack"));
+                .anyMatch(event -> event.getMessage().getFormattedMessage().contains("(unbalanced timing stack)"));
     }
 
     private static JoinPoint joinPoint(String shortString, Object... args) {
@@ -126,10 +127,12 @@ class MethodLoggingAspectTest {
         return java.util.Optional.of(Long.parseLong(matcher.group(1)));
     }
 
-    private static ThreadLocal<?> getThreadLocal() throws Exception {
-        final Field field = MethodLoggingAspect.class.getDeclaredField("START_NS");
+    private static ThreadLocal<ArrayDeque<Long>> getThreadLocal() throws Exception {
+        final Field field = MethodLoggingAspect.class.getDeclaredField("START_STACK");
         field.setAccessible(true);
-        return (ThreadLocal<?>) field.get(null);
+        @SuppressWarnings("unchecked")
+        final ThreadLocal<ArrayDeque<Long>> threadLocal = (ThreadLocal<ArrayDeque<Long>>) field.get(null);
+        return threadLocal;
     }
 
     private static final class TestTarget {
