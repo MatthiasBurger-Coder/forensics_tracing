@@ -7,7 +7,6 @@ javaparser = "3.27.1"
 aspectj  = "1.9.24"
 bytebuddy = "1.18.2"
 slf4j    = "2.0.17"
-log4j2 = "2.24.3"
 mockito = "5.13.0"
 byteman = "4.0.26"
 jakarta-annotation = "2.1.1"
@@ -37,9 +36,6 @@ aspectj-weaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj"
 
 # Logging
 slf4j-api       = { module = "org.slf4j:slf4j-api",        version.ref = "slf4j" }
-log4j-api = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j2" }
-log4j-core = { module = "org.apache.logging.log4j:log4j-core", version.ref = "log4j2" }
-log4j-core-test = { module = "org.apache.logging.log4j:log4j-core-test", version.ref = "log4j2" }
 #slf4j-simple    = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
 #jul-to-slf4j    = { module = "org.slf4j:jul-to-slf4j",     version.ref = "slf4j" }
 #jcl-over-slf4j  = { module = "org.slf4j:jcl-over-slf4j",   version.ref = "slf4j" }

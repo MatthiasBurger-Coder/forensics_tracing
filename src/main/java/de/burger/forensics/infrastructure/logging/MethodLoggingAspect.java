@@ -1,9 +1,8 @@
 package de.burger.forensics.infrastructure.logging;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.*;
+import org.slf4j.Logger;
 import org.slf4j.MDC;
 
 import java.util.ArrayDeque;
@@ -53,61 +52,73 @@ public class MethodLoggingAspect {
 
     @Before("appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)")
     public void onEnter(final JoinPoint jp) {
-        MDC.put(CID, java.util.Optional.ofNullable(MDC.get(CID))
-                .filter(s -> !s.isBlank())
-                .orElseGet(() -> UUID.randomUUID().toString()));
+        try {
+            MDC.put(CID, java.util.Optional.ofNullable(MDC.get(CID))
+                    .filter(s -> !s.isBlank())
+                    .orElseGet(() -> UUID.randomUUID().toString()));
 
-        START_STACK.get().push(System.nanoTime());
+            START_STACK.get().push(System.nanoTime());
 
-        final String msg = String.format("→ %s %s", shortSig(jp), argsOf(jp));
-        loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
-        fileLog("WARN", msg);
+            final String msg = String.format("→ %s %s", shortSig(jp), argsOf(jp));
+            loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
+            fileLog("WARN", msg);
+        } catch (Throwable t) {
+            swallow("Failed to log method entry.", t);
+        }
     }
 
     @AfterReturning("appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)")
     public void onReturn(final JoinPoint jp) {
-        final ArrayDeque<Long> stack = START_STACK.get();
-        final Long started = stack.poll();
-        final long elapsedMs;
-        if (started == null) {
-            final String warnMsg = "(unbalanced timing stack)";
-            loggerFor(jp).warn(warnMsg);
-            fileLog("WARN", warnMsg);
-            START_STACK.remove();
-            elapsedMs = 0L;
-        } else {
-            if (stack.isEmpty()) {
+        try {
+            final ArrayDeque<Long> stack = START_STACK.get();
+            final Long started = stack.poll();
+            final long elapsedMs;
+            if (started == null) {
+                final String warnMsg = "(unbalanced timing stack)";
+                loggerFor(jp).warn(warnMsg);
+                fileLog("WARN", warnMsg);
                 START_STACK.remove();
+                elapsedMs = 0L;
+            } else {
+                if (stack.isEmpty()) {
+                    START_STACK.remove();
+                }
+                final long elapsedNs = System.nanoTime() - started;
+                elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
             }
-            final long elapsedNs = System.nanoTime() - started;
-            elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
+            final String msg = String.format("← %s OK in %d ms", shortSig(jp), elapsedMs);
+            loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
+            fileLog("WARN", msg);
+        } catch (Throwable t) {
+            swallow("Failed to log method return.", t);
         }
-        final String msg = String.format("← %s OK in %d ms", shortSig(jp), elapsedMs);
-        loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
-        fileLog("WARN", msg);
     }
 
     @AfterThrowing(pointcut = "appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)", throwing = "ex")
     public void onThrow(final JoinPoint jp, final Throwable ex) {
-        final ArrayDeque<Long> stack = START_STACK.get();
-        final Long started = stack.poll();
-        final long elapsedMs;
-        if (started == null) {
-            final String warnMsg = "(unbalanced timing stack)";
-            loggerFor(jp).warn(warnMsg);
-            fileLog("WARN", warnMsg);
-            START_STACK.remove();
-            elapsedMs = 0L;
-        } else {
-            if (stack.isEmpty()) {
+        try {
+            final ArrayDeque<Long> stack = START_STACK.get();
+            final Long started = stack.poll();
+            final long elapsedMs;
+            if (started == null) {
+                final String warnMsg = "(unbalanced timing stack)";
+                loggerFor(jp).warn(warnMsg);
+                fileLog("WARN", warnMsg);
                 START_STACK.remove();
+                elapsedMs = 0L;
+            } else {
+                if (stack.isEmpty()) {
+                    START_STACK.remove();
+                }
+                final long elapsedNs = System.nanoTime() - started;
+                elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
             }
-            final long elapsedNs = System.nanoTime() - started;
-            elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
+            final String msg = String.format("✖ %s failed in %d ms: %s", shortSig(jp), elapsedMs, ex.getMessage());
+            loggerFor(jp).error(msg, ex);
+            fileLog("ERROR", msg + " (see stacktrace in console)");
+        } catch (Throwable t) {
+            swallow("Failed to log method exception.", t);
         }
-        final String msg = String.format("✖ %s failed in %d ms: %s", shortSig(jp), elapsedMs, ex.getMessage());
-        loggerFor(jp).error(msg, ex);
-        fileLog("ERROR", msg + " (see stacktrace in console)");
     }
 
     // ---- helpers (no if-statements) ----
@@ -117,7 +128,7 @@ public class MethodLoggingAspect {
      */
     private Logger loggerFor(JoinPoint jp) {
         final Class<?> type = jp.getSignature().getDeclaringType();
-        return PER_CLASS_LOGGERS.computeIfAbsent(type, LogManager::getLogger);
+        return PER_CLASS_LOGGERS.computeIfAbsent(type, PluginLogger::getLogger);
     }
 
     /**
@@ -160,6 +171,15 @@ public class MethodLoggingAspect {
             }
         } catch (Throwable ignored) {
             // never fail application due to file logging
+        }
+    }
+
+    private void swallow(String message, Throwable t) {
+        try {
+            // Logging is backend-agnostic via SLF4J, so failures remain local.
+            PluginLogger.getLogger(MethodLoggingAspect.class).debug(message, t);
+        } catch (Throwable ignored) {
+            // never fail application due to logging failures
         }
     }
 }
