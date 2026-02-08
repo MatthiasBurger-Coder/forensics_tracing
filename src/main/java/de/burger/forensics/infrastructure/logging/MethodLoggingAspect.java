@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -65,7 +64,7 @@ public class MethodLoggingAspect {
     @AfterReturning("appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)")
     public void onReturn(final JoinPoint jp) {
         final Long started = START_NS.get();
-        final long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - (started != null ? started : System.nanoTime()));
+        final long elapsedMs = System.nanoTime() - (started != null ? started : System.nanoTime());
         START_NS.set(0L);
         final String msg = String.format("← %s OK in %d ms", shortSig(jp), elapsedMs);
         loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
@@ -75,7 +74,7 @@ public class MethodLoggingAspect {
     @AfterThrowing(pointcut = "appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)", throwing = "ex")
     public void onThrow(final JoinPoint jp, final Throwable ex) {
         final Long started = START_NS.get();
-        final long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - (started != null ? started : System.nanoTime()));
+        final long elapsedMs = System.nanoTime() - (started != null ? started : System.nanoTime());
         START_NS.set(0L);
         final String msg = String.format("✖ %s failed in %d ms: %s", shortSig(jp), elapsedMs, ex.getMessage());
         loggerFor(jp).error(msg, ex);
