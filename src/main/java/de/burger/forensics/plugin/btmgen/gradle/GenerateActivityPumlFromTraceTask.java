@@ -83,7 +83,8 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
         sb.append("|").append(firstLane).append("|\n");
         sb.append("start\n\n");
 
-        String pendingCondition = null;
+        String pendingConditionExpr = null;
+        String pendingConditionValue = null;
         for (TraceEvent event : path) {
             if ("BRANCH_TAKEN".equals(event.event())) {
                 String kind = event.details().get("kind");
@@ -91,14 +92,24 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
                     String cls = event.details().getOrDefault("class", endpoint.className());
                     String method = event.details().getOrDefault("method", "unknown");
                     String branch = event.details().getOrDefault("branch", "UNKNOWN");
-                    String conditionText = pendingCondition != null ? pendingCondition : cls + "#" + method;
-                    pendingCondition = null;
-                    appendIfBlock(sb, simpleName(cls), conditionText, branch, elapsedMs(t0, event.timestamp()), event.tsRaw());
+                    String conditionText = pendingConditionExpr != null ? pendingConditionExpr : cls + "#" + method;
+                    appendIfBlock(
+                            sb,
+                            simpleName(cls),
+                            conditionText,
+                            branch,
+                            pendingConditionValue,
+                            elapsedMs(t0, event.timestamp()),
+                            event.tsRaw()
+                    );
+                    pendingConditionExpr = null;
+                    pendingConditionValue = null;
                 } else {
                     String label = event.details().get("label");
                     String value = event.details().get("value");
                     if (label != null) {
-                        pendingCondition = normalizeLabel(label, value);
+                        pendingConditionExpr = normalizeLabel(label);
+                        pendingConditionValue = value;
                     }
                 }
                 continue;
@@ -113,9 +124,9 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
                 String result = event.details().get("result");
                 sb.append("|").append(simpleName(cls)).append("|\n");
                 if (result != null && !result.isBlank()) {
-                    sb.append(":").append(escape(method)).append("() -> ").append(escape(result)).append("; <<#LightGreen>>\n");
+                    sb.append(":").append(escape(method)).append("() -> ").append(escape(result)).append(";\n");
                 } else {
-                    sb.append(":").append(escape(method)).append("(); <<#LightGreen>>\n");
+                    sb.append(":").append(escape(method)).append("();\n");
                 }
                 appendNote(sb, elapsedMs(t0, event.timestamp()), event.tsRaw());
                 sb.append("\n");
@@ -144,19 +155,30 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
         getLogger().lifecycle("Generated trace activity PUML -> {}", out.toAbsolutePath());
     }
 
-    private static void appendIfBlock(StringBuilder sb, String lane, String conditionText, String branch, double ms, String tsRaw) {
+    private static void appendIfBlock(
+            StringBuilder sb,
+            String lane,
+            String conditionText,
+            String branch,
+            String observedValue,
+            double ms,
+            String tsRaw
+    ) {
         boolean trueTaken = "IF_TRUE".equalsIgnoreCase(branch);
+        String observedSuffix = observedValue != null && !observedValue.isBlank()
+                ? " (observed=" + escape(observedValue) + ")"
+                : "";
         sb.append("|").append(lane).append("|\n");
         sb.append("if (").append(escape(conditionText)).append(") then (true)\n");
         if (trueTaken) {
-            sb.append(":IF_TRUE taken; <<#LightGreen>>\n");
+            sb.append(":IF_TRUE taken").append(observedSuffix).append(";\n");
             appendNote(sb, ms, tsRaw);
             sb.append("else (false)\n");
             sb.append(":not taken;\n");
         } else {
             sb.append(":not taken;\n");
             sb.append("else (false)\n");
-            sb.append(":IF_FALSE taken; <<#LightGreen>>\n");
+            sb.append(":IF_FALSE taken").append(observedSuffix).append(";\n");
             appendNote(sb, ms, tsRaw);
         }
         sb.append("endif\n\n");
@@ -283,11 +305,9 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
         return Duration.between(t0, t).toNanos() / 1_000_000.0;
     }
 
-    private static String normalizeLabel(String label, String value) {
+    private static String normalizeLabel(String label) {
         int idx = label.indexOf(':');
-        String expr = idx >= 0 ? label.substring(idx + 1) : label;
-        if (value == null || value.isBlank()) return expr;
-        return expr + " -> " + value;
+        return idx >= 0 ? label.substring(idx + 1) : label;
     }
 
     private static String simpleName(String fqcn) {

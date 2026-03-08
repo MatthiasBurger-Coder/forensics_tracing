@@ -75,22 +75,29 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
         });
 
         StringBuilder sb = new StringBuilder();
+        List<Map.Entry<String, Map<String, MethodSummary>>> sortedClasses = classToMethods.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .toList();
+        String firstLane = simpleName(sortedClasses.get(0).getKey());
+
         sb.append("@startuml\n");
         sb.append("title ").append(sanitize(getDiagramTitle().getOrElse("Forensics Activity Diagram"))).append("\n");
         sb.append("skinparam shadowing false\n");
-        sb.append("start\n");
+        sb.append("|").append(firstLane).append("|\n");
+        sb.append("start\n\n");
 
-        classToMethods.entrySet().stream()
+        sortedClasses.forEach(classEntry -> classEntry.getValue().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
-                .forEach(classEntry -> {
-                    sb.append("partition \"").append(sanitize(classEntry.getKey())).append("\" {\n");
-                    classEntry.getValue().entrySet().stream()
-                            .sorted(Map.Entry.comparingByKey())
-                            .map(Map.Entry::getValue)
-                            .forEach(method -> writeMethodBlock(sb, method));
-                    sb.append("}\n");
-                });
+                .map(Map.Entry::getValue)
+                .forEach(method -> writeMethodBlock(sb, simpleName(classEntry.getKey()), method)));
 
+        sb.append("|").append(firstLane).append("|\n");
+        sb.append("note right\n");
+        sb.append("BTM limits:\\n");
+        sb.append("- this view comes from static Byteman rules, not runtime events\\n");
+        sb.append("- exact executed branch and timings are not available\\n");
+        sb.append("- counts show available instrumentation rules per method\n");
+        sb.append("end note\n");
         sb.append("stop\n");
         sb.append("@enduml\n");
 
@@ -108,22 +115,43 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
         getLogger().lifecycle("Generated activity PUML with swimlanes -> {}", outputPath.toAbsolutePath());
     }
 
-    private static void writeMethodBlock(StringBuilder sb, MethodSummary method) {
+    private static void writeMethodBlock(StringBuilder sb, String lane, MethodSummary method) {
+        sb.append("|").append(lane).append("|\n");
         sb.append(":").append(sanitize(method.methodName)).append("();\n");
-        if (method.enterCount > 0) sb.append(":METHOD_ENTER x").append(method.enterCount).append(";\n");
+        if (method.enterCount > 0) {
+            sb.append("|").append(lane).append("|\n");
+            sb.append(":METHOD_ENTER x").append(method.enterCount).append(";\n");
+        }
         if (method.ifTrueCount > 0 || method.ifFalseCount > 0) {
             String condition = method.conditions.stream().findFirst().orElse("condition");
+            sb.append("|").append(lane).append("|\n");
             sb.append("if (").append(sanitize(condition)).append(") then (true)\n");
-            sb.append(":IF_TRUE x").append(method.ifTrueCount).append(";\n");
+            sb.append(":IF_TRUE rule x").append(method.ifTrueCount).append(";\n");
             sb.append("else (false)\n");
-            sb.append(":IF_FALSE x").append(method.ifFalseCount).append(";\n");
+            sb.append(":IF_FALSE rule x").append(method.ifFalseCount).append(";\n");
             sb.append("endif\n");
         }
-        if (method.switchCount > 0) sb.append(":SWITCH x").append(method.switchCount).append(";\n");
-        if (method.switchCaseCount > 0) sb.append(":SWITCH_CASE x").append(method.switchCaseCount).append(";\n");
-        if (method.throwCount > 0) sb.append(":THROW x").append(method.throwCount).append(";\n");
-        if (method.returnCount > 0) sb.append(":RETURN x").append(method.returnCount).append(";\n");
-        if (method.exitCount > 0) sb.append(":METHOD_EXIT x").append(method.exitCount).append(";\n");
+        if (method.switchCount > 0) {
+            sb.append("|").append(lane).append("|\n");
+            sb.append(":SWITCH rule x").append(method.switchCount).append(";\n");
+        }
+        if (method.switchCaseCount > 0) {
+            sb.append("|").append(lane).append("|\n");
+            sb.append(":SWITCH_CASE rule x").append(method.switchCaseCount).append(";\n");
+        }
+        if (method.throwCount > 0) {
+            sb.append("|").append(lane).append("|\n");
+            sb.append(":THROW rule x").append(method.throwCount).append(";\n");
+        }
+        if (method.returnCount > 0) {
+            sb.append("|").append(lane).append("|\n");
+            sb.append(":RETURN rule x").append(method.returnCount).append(";\n");
+        }
+        if (method.exitCount > 0) {
+            sb.append("|").append(lane).append("|\n");
+            sb.append(":METHOD_EXIT x").append(method.exitCount).append(";\n");
+        }
+        sb.append("\n");
     }
 
     private static List<ParsedRule> parseRules(String content) {
@@ -188,6 +216,12 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
                 .replace('\r', ' ')
                 .replace('\n', ' ')
                 .trim();
+    }
+
+    private static String simpleName(String fqcn) {
+        if (fqcn == null || fqcn.isBlank()) return "Unknown";
+        int idx = fqcn.lastIndexOf('.');
+        return idx >= 0 && idx < fqcn.length() - 1 ? fqcn.substring(idx + 1) : fqcn;
     }
 
     private record ParsedRule(String className, String methodName, EventType eventType, String condition) { }
