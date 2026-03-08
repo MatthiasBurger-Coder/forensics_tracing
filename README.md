@@ -185,6 +185,16 @@ tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateBtmTask>("generateB
 }
 ```
 
+Runtime trace output is configured on the JVM process (`Test`, `bootRun`, app start), not in `btmGen` / `GenerateBtmTask`.
+For Gradle tests, configure it like this:
+
+```kotlin
+tasks.withType<Test>().configureEach {
+    systemProperty("forensics.rt.enabled", "true")
+    systemProperty("forensics.rt.output", "logs/trace.json")
+}
+```
+
 ## Generate rules
 
 ```bash
@@ -248,17 +258,14 @@ Enable runtime tracing:
 
 - JVM property: `-Dforensics.rt.enabled=true`
 - or env var: `FORENSICS_RT_ENABLED=true`
-- Optional file output: `-Dforensics.rt.output=build/forensics/rttrace.jsonl`
+- Optional file output: `-Dforensics.rt.output=logs/trace.json`
 
 Example for Gradle `test`:
 
 ```kotlin
 tasks.withType<Test>().configureEach {
     systemProperty("forensics.rt.enabled", "true")
-    systemProperty(
-        "forensics.rt.output",
-        layout.buildDirectory.file("forensics/rttrace.jsonl").get().asFile.absolutePath
-    )
+    systemProperty("forensics.rt.output", "logs/trace.json")
 }
 ```
 
