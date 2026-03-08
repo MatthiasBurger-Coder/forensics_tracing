@@ -1,6 +1,5 @@
 package de.burger.forensics.adapters.javaparser;
 
-import com.github.javaparser.JavaParser;
 import de.burger.forensics.adaptersupport.javaparser.DefaultConditionRenderingStrategy;
 import de.burger.forensics.adaptersupport.javaparser.InstanceFieldNormalizer;
 import de.burger.forensics.adaptersupport.javaparser.MethodEventExtractor;
@@ -18,30 +17,33 @@ public final class JavaParserScanner implements CodeScanPort {
     private final MethodEventExtractor methodEventExtractor;
     private final JavaParserFactory parserFactory;
     private final JavaSourceFileCollector sourceFileCollector;
+    private final JavaParallelFileScanExecutor parallelFileScanExecutor;
 
     public JavaParserScanner() {
         this(
             new MethodEventExtractor(new DefaultConditionRenderingStrategy(new InstanceFieldNormalizer())),
             new JavaParserFactory(),
-            new JavaSourceFileCollector()
+            new JavaSourceFileCollector(),
+            new JavaParallelFileScanExecutor()
         );
     }
 
     JavaParserScanner(
         MethodEventExtractor methodEventExtractor,
         JavaParserFactory parserFactory,
-        JavaSourceFileCollector sourceFileCollector
+        JavaSourceFileCollector sourceFileCollector,
+        JavaParallelFileScanExecutor parallelFileScanExecutor
     ) {
         this.methodEventExtractor = methodEventExtractor;
         this.parserFactory = parserFactory;
         this.sourceFileCollector = sourceFileCollector;
+        this.parallelFileScanExecutor = parallelFileScanExecutor;
     }
 
     @Override
     public Stream<ScanEvent> scan(Path root) {
-        JavaParser parser = parserFactory.create(root);
-        return sourceFileCollector.collect(root).stream()
-            .map(file -> JavaParserScanEventCollector.collectSafely(parser, file, methodEventExtractor))
-            .flatMap(java.util.Collection::stream);
+        return parallelFileScanExecutor
+            .scan(root, sourceFileCollector.collect(root), parserFactory, methodEventExtractor)
+            .stream();
     }
 }

@@ -16,6 +16,7 @@ final class JavaSourceFileCollector {
             return paths
                 .filter(Files::isRegularFile)
                 .filter(path -> path.getFileName().toString().endsWith(".java"))
+                .sorted()
                 .toList();
         } catch (IOException ignored) {
             // Ignore traversal failures to avoid failing the build on single-file issues.
