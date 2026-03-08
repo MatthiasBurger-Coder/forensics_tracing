@@ -2,11 +2,7 @@ package de.burger.forensics.adaptersupport.javaparser;
 
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.RecordDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.NameExpr;
@@ -50,25 +46,13 @@ public final class StaticFieldQualifier {
     }
 
     boolean isLikelyStaticField(NameExpr name, String identifier, Set<String> localVariables) {
-        if (identifier.isEmpty()) {
-            return false;
-        }
-        if (name.getParentNode().filter(FieldAccessExpr.class::isInstance).isPresent()) {
-            return false;
-        }
-        if (shadowsParameter(name, identifier)) {
-            return false;
-        }
-        if (shadowsLambdaParameter(name, identifier)) {
-            return false;
-        }
-        if (shadowsCatchParameter(name, identifier)) {
-            return false;
-        }
-        if (localVariables.contains(identifier)) {
-            return false;
-        }
-        return declaresStaticField(name, identifier);
+        return !identifier.isEmpty()
+            && name.getParentNode().filter(FieldAccessExpr.class::isInstance).isEmpty()
+            && !shadowsParameter(name, identifier)
+            && !shadowsLambdaParameter(name, identifier)
+            && !shadowsCatchParameter(name, identifier)
+            && !localVariables.contains(identifier)
+            && declaresStaticField(name, identifier);
     }
 
     boolean shadowsParameter(NameExpr name, String identifier) {
@@ -97,13 +81,13 @@ public final class StaticFieldQualifier {
         }
         return findAncestor(name, ClassOrInterfaceDeclaration.class)
             .map(decl -> decl.getFields().stream()
-                .filter(field -> field.isStatic())
+                .filter(FieldDeclaration::isStatic)
                 .flatMap(field -> field.getVariables().stream())
                 .map(VariableDeclarator::getNameAsString)
                 .anyMatch(identifier::equals))
             .or(() -> findAncestor(name, EnumDeclaration.class)
                 .map(decl -> decl.getFields().stream()
-                    .filter(field -> field.isStatic())
+                    .filter(FieldDeclaration::isStatic)
                     .flatMap(field -> field.getVariables().stream())
                     .map(VariableDeclarator::getNameAsString)
                     .anyMatch(identifier::equals)))
