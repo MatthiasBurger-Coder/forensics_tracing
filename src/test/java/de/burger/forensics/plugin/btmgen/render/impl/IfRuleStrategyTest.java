@@ -126,4 +126,24 @@ class IfRuleStrategyTest {
                 .contains("IF eval(\"rule-6\", \"!(com.acme.legacy.OrderRepository.INSTANCE == null)\", !(com.acme.legacy.OrderRepository.INSTANCE == null))")
                 .doesNotContain(" IF eval(\"rule-6\", \"!(INSTANCE == null)\"");
     }
+
+    @Test
+    void resolvesClassPlaceholderForStaticFieldConditions() {
+        RuleParams params = new RuleParams(
+                "rule-7",
+                "com.acme.legacy.OrderRepository",
+                "getInstance",
+                "()Lcom/acme/legacy/OrderRepository;",
+                "OrderRepository#getInstance",
+                "$CLASS.INSTANCE == null",
+                null,
+                RuleParams.DEFAULT_HELPER_FQN
+        );
+
+        String rule = new IfFalseRuleStrategy().render(params);
+
+        assertThat(rule)
+                .contains("IF eval(\"rule-7\", \"!(com.acme.legacy.OrderRepository.INSTANCE == null)\", !(com.acme.legacy.OrderRepository.INSTANCE == null))")
+                .doesNotContain("$CLASS.INSTANCE");
+    }
 }

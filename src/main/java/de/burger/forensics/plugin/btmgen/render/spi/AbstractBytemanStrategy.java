@@ -41,6 +41,16 @@ public abstract class AbstractBytemanStrategy {
         return trimmed;
     }
 
+    protected static String resolveClassPlaceholder(String className, String expression) {
+        if (expression == null) {
+            return null;
+        }
+        if (className == null || className.isBlank()) {
+            return expression;
+        }
+        return expression.replace("$CLASS.", className + ".");
+    }
+
     protected static String qualifyStaticNullCheck(String className, String condition) {
         if (className == null || className.isBlank()) {
             return condition;
