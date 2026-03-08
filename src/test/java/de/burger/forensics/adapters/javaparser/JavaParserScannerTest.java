@@ -10,6 +10,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -219,5 +222,53 @@ class JavaParserScannerTest {
         List<ScanEvent> events = scanner.scan(source).toList();
 
         assertThat(events).hasSize(2);
+    }
+
+    @Test
+    void supportsConcurrentScans(@TempDir Path tempDir) throws Exception {
+        Path left = Files.createDirectory(tempDir.resolve("left"));
+        Path right = Files.createDirectory(tempDir.resolve("right"));
+
+        Files.writeString(left.resolve("Left.java"), """
+            package example.left;
+            public class Left {
+              public void run(int value) {
+                if (value > 0) {
+                  System.out.println(value);
+                }
+              }
+            }
+            """);
+
+        Files.writeString(right.resolve("Right.java"), """
+            package example.right;
+            public class Right {
+              public void run(int value) {
+                if (value > 0) {
+                  System.out.println(value);
+                }
+              }
+            }
+            """);
+
+        try (var executor = Executors.newFixedThreadPool(6)) {
+            List<Callable<List<ScanEvent>>> tasks = List.of(
+                () -> scanner.scan(left).toList(),
+                () -> scanner.scan(right).toList(),
+                () -> scanner.scan(left).toList(),
+                () -> scanner.scan(right).toList(),
+                () -> scanner.scan(left).toList(),
+                () -> scanner.scan(right).toList()
+            );
+
+            var futures = executor.invokeAll(tasks);
+
+            for (var future : futures) {
+                List<ScanEvent> events = future.get(5, TimeUnit.SECONDS);
+                assertThat(events).hasSize(2);
+                assertThat(events).extracting(ScanEvent::kind)
+                    .containsExactlyInAnyOrder(RuleTemplate.IF_TRUE, RuleTemplate.IF_FALSE);
+            }
+        }
     }
 }
