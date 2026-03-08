@@ -274,6 +274,34 @@ If `forensics.rt.output` is set, events are also appended to that JSONL file.
 
 For runtime tracing output, set JVM properties on the process that runs with Byteman (for example `test`, `bootRun`, application start).
 
+## Runtime trace -> PlantUML activity
+
+If your trace JSON is generated during runtime, evaluate it in a second step:
+
+1. Run your application/tests with runtime tracing enabled so `logs/trace.json` is produced.
+2. Generate PlantUML from the recorded trace:
+
+```bash
+./gradlew generateActivityPumlFromTrace
+```
+
+Defaults:
+
+- Input trace: `logs/trace.json`
+- Output diagram: `build/forensics/trace-activity.puml`
+
+Optional (in your consumer `build.gradle.kts`) to point to another trace file:
+
+```kotlin
+tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateActivityPumlFromTraceTask>("generateActivityPumlFromTrace") {
+    inputTrace.set(file("D:/Projects/legacy-demo-shop/logs/trace.json"))
+    outputPuml.set(layout.buildDirectory.file("forensics/source.puml"))
+    // optional endpoint override:
+    // rootClass.set("com.acme.legacy.OrderService")
+    // rootMethod.set("sumGross")
+}
+```
+
 Legacy runtime property compatibility (still supported):
 
 - `-Dforensics.btmgen.logToFile=true`

@@ -72,6 +72,16 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
                     t.getDiagramTitle().convention("Forensics Activity from Byteman Rules");
                 }
         );
+        project.getTasks().register(
+                "generateActivityPumlFromTrace",
+                GenerateActivityPumlFromTraceTask.class,
+                t -> {
+                    t.setGroup("forensics");
+                    t.setDescription("Converts runtime trace JSON (METHOD_EXIT/BRANCH_TAKEN) into a PlantUML activity diagram.");
+                    t.getInputTrace().convention(project.getLayout().getProjectDirectory().file("logs/trace.json"));
+                    t.getOutputPuml().convention(project.getLayout().getBuildDirectory().file("forensics/trace-activity.puml"));
+                }
+        );
         taskProvider.configure(task -> {
             task.getSourceRoot().finalizeValueOnRead();
             task.getOutputFile().finalizeValueOnRead();

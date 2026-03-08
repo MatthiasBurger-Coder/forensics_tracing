@@ -23,6 +23,16 @@ class BtmGenPluginTest {
     }
 
     @Test
+    void registersTraceActivityPumlTask() {
+        Project project = ProjectBuilder.builder().build();
+        project.getPlugins().apply("de.burger.forensics.btmgen");
+
+        var task = project.getTasks().findByName("generateActivityPumlFromTrace");
+        assertNotNull(task, "generateActivityPumlFromTrace task should be registered");
+        assertEquals("forensics", task.getGroup());
+    }
+
+    @Test
     void appliesRuntimeHelperToJavaConfigurations() {
         Project project = ProjectBuilder.builder().build();
         project.getPlugins().apply("java");
