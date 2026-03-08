@@ -124,12 +124,12 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
         LinkedList<String> parts = new LinkedList<>();
         Node current = declaration.getParentNode().orElse(null);
         while (current != null) {
-            switch (current) {
-                case ClassOrInterfaceDeclaration cls -> parts.addFirst(cls.getNameAsString());
-                case EnumDeclaration en -> parts.addFirst(en.getNameAsString());
-                case RecordDeclaration rec -> parts.addFirst(rec.getNameAsString());
-                default -> {
-                }
+            if (current instanceof ClassOrInterfaceDeclaration cls) {
+                parts.addFirst(cls.getNameAsString());
+            } else if (current instanceof EnumDeclaration en) {
+                parts.addFirst(en.getNameAsString());
+            } else if (current instanceof RecordDeclaration rec) {
+                parts.addFirst(rec.getNameAsString());
             }
             current = current.getParentNode().orElse(null);
         }

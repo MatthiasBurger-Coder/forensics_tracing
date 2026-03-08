@@ -36,7 +36,8 @@ final class JavaParallelFileScanExecutor {
         }
 
         List<List<Path>> batches = partition(sourceFiles, workerCount);
-        try (ExecutorService executor = Executors.newFixedThreadPool(workerCount)) {
+        ExecutorService executor = Executors.newFixedThreadPool(workerCount);
+        try {
             List<Callable<List<ScanEvent>>> tasks = batches.stream()
                 .<Callable<List<ScanEvent>>>map(batch ->
                     () -> scanBatch(root, batch, parserFactory, methodEventExtractor))
@@ -52,6 +53,8 @@ final class JavaParallelFileScanExecutor {
             return scanBatch(root, sourceFiles, parserFactory, methodEventExtractor);
         } catch (ExecutionException ignored) {
             return scanBatch(root, sourceFiles, parserFactory, methodEventExtractor);
+        } finally {
+            executor.shutdown();
         }
     }
 

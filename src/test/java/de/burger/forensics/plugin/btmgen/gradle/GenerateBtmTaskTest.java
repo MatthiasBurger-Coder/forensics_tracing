@@ -44,7 +44,7 @@ class GenerateBtmTaskTest {
         task.generate();
 
         assertEquals(1, strategy.calls.size(), "Expected exactly one rendered rule");
-        RuleParams params = strategy.calls.getFirst();
+        RuleParams params = strategy.calls.get(0);
         assertEquals("com.example.Foo", params.className());
         assertEquals("bar", params.methodName());
         assertEquals("(I)V", params.methodDesc());
@@ -110,9 +110,9 @@ class GenerateBtmTaskTest {
         assertEquals(2, strategies.get("METHOD_ENTER").calls.size());
         assertEquals(2, strategies.get("METHOD_EXIT").calls.size());
         assertEquals(1, strategies.get("RETURN").calls.size());
-        assertEquals("alpha", strategies.get("RETURN").calls.getFirst().methodName());
+        assertEquals("alpha", strategies.get("RETURN").calls.get(0).methodName());
         assertEquals(1, strategies.get("THROW").calls.size());
-        assertEquals("beta", strategies.get("THROW").calls.getFirst().methodName());
+        assertEquals("beta", strategies.get("THROW").calls.get(0).methodName());
 
         assertEquals(Set.of("alpha", "beta"),
                 strategies.get("IF_TRUE").calls.stream().map(RuleParams::methodName).collect(Collectors.toSet()));
@@ -230,7 +230,7 @@ class GenerateBtmTaskTest {
 
         task.generate();
 
-        assertEquals("com.example.Helper", strategy.calls.getFirst().helperFqn());
+        assertEquals("com.example.Helper", strategy.calls.get(0).helperFqn());
     }
 
     @Test
@@ -255,7 +255,7 @@ class GenerateBtmTaskTest {
 
         task.generate();
 
-        assertEquals(RuleParams.DEFAULT_HELPER_FQN, strategy.calls.getFirst().helperFqn());
+        assertEquals(RuleParams.DEFAULT_HELPER_FQN, strategy.calls.get(0).helperFqn());
     }
 
     private static Map<String, RecordingStrategy> registerDefaultStrategies(BtmGenExtension extension) {

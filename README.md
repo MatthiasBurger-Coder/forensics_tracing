@@ -12,7 +12,7 @@
 
 ## Requirements
 
-- Java 21+
+- Java 17+
 - Gradle 9.1+
 - Byteman runtime when you want to load generated rules into a JVM
 
@@ -107,6 +107,22 @@ Enable runtime tracing:
 
 ```bash
 ./gradlew test
+```
+
+This branch is aligned for Java 17 compatibility.
+You can verify compilation explicitly with `--release 17` via Gradle init script:
+
+```kotlin
+// force-release-17.init.gradle.kts
+allprojects {
+    tasks.withType<JavaCompile>().configureEach {
+        options.release.set(17)
+    }
+}
+```
+
+```bash
+./gradlew clean compileJava compileTestJava -I force-release-17.init.gradle.kts
 ```
 
 ## Local development

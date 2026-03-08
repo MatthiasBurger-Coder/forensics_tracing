@@ -10,7 +10,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * - No external dependencies
  * - Single JSON line per event to stdout
  * - Thread-local correlationId and nested spans
- *
  * Enable via:
  *   -Dforensics.rt.enabled=true
  * or environment:
@@ -29,6 +28,7 @@ public final class RtTrace {
     /* ===== Public API ===== */
 
     /** Cheap global check to allow fast-path no-op when disabled. */
+    @SuppressWarnings("unused")
     public static boolean isOn() {
         return ENABLED;
     }
@@ -48,6 +48,7 @@ public final class RtTrace {
     }
 
     /** Get the current correlation id (may be null). */
+    @SuppressWarnings("unused")
     public static String correlationId() {
         return CORR_ID.get();
     }
@@ -248,7 +249,7 @@ public final class RtTrace {
         }
 
         sb.append('}');
-        System.out.println(sb.toString());
+        System.out.println(sb);
     }
 
     private static void kv(StringBuilder sb, String k, String v) {
@@ -295,7 +296,7 @@ public final class RtTrace {
         static String newCorrelationId() {
             // Simple, sortable-ish id; replace with UUID if you prefer
             return "corr-" + Long.toUnsignedString(System.currentTimeMillis(), 36)
-                    + "-" + Long.toUnsignedString(Thread.currentThread().threadId(), 36);
+                    + "-" + Integer.toUnsignedString(System.identityHashCode(Thread.currentThread()), 36);
         }
         static String newSpanId() {
             return "s-" + Long.toUnsignedString(SPAN_SEQ.getAndIncrement(), 36);

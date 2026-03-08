@@ -137,7 +137,7 @@ public final class GenerateRulesUseCase {
             if (methodEvents.isEmpty()) {
                 continue;
             }
-            ScanEvent first = methodEvents.getFirst();
+            ScanEvent first = methodEvents.get(0);
             SourceLocation location = first.location();
             context.addMethodContext(
                 methodId,
@@ -178,7 +178,7 @@ public final class GenerateRulesUseCase {
                                        List<Rule> rules) {
         boolean hasEntry = methodEvents.stream().anyMatch(e -> e.kind() == RuleTemplate.METHOD_ENTER);
         if (!hasEntry) {
-            SourceLocation firstLoc = methodEvents.getFirst().location();
+            SourceLocation firstLoc = methodEvents.get(0).location();
             rules.add(entryRule(firstLoc, request.helperFqcn()));
         }
     }
@@ -188,7 +188,7 @@ public final class GenerateRulesUseCase {
                                       List<Rule> rules) {
         boolean hasExit = methodEvents.stream().anyMatch(e -> e.kind() == RuleTemplate.METHOD_EXIT);
         if (!hasExit) {
-            SourceLocation lastLoc = methodEvents.getLast().location();
+            SourceLocation lastLoc = methodEvents.get(methodEvents.size() - 1).location();
             rules.add(exitRule(lastLoc, request.helperFqcn()));
         }
     }

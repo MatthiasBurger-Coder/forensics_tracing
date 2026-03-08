@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
@@ -251,7 +252,8 @@ class JavaParserScannerTest {
             }
             """);
 
-        try (var executor = Executors.newFixedThreadPool(6)) {
+        ExecutorService executor = Executors.newFixedThreadPool(6);
+        try {
             List<Callable<List<ScanEvent>>> tasks = List.of(
                 () -> scanner.scan(left).toList(),
                 () -> scanner.scan(right).toList(),
@@ -269,6 +271,8 @@ class JavaParserScannerTest {
                 assertThat(events).extracting(ScanEvent::kind)
                     .containsExactlyInAnyOrder(RuleTemplate.IF_TRUE, RuleTemplate.IF_FALSE);
             }
+        } finally {
+            executor.shutdown();
         }
     }
 }
