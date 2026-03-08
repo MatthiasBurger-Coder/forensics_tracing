@@ -109,7 +109,7 @@ Enable runtime tracing:
 ./gradlew test
 ```
 
-This branch is aligned for Java 17 compatibility.
+This project is aligned to a Java 17 baseline.
 You can verify compilation explicitly with `--release 17` via Gradle init script:
 
 ```kotlin
