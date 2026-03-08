@@ -2,7 +2,7 @@
 junit    = "5.13.4"
 archunit = "1.4.1"
 junit-platform = "1.11.3"
-assertj  = "3.27.6"
+assertj  = "3.27.7"
 javaparser = "3.27.1"
 aspectj  = "1.9.24"
 bytebuddy = "1.18.2"
