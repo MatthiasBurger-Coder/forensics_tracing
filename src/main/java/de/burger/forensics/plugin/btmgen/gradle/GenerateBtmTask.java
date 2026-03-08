@@ -14,6 +14,7 @@ import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
 import de.burger.forensics.plugin.btmgen.writer.BtmFileWriter;
 import org.gradle.api.DefaultTask;
+import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.file.RegularFileProperty;
@@ -22,6 +23,7 @@ import org.gradle.api.tasks.*;
 import org.gradle.api.tasks.Optional;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,8 +31,10 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Scans Java sources and renders Byteman rules using {@link GenerateRulesUseCase}.
@@ -42,6 +46,11 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Optional
     @PathSensitive(PathSensitivity.RELATIVE)
     public abstract DirectoryProperty getSourceRoot();
+
+    @InputFiles
+    @Optional
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public abstract ConfigurableFileCollection getSourceRoots();
 
     @OutputFile
     @Optional
@@ -74,6 +83,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
         if (ext.getSourceRoot().isPresent()) {
             getSourceRoot().set(ext.getSourceRoot().get());
         }
+        if (!ext.getSourceRoots().isEmpty()) {
+            getSourceRoots().setFrom(ext.getSourceRoots());
+        }
         if (ext.getOutputFile().isPresent()) {
             var file = ext.getOutputFile().get();
             getOutputFile().fileValue(file);
@@ -89,7 +101,6 @@ public abstract class GenerateBtmTask extends DefaultTask {
     public void generate() {
         ensureExtension();
         applyDefaultConventions();
-        final Path srcRoot = getSourceRoot().get().getAsFile().toPath();
         final Path outFile = getOutputFile().get().getAsFile().toPath();
         final StrategyRegistry registry = extension.getRegistry() != null
                 ? extension.getRegistry() : StrategyRegistries.defaultRegistry();
@@ -118,16 +129,17 @@ public abstract class GenerateBtmTask extends DefaultTask {
             );
             allRules.add(renderer.render(templateIdOrDefault(), params));
         } else {
-            getLogger().lifecycle("Scanning sources in {}", srcRoot.toAbsolutePath());
+            List<Path> roots = resolveSourceRoots();
             GenerateRulesUseCase useCase = new GenerateRulesUseCase(
-                    new JavaParserScanner(),
-                    new BytemanRuleRenderAdapter(renderer),
-                    new SystemClockAdapter(),
-                    new GradleLogAdapter(getLogger()),
-                    new DefaultStrategyFactory()
+                new JavaParserScanner(),
+                new BytemanRuleRenderAdapter(renderer),
+                new SystemClockAdapter(),
+                new GradleLogAdapter(getLogger()),
+                new DefaultStrategyFactory()
             );
-
-            GenerationRequest request = new GenerationRequest(
+            for (Path srcRoot : roots) {
+                getLogger().lifecycle("Scanning sources in {}", srcRoot.toAbsolutePath());
+                GenerationRequest request = new GenerationRequest(
                     srcRoot,
                     resolveHelperFqn(),
                     false,
@@ -135,11 +147,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
                     packagePrefixes(),
                     minBranches(),
                     Collections.emptyList()
-            );
-
-            RuleGenerationResult result = useCase.generate(request);
-            allRules.addAll(result.renderedRules());
+                );
+                RuleGenerationResult result = useCase.generate(request);
+                allRules.addAll(result.renderedRules());
+            }
         }
+
+        List<String> uniqueRules = new ArrayList<>(new LinkedHashSet<>(allRules));
 
         // Write output once
         try {
@@ -150,12 +164,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
             } catch (NoSuchMethodError | NoClassDefFoundError e) {
                 writer = new BtmFileWriter(outFile);
             }
-            writer.write(allRules);
+            writer.write(uniqueRules);
         } catch (Exception e) {
             throw new RuntimeException("Failed writing BTM file " + outFile, e);
         }
 
-        getLogger().lifecycle("Generated {} rules -> {}", allRules.size(), outFile.toAbsolutePath());
+        getLogger().lifecycle("Generated {} rules -> {}", uniqueRules.size(), outFile.toAbsolutePath());
     }
 
     private void ensureExtension() {
@@ -172,6 +186,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
         ProjectLayout layout = getProject().getLayout();
         if (!getSourceRoot().isPresent()) {
             getSourceRoot().convention(layout.getProjectDirectory().dir("src/main/java"));
+        }
+        if (getSourceRoots().isEmpty()) {
+            getSourceRoots().from(getSourceRoot());
         }
         if (!getOutputFile().isPresent()) {
             getOutputFile().convention(
@@ -211,6 +228,20 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
     private int minBranches() {
         return getMinBranchesPerMethod().getOrElse(2);
+    }
+
+    private List<Path> resolveSourceRoots() {
+        Set<Path> roots = new LinkedHashSet<>();
+        getSourceRoots().getFiles().stream()
+            .map(File::toPath)
+            .forEach(roots::add);
+        if (roots.isEmpty() && getSourceRoot().isPresent()) {
+            roots.add(getSourceRoot().get().getAsFile().toPath());
+        }
+        return roots.stream()
+            .filter(Files::exists)
+            .filter(Files::isDirectory)
+            .toList();
     }
 
     private List<String> packagePrefixes() {

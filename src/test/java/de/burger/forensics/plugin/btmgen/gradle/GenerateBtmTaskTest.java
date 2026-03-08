@@ -131,6 +131,54 @@ class GenerateBtmTaskTest {
     }
 
     @Test
+    void generateScansMultipleSourceRootsAcrossModules(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+
+        Path moduleASrc = tempDir.resolve("module-a/src/main/java/com/acme/a");
+        Path moduleBSrc = tempDir.resolve("module-b/src/main/java/com/acme/b");
+        Files.createDirectories(moduleASrc);
+        Files.createDirectories(moduleBSrc);
+
+        Files.writeString(moduleASrc.resolve("Alpha.java"), """
+                package com.acme.a;
+                public class Alpha {
+                  public int one() {
+                    if (true) { }
+                    switch (1) { case 1 -> {} }
+                    return 1;
+                  }
+                }
+                """);
+        Files.writeString(moduleBSrc.resolve("Beta.java"), """
+                package com.acme.b;
+                public class Beta {
+                  public int two() {
+                    if (false) { }
+                    switch (2) { case 2 -> {} }
+                    return 2;
+                  }
+                }
+                """);
+
+        var task = project.getTasks().register("generateBtmMultiModule", GenerateBtmTask.class).get();
+        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        extension.getSourceRoots().setFrom(
+            tempDir.resolve("module-a/src/main/java").toFile(),
+            tempDir.resolve("module-b/src/main/java").toFile()
+        );
+        Path outputFile = tempDir.resolve("build/forensics/multi-module.btm");
+        extension.getOutputFile().set(outputFile.toFile());
+        task.setExtension(extension);
+
+        task.generate();
+
+        assertTrue(Files.exists(outputFile), "Output file should be created");
+        String content = Files.readString(outputFile);
+        assertTrue(content.contains("com.acme.a.Alpha#one"));
+        assertTrue(content.contains("com.acme.b.Beta#two"));
+    }
+
+    @Test
     void generatedRulesInvokeHelpersDirectly(@TempDir Path tempDir) throws IOException {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
         Path srcDir = tempDir.resolve("src/main/java/com/example");

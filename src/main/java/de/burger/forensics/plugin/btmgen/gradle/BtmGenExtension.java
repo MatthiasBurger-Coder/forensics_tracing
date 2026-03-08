@@ -6,6 +6,7 @@ import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
 import lombok.Getter;
 import lombok.Setter;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.provider.Property;
 import org.jetbrains.annotations.NotNull;
 
@@ -31,6 +32,11 @@ public abstract class BtmGenExtension {
     private final Property<@NotNull File> sourceRoot;
     /**
      * -- GETTER --
+     * Optional: multiple source roots to scan in one run (for multi-module layouts).
+     */
+    private final ConfigurableFileCollection sourceRoots;
+    /**
+     * -- GETTER --
      * Output .btm file location.
      */
     private final Property<@NotNull File> outputFile;
@@ -49,11 +55,13 @@ public abstract class BtmGenExtension {
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
         this.sourceRoot = objects.property(File.class);
+        this.sourceRoots = objects.fileCollection();
         this.outputFile = objects.property(File.class);
         this.includes = objects.property(String.class);
         this.helperFqn = objects.property(String.class);
         this.minBranchesPerMethod = objects.property(Integer.class);
         this.sourceRoot.convention(new File("src/main/java"));
+        this.sourceRoots.from(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
         this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
         this.minBranchesPerMethod.convention(2);
