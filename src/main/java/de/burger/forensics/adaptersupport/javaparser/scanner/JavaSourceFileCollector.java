@@ -1,4 +1,4 @@
-package de.burger.forensics.adapters.javaparser;
+package de.burger.forensics.adaptersupport.javaparser.scanner;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -9,9 +9,9 @@ import java.util.stream.Stream;
 /**
  * Collects Java source files while skipping symbolic-link directories.
  */
-final class JavaSourceFileCollector {
+public final class JavaSourceFileCollector {
 
-    List<Path> collect(Path root) {
+    public List<Path> collect(Path root) {
         try (Stream<Path> paths = Files.walk(root, 64)) {
             return paths
                 .filter(Files::isRegularFile)

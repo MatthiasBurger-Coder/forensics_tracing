@@ -1,4 +1,4 @@
-package de.burger.forensics.adapters.javaparser;
+package de.burger.forensics.adaptersupport.javaparser.scanner;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
@@ -13,9 +13,9 @@ import java.nio.file.Path;
 /**
  * Creates per-scan JavaParser instances with an isolated symbol solver.
  */
-final class JavaParserFactory {
+public final class JavaParserFactory {
 
-    JavaParser create(Path root) {
+    public JavaParser create(Path root) {
         CombinedTypeSolver typeSolver = new CombinedTypeSolver(new ReflectionTypeSolver(false));
         if (Files.isDirectory(root)) {
             typeSolver.add(new JavaParserTypeSolver(root));

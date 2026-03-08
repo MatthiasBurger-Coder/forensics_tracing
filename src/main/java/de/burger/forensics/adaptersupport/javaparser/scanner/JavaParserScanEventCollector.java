@@ -1,4 +1,4 @@
-package de.burger.forensics.adapters.javaparser;
+package de.burger.forensics.adaptersupport.javaparser.scanner;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.body.MethodDeclaration;
@@ -13,7 +13,7 @@ import java.util.List;
 /**
  * Parses a Java source file and maps it to domain scan events.
  */
-final class JavaParserScanEventCollector {
+public final class JavaParserScanEventCollector {
 
     private JavaParserScanEventCollector() {
     }

@@ -3,6 +3,9 @@ package de.burger.forensics.adapters.javaparser;
 import de.burger.forensics.adaptersupport.javaparser.DefaultConditionRenderingStrategy;
 import de.burger.forensics.adaptersupport.javaparser.InstanceFieldNormalizer;
 import de.burger.forensics.adaptersupport.javaparser.MethodEventExtractor;
+import de.burger.forensics.adaptersupport.javaparser.scanner.JavaParallelFileScanExecutor;
+import de.burger.forensics.adaptersupport.javaparser.scanner.JavaParserFactory;
+import de.burger.forensics.adaptersupport.javaparser.scanner.JavaSourceFileCollector;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.port.out.CodeScanPort;
 
