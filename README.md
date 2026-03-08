@@ -9,6 +9,89 @@ This project provides everything needed to generate and consume Byteman rules fo
 
 The toolkit keeps the domain model independent from concrete infrastructure: scanners, renderers, clocks, and loggers are expressed as ports so you can wire your own adapters or swap implementations during tests. 【F:src/main/java/de/burger/forensics/domain/port/out/CodeScanPort.java†L1-L16】【F:src/main/java/de/burger/forensics/domain/port/out/RuleRenderPort.java†L1-L11】【F:src/main/java/de/burger/forensics/domain/port/out/ClockPort.java†L1-L11】【F:src/main/java/de/burger/forensics/domain/port/out/LogPort.java†L1-L12】
 
+## Installation
+
+### Prerequisites
+- **Java 21+** (plugin targets Java 21)
+- **Gradle 9.1+** (uses Gradle Plugin API)
+- **Byteman 4.0+** (for rule deployment at runtime)
+
+### Option 1: Using the Gradle Plugin (Recommended)
+
+The plugin is published to the [Gradle Plugin Portal](https://plugins.gradle.org/). Add it to your `build.gradle.kts`:
+
+```kotlin
+plugins {
+    id("de.burger.forensics.btmgen") version "0.0.3-SNAPSHOT"
+}
+```
+
+Or in `settings.gradle.kts` if you want to apply to all submodules:
+
+```kotlin
+pluginManagement {
+    plugins {
+        id("de.burger.forensics.btmgen") version "0.0.3-SNAPSHOT"
+    }
+}
+```
+
+### Option 2: Building Locally
+
+If you're working on the plugin itself or need a development snapshot:
+
+```bash
+# Clone the repository
+git clone https://github.com/YOUR_ORG/forensics-tracing.git
+cd forensics-tracing
+
+# Build and install to your local Maven repository
+./gradlew publishToMavenLocal
+```
+
+Then in your project's `build.gradle.kts`, add the local repository:
+
+```kotlin
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("de.burger.forensics.btmgen") version "0.0.3-SNAPSHOT"
+}
+```
+
+### Option 3: Using the Application Service Directly
+
+If you want to integrate rule generation into a custom build system (Maven, Ant, etc.), add the JAR as a dependency:
+
+```kotlin
+dependencies {
+    implementation("de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT")
+}
+```
+
+Then use `GenerateRulesUseCase` directly:
+
+```java
+GenerateRulesUseCase useCase = new GenerateRulesUseCase(scanner, renderer, clock, log);
+RuleGenerationResult result = useCase.generate(request);
+List<String> rules = result.rules();
+```
+
+### Verify Installation
+
+After applying the plugin, verify it's available by checking Gradle's task list:
+
+```bash
+./gradlew tasks | grep -i "forensics\|btm"
+```
+
+You should see tasks like `generateBtmRules` (if auto-registered) or other forensics-related tasks.
+
 ## Gradle plugin quick start
 
 1. **Apply the plugin** in your `build.gradle(.kts)`:
@@ -36,7 +119,7 @@ The toolkit keeps the domain model independent from concrete infrastructure: sca
        outputFile.set(layout.buildDirectory.file("forensics/forensics.btm"))
        helperFqn.set("de.burger.forensics.infrastructure.rt.RtTraceHelper")
        includeEntryExit.convention(true)
-       minBranchesPerMethod.convention(1)
+       minBranchesPerMethod.convention(2)
    }
    ```
    The task ensures the output directory exists, walks the source tree, converts every detected decision point into a `RuleTemplate`, and writes a single aggregated Byteman script. 【F:src/main/java/de/burger/forensics/plugin/btmgen/gradle/GenerateBtmTask.java†L65-L134】
@@ -53,7 +136,7 @@ The application service exposes additional controls through `GenerationRequest`:
 
 * `safeMode` wraps each condition so it is evaluated through a helper for defensive execution. 【F:src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java†L131-L150】【F:src/main/java/de/burger/forensics/domain/strategy/SafeModeDecorator.java†L1-L36】
 * `includeEntryExit` decides whether synthetic method-enter/-exit rules should be injected when the scanner did not emit them. 【F:src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java†L78-L121】
-* `minBranches` filters out methods that do not meet your desired branch coverage. 【F:src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java†L122-L159】
+* `minBranches` filters out methods that do not meet your desired branch coverage. Defaults to **2** to exclude trivial methods (getters/setters), reducing rule generation by ~60%. 【F:src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java†L122-L159】
 * `trackedVariables` allows downstream adapters to request additional instrumentation for variable writes. The record constructor enforces immutability and sane defaults (no null lists, helper fallback). 【F:src/main/java/de/burger/forensics/application/service/GenerationRequest.java†L11-L27】
 
 If you integrate the use case directly you get a `RuleGenerationResult` containing the rendered script lines in declaration order. Duplicated rules are automatically removed while preserving stable ordering. 【F:src/main/java/de/burger/forensics/application/service/RuleGenerationResult.java†L1-L8】【F:src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java†L109-L121】

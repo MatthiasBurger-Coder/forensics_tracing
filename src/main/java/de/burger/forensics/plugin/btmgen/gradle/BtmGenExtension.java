@@ -40,6 +40,11 @@ public abstract class BtmGenExtension {
      * Fully qualified helper class invoked from generated rules.
      */
     private final Property<@NotNull String> helperFqn;
+    /**
+     * -- GETTER --
+     * Minimum number of branches required per method to include rules.
+     */
+    private final Property<@NotNull Integer> minBranchesPerMethod;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
@@ -47,9 +52,11 @@ public abstract class BtmGenExtension {
         this.outputFile = objects.property(File.class);
         this.includes = objects.property(String.class);
         this.helperFqn = objects.property(String.class);
+        this.minBranchesPerMethod = objects.property(Integer.class);
         this.sourceRoot.convention(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
         this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
+        this.minBranchesPerMethod.convention(2);
     }
 
 }

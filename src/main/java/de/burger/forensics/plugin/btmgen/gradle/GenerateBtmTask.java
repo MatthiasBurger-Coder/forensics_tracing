@@ -82,6 +82,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
             }
         }
         getHelperFqn().convention(ext.getHelperFqn());
+        getMinBranchesPerMethod().convention(ext.getMinBranchesPerMethod());
     }
 
     @TaskAction
@@ -185,6 +186,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
         if (!getIncludeEntryExit().isPresent()) {
             getIncludeEntryExit().convention(true);
         }
+        if (!getMinBranchesPerMethod().isPresent()) {
+            getMinBranchesPerMethod().convention(2);
+        }
     }
 
     private boolean hasMinimalInputs() {
@@ -206,7 +210,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
     }
 
     private int minBranches() {
-        return getMinBranchesPerMethod().getOrElse(0);
+        return getMinBranchesPerMethod().getOrElse(2);
     }
 
     private List<String> packagePrefixes() {
