@@ -61,6 +61,17 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
                     }
                 }
         );
+        project.getTasks().register(
+                "generateActivityPumlFromBtm",
+                GenerateActivityPumlFromBtmTask.class,
+                t -> {
+                    t.setGroup("forensics");
+                    t.setDescription("Converts a Byteman (.btm) file into a PlantUML activity diagram with swimlanes.");
+                    t.getInputBtm().convention(project.getLayout().getBuildDirectory().file("forensics/forensics.btm"));
+                    t.getOutputPuml().convention(project.getLayout().getBuildDirectory().file("forensics/forensics-activity.puml"));
+                    t.getDiagramTitle().convention("Forensics Activity from Byteman Rules");
+                }
+        );
         taskProvider.configure(task -> {
             task.getSourceRoot().finalizeValueOnRead();
             task.getOutputFile().finalizeValueOnRead();

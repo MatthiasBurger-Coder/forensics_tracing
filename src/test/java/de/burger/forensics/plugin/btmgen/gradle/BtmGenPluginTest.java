@@ -13,6 +13,16 @@ import static org.junit.jupiter.api.Assertions.*;
 class BtmGenPluginTest {
 
     @Test
+    void registersActivityPumlTask() {
+        Project project = ProjectBuilder.builder().build();
+        project.getPlugins().apply("de.burger.forensics.btmgen");
+
+        var task = project.getTasks().findByName("generateActivityPumlFromBtm");
+        assertNotNull(task, "generateActivityPumlFromBtm task should be registered");
+        assertEquals("forensics", task.getGroup());
+    }
+
+    @Test
     void appliesRuntimeHelperToJavaConfigurations() {
         Project project = ProjectBuilder.builder().build();
         project.getPlugins().apply("java");
