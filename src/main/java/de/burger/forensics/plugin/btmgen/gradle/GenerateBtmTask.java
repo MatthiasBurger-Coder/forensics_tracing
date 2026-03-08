@@ -66,8 +66,6 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Input @Optional public abstract Property<@NotNull String> getMethodDesc();
     @Input @Optional public abstract Property<@NotNull Boolean> getIncludeEntryExit();
     @Input @Optional public abstract Property<@NotNull Integer>  getMinBranchesPerMethod();
-    @Input @Optional public abstract Property<@NotNull Boolean> getLogToFile();
-    @Input @Optional public abstract Property<@NotNull String>  getLogFilePath();
     @Input @Optional public abstract Property<@NotNull String>  getHelperFqn();
     @Input @Optional public abstract Property<@NotNull Boolean> getScanSubprojects();
 

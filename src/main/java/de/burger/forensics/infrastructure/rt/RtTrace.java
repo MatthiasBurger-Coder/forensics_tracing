@@ -18,7 +18,10 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class RtTrace {
 
     private static final boolean ENABLED = isEnabled();
+    private static final String FILE_LOG_PATH = fileLogPath();
+    private static final boolean FILE_LOG_ENABLED = isFileLogEnabled();
     private static final AtomicLong SPAN_SEQ = new AtomicLong(1);
+    private static final Object FILE_LOCK = new Object();
 
     private static final ThreadLocal<String> CORR_ID = ThreadLocal.withInitial(() -> null);
     private static final ThreadLocal<SpanStack> SPANS = ThreadLocal.withInitial(SpanStack::new);
@@ -249,7 +252,9 @@ public final class RtTrace {
         }
 
         sb.append('}');
-        System.out.println(sb);
+        String line = sb.toString();
+        System.out.println(line);
+        appendToFile(line);
     }
 
     private static void kv(StringBuilder sb, String k, String v) {
@@ -288,6 +293,60 @@ public final class RtTrace {
         if (p != null) return Boolean.parseBoolean(p);
         String env = System.getenv("FORENSICS_RT_ENABLED");
         return env != null && env.equalsIgnoreCase("true");
+    }
+
+    private static String fileLogPath() {
+        String output = System.getProperty("forensics.rt.output");
+        if (output != null && !output.isBlank()) return output;
+        String p = System.getProperty("forensics.rt.logFilePath");
+        if (p != null && !p.isBlank()) return p;
+        String legacyPath = System.getProperty("forensics.btmgen.logFilePath");
+        if (legacyPath != null && !legacyPath.isBlank()) return legacyPath;
+        String legacyFile = System.getProperty("forensics.btmgen.logFile");
+        if (legacyFile != null && !legacyFile.isBlank()) return legacyFile;
+        if (legacyBooleanTrue("forensics.rt.logToFile") || legacyBooleanTrue("forensics.btmgen.logToFile")) {
+            return "build/forensics/rttrace.jsonl";
+        }
+        return null;
+    }
+
+    private static boolean isFileLogEnabled() {
+        // Preferred behavior: setting an output path is enough to enable file output.
+        if (FILE_LOG_PATH != null && !FILE_LOG_PATH.isBlank()) return true;
+
+        // Backward compatibility for existing property-based toggles.
+        String p = System.getProperty("forensics.rt.logToFile");
+        if (p != null) return Boolean.parseBoolean(p);
+        String legacy = System.getProperty("forensics.btmgen.logToFile");
+        if (legacy != null) return Boolean.parseBoolean(legacy);
+        return false;
+    }
+
+    private static boolean legacyBooleanTrue(String key) {
+        String value = System.getProperty(key);
+        return Boolean.parseBoolean(value);
+    }
+
+    private static void appendToFile(String line) {
+        if (!FILE_LOG_ENABLED) return;
+        String logPath = FILE_LOG_PATH;
+        if (logPath == null || logPath.isBlank()) return;
+        try {
+            java.io.File file = new java.io.File(logPath);
+            java.io.File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) {
+                // noinspection ResultOfMethodCallIgnored
+                parent.mkdirs();
+            }
+            synchronized (FILE_LOCK) {
+                try (java.io.FileWriter fw = new java.io.FileWriter(file, true)) {
+                    fw.write(line);
+                    fw.write(System.lineSeparator());
+                }
+            }
+        } catch (Throwable ignored) {
+            // never fail application due to tracing sink issues
+        }
     }
 
     /* ===== Helpers ===== */
