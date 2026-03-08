@@ -69,6 +69,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Input @Optional public abstract Property<@NotNull Boolean> getLogToFile();
     @Input @Optional public abstract Property<@NotNull String>  getLogFilePath();
     @Input @Optional public abstract Property<@NotNull String>  getHelperFqn();
+    @Input @Optional public abstract Property<@NotNull Boolean> getScanSubprojects();
 
     // Provided by plugin (or set manually in build script)
     private BtmGenExtension extension;
@@ -95,6 +96,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         }
         getHelperFqn().convention(ext.getHelperFqn());
         getMinBranchesPerMethod().convention(ext.getMinBranchesPerMethod());
+        getScanSubprojects().convention(ext.getScanSubprojects());
     }
 
     @TaskAction
@@ -206,6 +208,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
         if (!getMinBranchesPerMethod().isPresent()) {
             getMinBranchesPerMethod().convention(2);
         }
+        if (!getScanSubprojects().isPresent()) {
+            getScanSubprojects().convention(false);
+        }
     }
 
     private boolean hasMinimalInputs() {
@@ -235,6 +240,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getSourceRoots().getFiles().stream()
             .map(File::toPath)
             .forEach(roots::add);
+        if (getScanSubprojects().getOrElse(false)) {
+            getProject().getRootProject().getAllprojects().forEach(project -> {
+                Path candidate = project.getLayout().getProjectDirectory().dir("src/main/java").getAsFile().toPath();
+                roots.add(candidate);
+            });
+        }
         if (roots.isEmpty() && getSourceRoot().isPresent()) {
             roots.add(getSourceRoot().get().getAsFile().toPath());
         }

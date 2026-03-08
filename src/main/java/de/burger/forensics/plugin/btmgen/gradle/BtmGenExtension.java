@@ -51,6 +51,11 @@ public abstract class BtmGenExtension {
      * Minimum number of branches required per method to include rules.
      */
     private final Property<@NotNull Integer> minBranchesPerMethod;
+    /**
+     * -- GETTER --
+     * If true, automatically scan src/main/java in all projects of the current Gradle build.
+     */
+    private final Property<@NotNull Boolean> scanSubprojects;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
@@ -60,11 +65,13 @@ public abstract class BtmGenExtension {
         this.includes = objects.property(String.class);
         this.helperFqn = objects.property(String.class);
         this.minBranchesPerMethod = objects.property(Integer.class);
+        this.scanSubprojects = objects.property(Boolean.class);
         this.sourceRoot.convention(new File("src/main/java"));
         this.sourceRoots.from(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
         this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
         this.minBranchesPerMethod.convention(2);
+        this.scanSubprojects.convention(false);
     }
 
 }
