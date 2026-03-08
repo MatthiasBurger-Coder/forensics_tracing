@@ -357,6 +357,81 @@ class GenerateBtmTaskTest {
         assertEquals(RuleParams.DEFAULT_HELPER_FQN, strategy.calls.get(0).helperFqn());
     }
 
+    @Test
+    void generateDedupesDuplicateRuleHeaders(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Files.writeString(srcDir.resolve("Sample.java"), """
+                package com.example;
+                public class Sample {
+                  public void alpha() {
+                    if (true) { }
+                    if (false) { }
+                  }
+                }
+                """);
+
+        var task = project.getTasks().register("generateBtmDedupHeaders", GenerateBtmTask.class).get();
+        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        extension.getMinBranchesPerMethod().set(0);
+        Path outputFile = tempDir.resolve("build/forensics/dedup-headers.btm");
+        extension.getOutputFile().set(outputFile.toFile());
+        extension.setRegistry(StrategyRegistry.builder()
+            .register(new RuleRenderStrategy() {
+                @Override
+                public String id() {
+                    return "IF_TRUE";
+                }
+
+                @Override
+                public String render(RuleParams params) {
+                    return """
+                        RULE duplicate-header
+                        CLASS com.example.Sample
+                        METHOD alpha
+                        HELPER %s
+                        AT ENTRY
+                        IF %s
+                        DO
+                            onBranch(com.example.Sample.class, "alpha", "IF_TRUE");
+                        ENDRULE
+                        """.formatted(params.helperFqn(), params.condition());
+                }
+            })
+            .register(new RuleRenderStrategy() {
+                @Override
+                public String id() {
+                    return "IF_FALSE";
+                }
+
+                @Override
+                public String render(RuleParams params) {
+                    return """
+                        RULE unique-false-%s
+                        CLASS com.example.Sample
+                        METHOD alpha
+                        HELPER %s
+                        AT ENTRY
+                        IF %s
+                        DO
+                            onBranch(com.example.Sample.class, "alpha", "IF_FALSE");
+                        ENDRULE
+                        """.formatted(params.id(), params.helperFqn(), params.condition());
+                }
+            })
+            .build());
+        task.setExtension(extension);
+        task.getIncludeEntryExit().set(false);
+
+        task.generate();
+
+        String content = Files.readString(outputFile);
+        assertTrue(content.contains("RULE duplicate-header\n"));
+        assertTrue(content.contains("RULE duplicate-header_2\n"));
+    }
+
     private static Map<String, RecordingStrategy> registerDefaultStrategies(BtmGenExtension extension) {
         Map<String, RecordingStrategy> strategies = new HashMap<>();
         var builder = StrategyRegistry.builder();

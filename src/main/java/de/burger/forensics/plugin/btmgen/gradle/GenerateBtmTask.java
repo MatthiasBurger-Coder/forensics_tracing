@@ -31,15 +31,20 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Scans Java sources and renders Byteman rules using {@link GenerateRulesUseCase}.
  */
 public abstract class GenerateBtmTask extends DefaultTask {
+    private static final Pattern RULE_HEADER_PATTERN = Pattern.compile("(?m)^(\\s*RULE\\s+)(.+?)\\s*$");
 
     // ---- Configurable inputs ----
     @InputDirectory
@@ -154,6 +159,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         }
 
         List<String> uniqueRules = new ArrayList<>(new LinkedHashSet<>(allRules));
+        List<String> dedupedRuleNames = dedupeRuleHeaders(uniqueRules);
 
         // Write output once
         try {
@@ -164,12 +170,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
             } catch (NoSuchMethodError | NoClassDefFoundError e) {
                 writer = new BtmFileWriter(outFile);
             }
-            writer.write(uniqueRules);
+            writer.write(dedupedRuleNames);
         } catch (Exception e) {
             throw new RuntimeException("Failed writing BTM file " + outFile, e);
         }
 
-        getLogger().lifecycle("Generated {} rules -> {}", uniqueRules.size(), outFile.toAbsolutePath());
+        getLogger().lifecycle("Generated {} rules -> {}", dedupedRuleNames.size(), outFile.toAbsolutePath());
     }
 
     private void ensureExtension() {
@@ -265,5 +271,28 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
+    }
+
+    private List<String> dedupeRuleHeaders(List<String> rules) {
+        Map<String, Integer> seen = new HashMap<>();
+        List<String> out = new ArrayList<>(rules.size());
+        for (String rule : rules) {
+            Matcher matcher = RULE_HEADER_PATTERN.matcher(rule);
+            if (!matcher.find()) {
+                out.add(rule);
+                continue;
+            }
+            String prefix = matcher.group(1);
+            String originalName = matcher.group(2).trim();
+            int index = seen.merge(originalName, 1, Integer::sum);
+            if (index == 1) {
+                out.add(rule);
+                continue;
+            }
+            String replacement = prefix + originalName + "_" + index;
+            String rewritten = rule.substring(0, matcher.start()) + replacement + rule.substring(matcher.end());
+            out.add(rewritten);
+        }
+        return out;
     }
 }
