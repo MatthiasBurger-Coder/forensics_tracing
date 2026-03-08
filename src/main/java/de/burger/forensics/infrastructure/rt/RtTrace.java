@@ -305,7 +305,7 @@ public final class RtTrace {
         String legacyFile = System.getProperty("forensics.btmgen.logFile");
         if (legacyFile != null && !legacyFile.isBlank()) return legacyFile;
         if (legacyBooleanTrue("forensics.rt.logToFile") || legacyBooleanTrue("forensics.btmgen.logToFile")) {
-            return "build/forensics/rttrace.jsonl";
+            return "logs/trace.json";
         }
         return null;
     }
