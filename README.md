@@ -20,7 +20,7 @@ The toolkit keeps the domain model independent from concrete infrastructure: sca
 
 2. **Configure the extension** to define where sources live, which helper class should be invoked from rules, and (optionally) a custom strategy registry:
    ```kotlin
-   forensicsBtmGen {
+   btmGen {
        sourceRoot.set(layout.projectDirectory.dir("src/main/java").asFile)
        outputFile.set(layout.buildDirectory.file("forensics/tracing.btm").get().asFile)
        helperFqn.set("de.burger.forensics.infrastructure.rt.RtTraceHelper")
@@ -130,7 +130,7 @@ policy.routePredicate() >> ({ String id -> true } as Predicate<String>)
 If you prefer `Stub` semantics for the policy you need to perform the same cast, otherwise Spock will return the boolean value produced by the closure and Byteman (or your production code) will choke when it tries to call `Predicate#test` on it:
 
 ```groovy
-def policy = Stub(TogglePolicy) {
+Stub(TogglePolicy) {
   newEnabled() >> true
   routePredicate() >> ({ String id -> true } as Predicate<String>)
 }

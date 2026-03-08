@@ -35,7 +35,6 @@ public abstract class BtmGenExtension {
      */
     private final Property<@NotNull File> outputFile;
     private final Property<@NotNull String> includes;
-    private final Property<@NotNull File> sourceRootFile;
     /**
      * -- GETTER --
      * Fully qualified helper class invoked from generated rules.
@@ -47,7 +46,6 @@ public abstract class BtmGenExtension {
         this.sourceRoot = objects.property(File.class);
         this.outputFile = objects.property(File.class);
         this.includes = objects.property(String.class);
-        this.sourceRootFile = objects.property(File.class);
         this.helperFqn = objects.property(String.class);
         this.sourceRoot.convention(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
