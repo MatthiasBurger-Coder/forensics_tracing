@@ -69,7 +69,91 @@ Respect the existing hexagonal structure and keep logic in the correct layer.
 - Do not lower coverage thresholds or disable architecture, SOLID, or coverage checks.
 - Do not change dependency versions as a side effect of a focused bugfix unless explicitly requested.
 - Do not add new dependencies just to avoid writing focused tests when the current test stack is sufficient.
+- Prefer IF-less development: favor strategies, polymorphism, typed dispatch, and explicit objects over control-flow-heavy designs when behavior varies.
+- Prefer declarative programming: express intent through composition, transformations, predicates, and explicit data flow instead of mutation-heavy step-by-step control flow where clarity improves.
 - Gradle plugin modules must avoid bundling an SLF4J provider to prevent multiple bindings.
+
+## IF-Less Development Rules
+
+Prefer explicit object modeling over control-flow-heavy code. The repository follows an IF-less design preference whenever behavior varies by type, mode, state, or rule category.
+
+### Default Expectation
+
+- Prefer polymorphism, strategies, rule objects, dispatch maps, or typed selectors over growing `if / else` or `switch` chains.
+- Model behavioral variants as separate classes with explicit names and focused responsibilities.
+- Prefer composition to boolean flags that toggle behavior inside one class.
+- Keep decision logic close to the boundary or composition root, then delegate to the selected behavior.
+- Represent absence, fallback, and unsupported cases explicitly instead of encoding them through scattered conditionals.
+
+### Typical Preferred Replacements
+
+- Replace `if / else` trees on rule type, node type, or rendering mode with strategy selection.
+- Replace boolean mode flags with distinct collaborators, policies, or commands.
+- Replace `switch` on enum or string values with enum-backed behavior or a dedicated resolver.
+- Replace null-driven flow control with explicit return types, dedicated objects, or clearly named fallback policies.
+
+### Allowed Exceptions
+
+A small conditional is acceptable when it is the simplest correct solution and does not hide varying business behavior, for example:
+
+- guard clauses and fail-fast validation
+- null checks at boundaries where external APIs force them
+- adapter-side format translation or parser boundary handling
+- tiny and local decisions where introducing indirection would reduce clarity
+- performance-critical hot paths where a more abstract solution would be unjustified
+
+### Review Rules
+
+When introducing a new conditional, verify all the following:
+
+1. The branch is not actually polymorphic behavior that belongs in a strategy or rule object.
+2. The branch does not combine multiple responsibilities in one class.
+3. The branch does not use booleans, strings, or enums as hidden mode switches when a typed design would be clearer.
+4. The branch remains local, readable, and fully covered by tests.
+5. The branch does not leak domain decisions into adapters, Gradle/plugin code, or infrastructure.
+
+If a conditional grows, repeats, or spreads across classes, refactor toward a strategy-based or table-driven design.
+
+## Declarative Programming Preference
+
+Prefer code that describes what should happen rather than how to mutate state step by step, especially for filtering, mapping, grouping, rule selection, and transformation logic.
+
+### Default Expectation
+
+- Prefer named predicates, mappers, selectors, collectors, and transformation steps over mutation-heavy loops that mix multiple concerns.
+- Prefer immutable intermediate values or clearly scoped local values over shared mutable state that changes across many steps.
+- Prefer table-driven, configuration-driven, or composition-based designs when behavior can be described declaratively.
+- Keep side effects at the boundaries; domain and application code should favor pure transformations where practical.
+- Prefer constructing new values from inputs over updating existing objects across several conditional branches when this improves clarity and testability.
+
+### Typical Preferred Replacements
+
+- Replace manual filter-map-collect loops with clear declarative pipelines when the intent becomes easier to read.
+- Replace ad-hoc accumulation logic with dedicated collectors, aggregators, or domain-specific builder objects.
+- Replace repeated inline checks with named predicates or specification-style objects.
+- Replace scattered branching plus mutation with a transformation pipeline or resolver that returns the next explicit value.
+
+### Allowed Exceptions
+
+A local imperative solution is acceptable when it is the simplest and most readable correct solution, for example:
+
+- tiny loops with straightforward local state
+- performance-sensitive hot paths where extra allocations or abstraction would be unjustified
+- sequential parser logic or stateful extraction logic where the execution order itself is the clearest representation
+- APIs that require imperative interaction, checked exception handling, or callback-style control
+- debugging-heavy sections where a declarative rewrite would reduce traceability
+
+### Review Rules
+
+When writing transformation or collection-processing logic, verify all the following:
+
+1. The intent is visible from the structure of the code, not hidden in the mutable temporary state.
+2. Filtering, mapping, grouping, fallback, and side effects are not mixed in one opaque block.
+3. Named predicates, mappers, or helper types would not clarify the code.
+4. A declarative form would not significantly improve readability, testability, or composability.
+5. The chosen style keeps debugging, performance, and maintenance costs reasonable.
+
+Do not force streams, fluent APIs, or other declarative constructs when they make the code harder to understand than a small explicit loop. Favor readability over style fashion.
 
 ## Hardened Regression-First Workflow
 
@@ -270,7 +354,7 @@ Do not change unrelated rule template behavior when fixing a rule-specific defec
 
 ## Prohibited Shortcuts
 
-* Do not change expected test output to match a buggy implementation unless the specification truly changed.
+* Do not change the expected test output to match a buggy implementation unless the specification is truly changed.
 * Do not replace exact renderer assertions with loose assertions without a concrete reason.
 * Do not move logic across layers to make a test easier.
 * Do not hide missing branch protection behind a line coverage increase.
@@ -280,7 +364,7 @@ Do not change unrelated rule template behavior when fixing a rule-specific defec
 
 ## Before Finishing Any Change
 
-Verify all of the following:
+Verify all the following:
 
 * The fix is in the correct hexagonal layer.
 * A regression test was added or updated in the correct test layer.
@@ -291,5 +375,7 @@ Verify all of the following:
 * Architecture and SOLID expectations remain intact.
 * Coverage expectations remain intact.
 * No dependency or version drift was introduced unintentionally.
+* New branching was avoided where a strategy-based or typed IF-less design was the better fit, or the conditional was explicitly justified.
+* Declarative composition and transformation were preferred over mutation-heavy imperative flow where that improved clarity, or the imperative style was explicitly justified.
 * No SLF4J provider was bundled into Gradle plugin modules.
 * The completion summary includes the root cause, changed files, and exact tests/commands that were executed.
