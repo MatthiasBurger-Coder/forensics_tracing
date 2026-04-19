@@ -244,6 +244,9 @@ public final class GenerateRulesUseCase {
             case RETURN -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleTemplate.RETURN));
             case THROW -> rules.add(ruleFrom(event, helperFqcn, false, true, RuleTemplate.THROW));
             case METHOD_ENTER , METHOD_EXIT -> rules.add(ruleFrom(event, helperFqcn, false, true, type));
+            case THREAD_LIFECYCLE, JDBC_EXECUTE -> {
+                // These templates are rendered via the explicit Gradle task path, not scanner events.
+            }
         }
         return rules;
     }

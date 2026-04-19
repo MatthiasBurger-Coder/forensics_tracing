@@ -94,6 +94,31 @@ class GenerateRulesUseCaseTest {
             .allMatch(rule -> rule.contains("|branchy|"));
     }
 
+    @Test
+    void generateIgnoresManualOnlyTemplatesWhileKeepingSupportedEvents() {
+        List<ScanEvent> events = List.of(
+            event("com.example.Foo", "supported", 10, "(String name)", RuleTemplate.IF_TRUE, "x > 1", "java", "boolean"),
+            event("com.example.Foo", "supported", 11, "(String name)", RuleTemplate.JDBC_EXECUTE, "ignored", "java", "void"),
+            event("com.example.Bar", "ignored", 20, "(String name)", RuleTemplate.THREAD_LIFECYCLE, "ignored", "java", "void")
+        );
+
+        GenerationRequest request = new GenerationRequest(
+            Path.of("/tmp/project"),
+            GenerationRequest.DEFAULT_HELPER_FQCN,
+            false,
+            false,
+            List.of("com.example"),
+            0,
+            List.of()
+        );
+
+        RuleGenerationResult result = useCase(events).generate(request);
+
+        assertThat(result.renderedRules())
+            .containsExactly("IF_TRUE|supported|x > 1")
+            .doesNotContain("JDBC_EXECUTE|supported|ignored", "THREAD_LIFECYCLE|ignored|ignored");
+    }
+
     private static GenerateRulesUseCase useCase(List<ScanEvent> events) {
         CodeScanPort scanner = root -> events.stream();
         RuleRenderPort renderer = rule -> rule.type() + "|" + rule.location().method() + "|" + rule.condition();
