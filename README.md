@@ -2,6 +2,9 @@
 
 `forensics-tracing` generates Byteman rules from Java source code and provides runtime helpers for low-overhead tracing.
 
+## Quality Gate Badge
+[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=MatthiasBurger-Coder_forensics_tracing)](https://sonarcloud.io/summary/new_code?id=MatthiasBurger-Coder_forensics_tracing)
+
 ## What is included
 
 - Gradle plugin: `de.burger.forensics.btmgen`
