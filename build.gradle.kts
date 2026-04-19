@@ -377,6 +377,8 @@ abstract class PackageCoverageReportTask : DefaultTask() {
 }
 
 tasks.register<PackageCoverageReportTask>("checkPackageCoverage") {
+    group = LifecycleBasePlugin.VERIFICATION_GROUP
+    description = "Generates a per-package coverage report and fails below the configured thresholds."
     dependsOn(tasks.jacocoTestReport)
     jacocoXml.set(layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml"))
     reportFile.set(layout.buildDirectory.file("reports/coverage/package-coverage.txt"))
