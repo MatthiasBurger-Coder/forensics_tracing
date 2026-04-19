@@ -503,10 +503,16 @@ class GenerateBtmTaskTest {
         List<String> deduped = (List<String>) dedupeRuleHeaders.invoke(task, List.of(
             "plain text",
             "RULE duplicate\nCLASS A\nENDRULE",
-            "RULE duplicate\nCLASS A\nENDRULE"
+            "RULE duplicate\nCLASS A\nENDRULE",
+            "\n  RULE duplicate  \nCLASS A\nENDRULE",
+            "RULE    \nCLASS A\nENDRULE",
+            "RULER duplicate\nCLASS A\nENDRULE"
         ));
         assertEquals("plain text", deduped.get(0));
         assertTrue(deduped.get(2).contains("RULE duplicate_2"));
+        assertTrue(deduped.get(3).contains("RULE duplicate_3"));
+        assertEquals("RULE    \nCLASS A\nENDRULE", deduped.get(4));
+        assertEquals("RULER duplicate\nCLASS A\nENDRULE", deduped.get(5));
 
         extensionField.set(task, null);
         assertEquals(List.of(), packagePrefixes.invoke(task));

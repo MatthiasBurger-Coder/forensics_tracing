@@ -161,6 +161,8 @@ class GenerateActivityPumlFromBtmTaskTest {
         assertThat(extractCondition.invoke(null, (Object) null)).isNull();
         assertThat(extractCondition.invoke(null, "IF false")).isEqualTo("false");
         assertThat(extractCondition.invoke(null, "IF eval(\"rule-1\", \"orderId != null\", $1)")).isEqualTo("orderId != null");
+        assertThat(extractCondition.invoke(null, "IF eval(\"rule-1\", \"status == \\\"OK\\\"\", $1)")).isEqualTo("status == \"OK\"");
+        assertThat(extractCondition.invoke(null, "IF eval(\"rule-1\")")).isEqualTo("eval(\"rule-1\")");
         assertThat(extractCondition.invoke(null, "IF someCheck()")).isEqualTo("someCheck()");
         assertThat(detectEvent.invoke(null, "DO onEnter(com.example.Service.class, \"handle\")").toString()).isEqualTo("METHOD_ENTER");
         assertThat(detectEvent.invoke(null, "DO onExit(com.example.Service.class, \"handle\", \"ok\")").toString()).isEqualTo("METHOD_EXIT");

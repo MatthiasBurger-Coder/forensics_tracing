@@ -19,12 +19,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
-    private static final Pattern EVAL_PATTERN = Pattern.compile("^\\s*IF\\s+eval\\(\".*?\",\\s*\"(.*?)\"\\s*,.*$");
-
     @InputFile
     public abstract RegularFileProperty getInputBtm();
 
@@ -180,14 +176,95 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
 
     private static String extractCondition(String ifLine) {
         if (ifLine == null) return null;
-        if ("IF true".equals(ifLine) || "IF false".equals(ifLine)) {
-            return ifLine.substring(3).trim();
+        String trimmed = ifLine.trim();
+        if ("IF true".equals(trimmed) || "IF false".equals(trimmed)) {
+            return trimmed.substring(3).trim();
         }
-        Matcher m = EVAL_PATTERN.matcher(ifLine);
-        if (m.matches()) {
-            return m.group(1);
+        String evalCondition = extractEvalCondition(trimmed);
+        if (evalCondition != null) {
+            return evalCondition;
         }
-        return ifLine.substring(3).trim();
+        return trimmed.startsWith("IF ") ? trimmed.substring(3).trim() : trimmed;
+    }
+
+    private static String extractEvalCondition(String ifLine) {
+        if (!ifLine.startsWith("IF")) {
+            return null;
+        }
+
+        int cursor = skipWhitespace(ifLine, 2);
+        if (!ifLine.startsWith("eval(", cursor)) {
+            return null;
+        }
+
+        cursor = skipWhitespace(ifLine, cursor + "eval(".length());
+        ParsedQuotedSegment ruleId = parseQuotedSegment(ifLine, cursor);
+        if (ruleId == null) {
+            return null;
+        }
+
+        cursor = skipWhitespace(ifLine, ruleId.nextIndex());
+        if (cursor >= ifLine.length() || ifLine.charAt(cursor) != ',') {
+            return null;
+        }
+
+        cursor = skipWhitespace(ifLine, cursor + 1);
+        ParsedQuotedSegment condition = parseQuotedSegment(ifLine, cursor);
+        if (condition == null) {
+            return null;
+        }
+
+        cursor = skipWhitespace(ifLine, condition.nextIndex());
+        if (cursor >= ifLine.length() || ifLine.charAt(cursor) != ',') {
+            return null;
+        }
+
+        return condition.value();
+    }
+
+    private static ParsedQuotedSegment parseQuotedSegment(String source, int quoteIndex) {
+        if (quoteIndex >= source.length() || source.charAt(quoteIndex) != '"') {
+            return null;
+        }
+
+        StringBuilder value = new StringBuilder();
+        boolean escaping = false;
+        for (int index = quoteIndex + 1; index < source.length(); index++) {
+            char current = source.charAt(index);
+            if (escaping) {
+                value.append(unescapeQuotedChar(current));
+                escaping = false;
+                continue;
+            }
+            if (current == '\\') {
+                escaping = true;
+                continue;
+            }
+            if (current == '"') {
+                return new ParsedQuotedSegment(value.toString(), index + 1);
+            }
+            value.append(current);
+        }
+        return null;
+    }
+
+    private static int skipWhitespace(String source, int index) {
+        int cursor = index;
+        while (cursor < source.length() && Character.isWhitespace(source.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private static char unescapeQuotedChar(char escaped) {
+        return switch (escaped) {
+            case '"' -> '"';
+            case '\\' -> '\\';
+            case 'n' -> '\n';
+            case 'r' -> '\r';
+            case 't' -> '\t';
+            default -> escaped;
+        };
     }
 
     private static EventType detectEvent(String doLine) {
@@ -225,6 +302,8 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
     }
 
     private record ParsedRule(String className, String methodName, EventType eventType, String condition) { }
+
+    private record ParsedQuotedSegment(String value, int nextIndex) { }
 
     private enum EventType {
         METHOD_ENTER,

@@ -37,15 +37,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Scans Java sources and renders Byteman rules using {@link GenerateRulesUseCase}.
  */
 public abstract class GenerateBtmTask extends DefaultTask {
-    private static final Pattern RULE_HEADER_PATTERN = Pattern.compile("(?m)^(\\s*RULE\\s+)(.+?)\\s*$");
-
     // ---- Configurable inputs ----
     @InputDirectory
     @Optional
@@ -277,22 +273,102 @@ public abstract class GenerateBtmTask extends DefaultTask {
         Map<String, Integer> seen = new HashMap<>();
         List<String> out = new ArrayList<>(rules.size());
         for (String rule : rules) {
-            Matcher matcher = RULE_HEADER_PATTERN.matcher(rule);
-            if (!matcher.find()) {
+            RuleHeader header = findRuleHeader(rule);
+            if (header == null) {
                 out.add(rule);
                 continue;
             }
-            String prefix = matcher.group(1);
-            String originalName = matcher.group(2).trim();
+            String prefix = header.prefix();
+            String originalName = header.name();
             int index = seen.merge(originalName, 1, Integer::sum);
             if (index == 1) {
                 out.add(rule);
                 continue;
             }
             String replacement = prefix + originalName + "_" + index;
-            String rewritten = rule.substring(0, matcher.start()) + replacement + rule.substring(matcher.end());
+            String rewritten = rule.substring(0, header.startIndex()) + replacement + rule.substring(header.endIndex());
             out.add(rewritten);
         }
         return out;
     }
+
+    private static RuleHeader findRuleHeader(String rule) {
+        int lineStart = 0;
+        while (lineStart < rule.length()) {
+            int lineEnd = findLineEnd(rule, lineStart);
+            RuleHeader header = parseRuleHeader(rule, lineStart, lineEnd);
+            if (header != null) {
+                return header;
+            }
+            lineStart = skipLineBreak(rule, lineEnd);
+        }
+        return null;
+    }
+
+    private static RuleHeader parseRuleHeader(String rule, int lineStart, int lineEnd) {
+        int contentStart = skipInlineWhitespace(rule, lineStart, lineEnd);
+        if (!matchesKeyword(rule, contentStart, lineEnd, "RULE")) {
+            return null;
+        }
+
+        int afterKeyword = contentStart + "RULE".length();
+        if (afterKeyword >= lineEnd || !Character.isWhitespace(rule.charAt(afterKeyword))) {
+            return null;
+        }
+
+        int nameStart = skipInlineWhitespace(rule, afterKeyword, lineEnd);
+        if (nameStart >= lineEnd) {
+            return null;
+        }
+
+        int nameEnd = trimInlineWhitespace(rule, nameStart, lineEnd);
+        String prefix = rule.substring(lineStart, nameStart);
+        String name = rule.substring(nameStart, nameEnd);
+        return new RuleHeader(lineStart, lineEnd, prefix, name);
+    }
+
+    private static boolean matchesKeyword(String rule, int start, int lineEnd, String keyword) {
+        int keywordEnd = start + keyword.length();
+        return keywordEnd <= lineEnd && rule.regionMatches(start, keyword, 0, keyword.length());
+    }
+
+    private static int skipInlineWhitespace(String rule, int start, int end) {
+        int cursor = start;
+        while (cursor < end && Character.isWhitespace(rule.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private static int trimInlineWhitespace(String rule, int start, int end) {
+        int cursor = end;
+        while (cursor > start && Character.isWhitespace(rule.charAt(cursor - 1))) {
+            cursor--;
+        }
+        return cursor;
+    }
+
+    private static int findLineEnd(String rule, int lineStart) {
+        int cursor = lineStart;
+        while (cursor < rule.length()) {
+            char current = rule.charAt(cursor);
+            if (current == '\n' || current == '\r') {
+                return cursor;
+            }
+            cursor++;
+        }
+        return rule.length();
+    }
+
+    private static int skipLineBreak(String rule, int lineEnd) {
+        if (lineEnd >= rule.length()) {
+            return rule.length();
+        }
+        if (rule.charAt(lineEnd) == '\r' && lineEnd + 1 < rule.length() && rule.charAt(lineEnd + 1) == '\n') {
+            return lineEnd + 2;
+        }
+        return lineEnd + 1;
+    }
+
+    private record RuleHeader(int startIndex, int endIndex, String prefix, String name) { }
 }
