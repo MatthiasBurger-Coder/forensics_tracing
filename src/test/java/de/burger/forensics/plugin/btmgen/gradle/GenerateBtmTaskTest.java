@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -434,6 +436,80 @@ class GenerateBtmTaskTest {
         String content = Files.readString(outputFile);
         assertTrue(content.contains("RULE duplicate-header\n"));
         assertTrue(content.contains("RULE duplicate-header_2\n"));
+    }
+
+    @Test
+    void generateCreatesDefaultExtensionWhenMissing(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        var task = project.getTasks().register("generateBtmDefaultExtension", GenerateBtmTask.class).get();
+        task.getTemplateId().set("METHOD_ENTER");
+        task.getClassName().set("com.example.Foo");
+        task.getMethodName().set("bar");
+
+        task.generate();
+
+        assertTrue(Files.exists(tempDir.resolve("build/forensics/forensics.btm")));
+    }
+
+    @Test
+    void privateHelpersCoverFallbackConfigurationBranches(@TempDir Path tempDir) throws Exception {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        var task = project.getTasks().register("generateBtmPrivateHelpers", GenerateBtmTask.class).get();
+        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        extension.getIncludes().set("com.example , org.example");
+        extension.getScanSubprojects().set(true);
+        task.setExtension(extension);
+
+        Method hasMinimalInputs = GenerateBtmTask.class.getDeclaredMethod("hasMinimalInputs");
+        hasMinimalInputs.setAccessible(true);
+        Method templateIdOrDefault = GenerateBtmTask.class.getDeclaredMethod("templateIdOrDefault");
+        templateIdOrDefault.setAccessible(true);
+        Method resolveHelperFqn = GenerateBtmTask.class.getDeclaredMethod("resolveHelperFqn");
+        resolveHelperFqn.setAccessible(true);
+        Method includeEntryExit = GenerateBtmTask.class.getDeclaredMethod("includeEntryExit");
+        includeEntryExit.setAccessible(true);
+        Method minBranches = GenerateBtmTask.class.getDeclaredMethod("minBranches");
+        minBranches.setAccessible(true);
+        Method resolveSourceRoots = GenerateBtmTask.class.getDeclaredMethod("resolveSourceRoots");
+        resolveSourceRoots.setAccessible(true);
+        Method packagePrefixes = GenerateBtmTask.class.getDeclaredMethod("packagePrefixes");
+        packagePrefixes.setAccessible(true);
+        Method dedupeRuleHeaders = GenerateBtmTask.class.getDeclaredMethod("dedupeRuleHeaders", List.class);
+        dedupeRuleHeaders.setAccessible(true);
+        Field extensionField = GenerateBtmTask.class.getDeclaredField("extension");
+        extensionField.setAccessible(true);
+
+        assertEquals("METHOD_ENTER", templateIdOrDefault.invoke(task));
+        task.getTemplateId().set(" ");
+        assertEquals("METHOD_ENTER", templateIdOrDefault.invoke(task));
+        task.getHelperFqn().set(" ");
+        assertEquals(RuleParams.DEFAULT_HELPER_FQN, resolveHelperFqn.invoke(task));
+        assertEquals(true, includeEntryExit.invoke(task));
+        assertEquals(2, minBranches.invoke(task));
+        assertEquals(false, hasMinimalInputs.invoke(task));
+        task.getClassName().set("com.example.Foo");
+        task.getMethodName().set("bar");
+        task.getTemplateId().set("CUSTOM");
+        assertEquals(true, hasMinimalInputs.invoke(task));
+
+        Files.createDirectories(tempDir.resolve("src/main/java"));
+        Files.createDirectories(tempDir.resolve("module-a/src/main/java"));
+        @SuppressWarnings("unchecked")
+        List<Path> roots = (List<Path>) resolveSourceRoots.invoke(task);
+        assertTrue(roots.stream().anyMatch(path -> path.endsWith("src\\main\\java") || path.endsWith("src/main/java")));
+        assertEquals(List.of("com.example", "org.example"), packagePrefixes.invoke(task));
+
+        @SuppressWarnings("unchecked")
+        List<String> deduped = (List<String>) dedupeRuleHeaders.invoke(task, List.of(
+            "plain text",
+            "RULE duplicate\nCLASS A\nENDRULE",
+            "RULE duplicate\nCLASS A\nENDRULE"
+        ));
+        assertEquals("plain text", deduped.get(0));
+        assertTrue(deduped.get(2).contains("RULE duplicate_2"));
+
+        extensionField.set(task, null);
+        assertEquals(List.of(), packagePrefixes.invoke(task));
     }
 
     private static Map<String, RecordingStrategy> registerDefaultStrategies(BtmGenExtension extension) {

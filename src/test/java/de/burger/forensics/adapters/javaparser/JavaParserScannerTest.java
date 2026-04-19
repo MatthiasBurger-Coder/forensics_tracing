@@ -131,8 +131,9 @@ class JavaParserScannerTest {
 
     @Test
     void skipsSymbolicLinkDirectories(@TempDir Path tempDir) throws IOException {
-        Path realDir = Files.createDirectory(tempDir.resolve("real"));
-        Path linkedDir = tempDir.resolve("linked");
+        Path scanRoot = Files.createDirectory(tempDir.resolve("scan-root"));
+        Path realDir = Files.createDirectory(tempDir.resolve("external-real"));
+        Path linkedDir = scanRoot.resolve("linked");
         try {
             Files.createSymbolicLink(linkedDir, realDir);
         } catch (IOException | UnsupportedOperationException exception) {
@@ -140,7 +141,7 @@ class JavaParserScannerTest {
             Assumptions.assumeTrue(false, "Symbolic links are not supported or permitted in this environment.");
         }
 
-        Files.writeString(tempDir.resolve("Root.java"), """
+        Files.writeString(scanRoot.resolve("Root.java"), """
             package root;
             public class Root {
               public void run(int value) {
@@ -162,7 +163,7 @@ class JavaParserScannerTest {
             }
             """);
 
-        List<ScanEvent> events = scanner.scan(tempDir).toList();
+        List<ScanEvent> events = scanner.scan(scanRoot).toList();
 
         assertThat(events)
             .extracting(event -> event.location().fqcn())
