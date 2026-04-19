@@ -39,6 +39,10 @@ public final class RtTrace {
     /** Set or override the current correlation id for this thread. */
     public static void setCorrelationId(String correlationId) {
         if (!ENABLED) return;
+        if (correlationId == null) {
+            CORR_ID.remove();
+            return;
+        }
         CORR_ID.set(correlationId);
     }
 
@@ -68,7 +72,8 @@ public final class RtTrace {
     /** End the given span (no-op if disabled or wrong thread). */
     public static void endSpan(RtSpanToken token) {
         if (!ENABLED || token == null || token == RtSpanToken.NOOP) return;
-        SPANS.get().popIfTop(token);
+        SpanStack spanStack = SPANS.get();
+        spanStack.popIfTop(token);
         long durationNanos = Math.max(0L, System.nanoTime() - token.startedAtNanos());
         emit(RtEvent.TIMER_END, Map.of(
                 "span", token.spanId(),
@@ -217,44 +222,54 @@ public final class RtTrace {
         // Compose a single JSON line without external libs
         StringBuilder sb = new StringBuilder(256);
         String corr = CORR_ID.get();
-        RtSpanToken top = SPANS.get().peek();
+        SpanStack spanStack = SPANS.get();
+        RtSpanToken top = spanStack.peek();
 
-        sb.append('{');
-        kv(sb, "@ts", Instant.now().toString()); sb.append(',');
-        kv(sb, "event", event.name()); sb.append(',');
-        kv(sb, "thread", Thread.currentThread().getName()); sb.append(',');
+        try {
+            sb.append('{');
+            kv(sb, "@ts", Instant.now().toString()); sb.append(',');
+            kv(sb, "event", event.name()); sb.append(',');
+            kv(sb, "thread", Thread.currentThread().getName()); sb.append(',');
 
-        if (corr != null) { kv(sb, "correlationId", corr); sb.append(','); }
-        if (top != null && event != RtEvent.TIMER_START) { // TIMER_START already sets span explicitly
-            kv(sb, "span", top.spanId()); sb.append(',');
-        }
-
-        // details
-        if (details != null && !details.isEmpty()) {
-            sb.append("\"details\":{");
-            boolean first = true;
-            for (Map.Entry<String, ?> e : details.entrySet()) {
-                if (!first) sb.append(',');
-                kv(sb, e.getKey(), Safe.toString(e.getValue()));
-                first = false;
+            if (corr != null) { kv(sb, "correlationId", corr); sb.append(','); }
+            if (top != null && event != RtEvent.TIMER_START) { // TIMER_START already sets span explicitly
+                kv(sb, "span", top.spanId()); sb.append(',');
             }
+
+            // details
+            if (details != null && !details.isEmpty()) {
+                sb.append("\"details\":{");
+                boolean first = true;
+                for (Map.Entry<String, ?> e : details.entrySet()) {
+                    if (!first) sb.append(',');
+                    kv(sb, e.getKey(), Safe.toString(e.getValue()));
+                    first = false;
+                }
+                sb.append('}');
+            } else {
+                kv(sb, "details", "");
+            }
+
+            // optional error
+            if (t != null) {
+                sb.append(',');
+                kv(sb, "error", t.getClass().getName());
+                sb.append(',');
+                kv(sb, "errorMsg", Objects.toString(t.getMessage(), ""));
+            }
+
             sb.append('}');
-        } else {
-            kv(sb, "details", "");
+            String line = sb.toString();
+            System.out.println(line);
+            appendToFile(line);
+        } finally {
+            if (corr == null) {
+                CORR_ID.remove();
+            }
+            if (spanStack.isEmpty()) {
+                SPANS.remove();
+            }
         }
-
-        // optional error
-        if (t != null) {
-            sb.append(',');
-            kv(sb, "error", t.getClass().getName());
-            sb.append(',');
-            kv(sb, "errorMsg", Objects.toString(t.getMessage(), ""));
-        }
-
-        sb.append('}');
-        String line = sb.toString();
-        System.out.println(line);
-        appendToFile(line);
     }
 
     private static void kv(StringBuilder sb, String k, String v) {
@@ -368,6 +383,7 @@ public final class RtTrace {
         void push(RtSpanToken t) { head = new Node(t, head); }
         RtSpanToken peek() { return head == null ? null : head.val; }
         void popIfTop(RtSpanToken t) { if (head != null && head.val == t) head = head.next; }
+        boolean isEmpty() { return head == null; }
         private record Node(RtSpanToken val, Node next) {}
     }
 

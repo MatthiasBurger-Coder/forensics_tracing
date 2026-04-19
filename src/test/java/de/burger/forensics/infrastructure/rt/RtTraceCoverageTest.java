@@ -122,6 +122,35 @@ class RtTraceCoverageTest {
     }
 
     @Test
+    void clearsThreadLocalStateAfterLastSpanEnds() throws Exception {
+        @SuppressWarnings("unchecked")
+        ThreadLocal<Object> spans = (ThreadLocal<Object>) getStaticField("SPANS");
+        @SuppressWarnings("unchecked")
+        ThreadLocal<String> correlationIds = (ThreadLocal<String>) getStaticField("CORR_ID");
+
+        spans.remove();
+        correlationIds.remove();
+
+        Object firstStack = spans.get();
+        captureStdout(() -> {
+            RtTrace.setCorrelationId("corr-cleanup");
+            RtSpanToken token = RtTrace.beginSpan("cleanup");
+            RtTrace.setCorrelationId(null);
+            RtTrace.endSpan(token);
+        });
+        Object secondStack = spans.get();
+        String followUp = captureStdout(() -> RtTrace.trace(RtEvent.CUSTOM, Map.of("check", "done")));
+
+        assertThat(secondStack).isNotSameAs(firstStack);
+        assertThat(followUp).contains("\"event\":\"CUSTOM\"");
+        assertThat(followUp).doesNotContain("\"correlationId\"");
+        assertThat(followUp).doesNotContain("\"span\"");
+
+        spans.remove();
+        correlationIds.remove();
+    }
+
+    @Test
     void reloadedDisabledRuntimeCoversFastPathNoops() throws Exception {
         withRtTraceLoader(
             Map.of("forensics.rt.enabled", "false"),
@@ -239,6 +268,12 @@ class RtTraceCoverageTest {
 
     private static Object noopToken(ClassLoader loader) throws ReflectiveOperationException {
         Field field = load(loader, "de.burger.forensics.infrastructure.rt.RtSpanToken").getDeclaredField("NOOP");
+        field.setAccessible(true);
+        return field.get(null);
+    }
+
+    private static Object getStaticField(String fieldName) throws ReflectiveOperationException {
+        Field field = RtTrace.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         return field.get(null);
     }

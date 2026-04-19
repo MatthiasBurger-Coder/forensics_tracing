@@ -89,7 +89,9 @@ class GenerateRulesUseCaseTest {
 
         RuleGenerationResult result = useCase(events).generate(request);
 
-        assertThat(result.renderedRules()).allMatch(rule -> rule.contains("|branchy|"));
+        assertThat(result.renderedRules())
+            .isNotEmpty()
+            .allMatch(rule -> rule.contains("|branchy|"));
     }
 
     private static GenerateRulesUseCase useCase(List<ScanEvent> events) {

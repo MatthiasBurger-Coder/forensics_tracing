@@ -19,10 +19,10 @@ jobs:
       - name: Setup Gradle (caching + env)
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Set up JDK 21
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
           cache: 'gradle'
 
@@ -33,7 +33,7 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build & Test
-        run: ./gradlew clean test jacocoTestReport
+        run: ./gradlew clean test jacocoTestReport checkPackageCoverage
 
       - name: SonarCloud Scan
         env:

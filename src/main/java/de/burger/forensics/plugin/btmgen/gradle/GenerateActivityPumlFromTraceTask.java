@@ -23,13 +23,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
-    private static final Pattern FIELD_PATTERN = Pattern.compile("\"([^\"]+)\":\"((?:\\\\.|[^\"])*)\"");
-    private static final Pattern DETAILS_PATTERN = Pattern.compile("\"details\"\\s*:\\s*\\{(.*)}\\s*$");
-
     @InputFile
     public abstract RegularFileProperty getInputTrace();
 
@@ -271,11 +266,7 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
         if (ts == null || event == null || thread == null) {
             return java.util.Optional.empty();
         }
-        Matcher detailsMatcher = DETAILS_PATTERN.matcher(jsonLine);
-        Map<String, String> details = new LinkedHashMap<>();
-        if (detailsMatcher.find()) {
-            details = parseObjectFields(detailsMatcher.group(1));
-        }
+        Map<String, String> details = parseNestedObjectFields(jsonLine, "details");
         try {
             return java.util.Optional.of(new TraceEvent(ts, Instant.parse(ts), event, thread, details));
         } catch (Exception ignored) {
@@ -285,20 +276,206 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
 
     private static Map<String, String> parseObjectFields(String source) {
         Map<String, String> map = new LinkedHashMap<>();
-        Matcher m = FIELD_PATTERN.matcher(source);
-        while (m.find()) {
-            map.put(m.group(1), unescapeJsonString(m.group(2)));
+        int index = source.indexOf('{');
+        if (index < 0) {
+            return map;
+        }
+
+        index++;
+        while (index < source.length()) {
+            index = skipWhitespaceAndCommas(source, index);
+            if (index >= source.length() || source.charAt(index) == '}') {
+                return map;
+            }
+
+            ParsedString key = parseJsonString(source, index);
+            if (key == null) {
+                return map;
+            }
+
+            index = skipWhitespace(source, key.nextIndex());
+            if (index >= source.length() || source.charAt(index) != ':') {
+                return map;
+            }
+
+            index = skipWhitespace(source, index + 1);
+            if (index >= source.length()) {
+                return map;
+            }
+
+            if (source.charAt(index) == '"') {
+                ParsedString value = parseJsonString(source, index);
+                if (value == null) {
+                    return map;
+                }
+                map.put(key.value(), value.value());
+                index = value.nextIndex();
+                continue;
+            }
+
+            index = skipJsonValue(source, index);
         }
         return map;
     }
 
-    private static String unescapeJsonString(String value) {
-        return value
-                .replace("\\\"", "\"")
-                .replace("\\\\", "\\")
-                .replace("\\n", "\n")
-                .replace("\\r", "\r")
-                .replace("\\t", "\t");
+    private static Map<String, String> parseNestedObjectFields(String source, String fieldName) {
+        int objectStart = findNestedObjectStart(source, fieldName);
+        if (objectStart < 0) {
+            return new LinkedHashMap<>();
+        }
+        int objectEnd = skipJsonStructure(source, objectStart, '{', '}');
+        return parseObjectFields(source.substring(objectStart, objectEnd));
+    }
+
+    private static int findNestedObjectStart(String source, String fieldName) {
+        int index = source.indexOf('{');
+        if (index < 0) {
+            return -1;
+        }
+
+        index++;
+        while (index < source.length()) {
+            index = skipWhitespaceAndCommas(source, index);
+            if (index >= source.length() || source.charAt(index) == '}') {
+                return -1;
+            }
+
+            ParsedString key = parseJsonString(source, index);
+            if (key == null) {
+                return -1;
+            }
+
+            index = skipWhitespace(source, key.nextIndex());
+            if (index >= source.length() || source.charAt(index) != ':') {
+                return -1;
+            }
+
+            index = skipWhitespace(source, index + 1);
+            if (index >= source.length()) {
+                return -1;
+            }
+
+            if (fieldName.equals(key.value()) && source.charAt(index) == '{') {
+                return index;
+            }
+
+            index = skipJsonValue(source, index);
+        }
+        return -1;
+    }
+
+    private static int skipWhitespaceAndCommas(String source, int index) {
+        int next = skipWhitespace(source, index);
+        while (next < source.length() && source.charAt(next) == ',') {
+            next = skipWhitespace(source, next + 1);
+        }
+        return next;
+    }
+
+    private static int skipWhitespace(String source, int index) {
+        int next = index;
+        while (next < source.length() && Character.isWhitespace(source.charAt(next))) {
+            next++;
+        }
+        return next;
+    }
+
+    private static int skipJsonValue(String source, int index) {
+        if (index >= source.length()) {
+            return index;
+        }
+
+        char valueStart = source.charAt(index);
+        if (valueStart == '{') {
+            return skipJsonStructure(source, index, '{', '}');
+        }
+        if (valueStart == '[') {
+            return skipJsonStructure(source, index, '[', ']');
+        }
+        if (valueStart == '"') {
+            ParsedString value = parseJsonString(source, index);
+            return value == null ? source.length() : value.nextIndex();
+        }
+
+        int next = index;
+        while (next < source.length()) {
+            char current = source.charAt(next);
+            if (current == ',' || current == '}') {
+                return next;
+            }
+            next++;
+        }
+        return next;
+    }
+
+    private static int skipJsonStructure(String source, int index, char open, char close) {
+        int depth = 0;
+        boolean inString = false;
+        boolean escaping = false;
+
+        for (int i = index; i < source.length(); i++) {
+            char current = source.charAt(i);
+            if (inString) {
+                if (escaping) {
+                    escaping = false;
+                } else if (current == '\\') {
+                    escaping = true;
+                } else if (current == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+
+            if (current == '"') {
+                inString = true;
+            } else if (current == open) {
+                depth++;
+            } else if (current == close) {
+                depth--;
+                if (depth == 0) {
+                    return i + 1;
+                }
+            }
+        }
+
+        return source.length();
+    }
+
+    private static ParsedString parseJsonString(String source, int quoteIndex) {
+        if (quoteIndex >= source.length() || source.charAt(quoteIndex) != '"') {
+            return null;
+        }
+
+        StringBuilder value = new StringBuilder();
+        boolean escaping = false;
+        for (int i = quoteIndex + 1; i < source.length(); i++) {
+            char current = source.charAt(i);
+            if (escaping) {
+                value.append(unescapeJsonChar(current));
+                escaping = false;
+                continue;
+            }
+            if (current == '\\') {
+                escaping = true;
+                continue;
+            }
+            if (current == '"') {
+                return new ParsedString(value.toString(), i + 1);
+            }
+            value.append(current);
+        }
+        return null;
+    }
+
+    private static char unescapeJsonChar(char escaped) {
+        return switch (escaped) {
+            case '"' -> '"';
+            case '\\' -> '\\';
+            case 'n' -> '\n';
+            case 'r' -> '\r';
+            case 't' -> '\t';
+            default -> escaped;
+        };
     }
 
     private static double elapsedMs(Instant t0, Instant t) {
@@ -324,6 +501,8 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
     }
 
     private record MethodRef(String className, String methodName) { }
+
+    private record ParsedString(String value, int nextIndex) { }
 
     private record TraceEvent(
             String tsRaw,

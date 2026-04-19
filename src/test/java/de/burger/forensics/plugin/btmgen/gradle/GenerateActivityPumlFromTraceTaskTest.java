@@ -11,6 +11,8 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -237,6 +239,25 @@ class GenerateActivityPumlFromTraceTaskTest {
         assertThat(parseLine.invoke(null, "{\"@ts\":\"bad\",\"event\":\"METHOD_EXIT\",\"thread\":\"main\"}").toString()).isEqualTo("Optional.empty");
         assertThat(parseLine.invoke(null, "{\"@ts\":\"2026-01-01T00:00:00Z\",\"event\":\"METHOD_EXIT\",\"thread\":\"main\"}").toString())
             .startsWith("Optional[");
+
+        String repeatedPayload = ("value\\\\with\\\"escapes\\n").repeat(2048);
+        @SuppressWarnings("unchecked")
+        Optional<Object> parsedLine = (Optional<Object>) parseLine.invoke(
+            null,
+            "{\"@ts\":\"2026-01-01T00:00:00Z\",\"event\":\"METHOD_EXIT\",\"thread\":\"main\",\"details\":"
+                + "{\"class\":\"com.example.Worker\",\"method\":\"finish\",\"result\":\"" + repeatedPayload + "\"}}"
+        );
+        assertThat(parsedLine).isPresent();
+
+        Method detailsAccessor = parsedLine.orElseThrow().getClass().getDeclaredMethod("details");
+        detailsAccessor.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, String> details = (Map<String, String>) detailsAccessor.invoke(parsedLine.orElseThrow());
+        assertThat(details)
+            .containsEntry("class", "com.example.Worker")
+            .containsEntry("method", "finish")
+            .containsEntry("result", ("value\\with\"escapes\n").repeat(2048));
+
         assertThat(normalizeLabel.invoke(null, "rule-1:flag")).isEqualTo("flag");
         assertThat(normalizeLabel.invoke(null, "flag")).isEqualTo("flag");
         assertThat(simpleName.invoke(null, " ")).isEqualTo("Unknown");
@@ -259,5 +280,77 @@ class GenerateActivityPumlFromTraceTaskTest {
         assertThat(readEventsFailure.getCause())
             .isInstanceOf(GradleException.class)
             .hasMessageContaining("Failed reading trace file");
+    }
+
+    @Test
+    void privateJsonScannerHelpersCoverWhitespacePrimitiveArraysAndMalformedBranches() throws Exception {
+        Method parseObjectFields = GenerateActivityPumlFromTraceTask.class.getDeclaredMethod("parseObjectFields", String.class);
+        parseObjectFields.setAccessible(true);
+        Method parseNestedObjectFields = GenerateActivityPumlFromTraceTask.class.getDeclaredMethod(
+            "parseNestedObjectFields",
+            String.class,
+            String.class
+        );
+        parseNestedObjectFields.setAccessible(true);
+        Method skipJsonValue = GenerateActivityPumlFromTraceTask.class.getDeclaredMethod("skipJsonValue", String.class, int.class);
+        skipJsonValue.setAccessible(true);
+        Method skipJsonStructure = GenerateActivityPumlFromTraceTask.class.getDeclaredMethod(
+            "skipJsonStructure",
+            String.class,
+            int.class,
+            char.class,
+            char.class
+        );
+        skipJsonStructure.setAccessible(true);
+        Method parseJsonString = GenerateActivityPumlFromTraceTask.class.getDeclaredMethod("parseJsonString", String.class, int.class);
+        parseJsonString.setAccessible(true);
+        Method unescapeJsonChar = GenerateActivityPumlFromTraceTask.class.getDeclaredMethod("unescapeJsonChar", char.class);
+        unescapeJsonChar.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> parsedObject = (Map<String, String>) parseObjectFields.invoke(
+            null,
+            "{  \"name\" : \"ok\" , \"flag\" : true , \"list\" : [\"x\"] , \"nested\" : {\"skip\":\"me\"} , \"tail\" : \"done\" }"
+        );
+        assertThat(parsedObject)
+            .containsEntry("name", "ok")
+            .containsEntry("tail", "done")
+            .doesNotContainKeys("flag", "list", "nested");
+        assertThat(parseObjectFields.invoke(null, "plain")).isEqualTo(Map.of());
+        assertThat(parseObjectFields.invoke(null, "{\"broken\" \"value\"}")).isEqualTo(Map.of());
+        assertThat(parseObjectFields.invoke(null, "{\"broken\":\"unterminated}")).isEqualTo(Map.of());
+        assertThat(parseObjectFields.invoke(null, "{\"broken\":   ")).isEqualTo(Map.of());
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> nestedObject = (Map<String, String>) parseNestedObjectFields.invoke(
+            null,
+            "{ \"details\" : { \"line\" : \"a\\r\\tb\\q\" }, \"event\" : \"METHOD_EXIT\" }",
+            "details"
+        );
+        assertThat(nestedObject).containsEntry("line", "a\r\tbq");
+        assertThat(parseNestedObjectFields.invoke(null, "plain", "details")).isEqualTo(Map.of());
+        assertThat(parseNestedObjectFields.invoke(null, "{ \"details\" { \"broken\" : \"value\" } }", "details"))
+            .isEqualTo(Map.of());
+        assertThat(parseNestedObjectFields.invoke(null, "{ \"details\" :   ", "details")).isEqualTo(Map.of());
+
+        String primitiveSource = "{\"flag\":true}";
+        assertThat(skipJsonValue.invoke(null, primitiveSource, primitiveSource.indexOf("true")))
+            .isEqualTo(primitiveSource.indexOf('}'));
+        String primitiveTailSource = "{\"flag\":true,\"tail\":\"ok\"}";
+        assertThat(skipJsonValue.invoke(null, primitiveTailSource, primitiveTailSource.indexOf("true")))
+            .isEqualTo(primitiveTailSource.indexOf(','));
+        String arraySource = "{\"list\":[\"x\"]}";
+        assertThat(skipJsonValue.invoke(null, arraySource, arraySource.indexOf('[')))
+            .isEqualTo(arraySource.length() - 1);
+        String invalidStringSource = "\"unterminated";
+        assertThat(skipJsonValue.invoke(null, invalidStringSource, 0)).isEqualTo(invalidStringSource.length());
+        String unterminatedObject = "{\"a\":\"b\"";
+        assertThat(skipJsonStructure.invoke(null, unterminatedObject, 0, '{', '}')).isEqualTo(unterminatedObject.length());
+
+        assertThat(parseJsonString.invoke(null, "value", 0)).isNull();
+        assertThat(parseJsonString.invoke(null, "\"unterminated", 0)).isNull();
+        assertThat(unescapeJsonChar.invoke(null, 'r')).isEqualTo('\r');
+        assertThat(unescapeJsonChar.invoke(null, 't')).isEqualTo('\t');
+        assertThat(unescapeJsonChar.invoke(null, 'q')).isEqualTo('q');
     }
 }
