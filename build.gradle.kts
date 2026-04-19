@@ -16,49 +16,36 @@ plugins {
 val aspectjAgent by configurations.creating
 
 dependencies {
+    aspectjAgent(libs.aspectj.weaver)
 
-    // Runtime
     implementation(libs.slf4j.api)
+    implementation(libs.aspectj.rt)
+    implementation(libs.javaparser.symbol.solver.core)
+
     compileOnly(libs.byteman)
     compileOnly(libs.jakarta.annotation.api)
+    compileOnly(libs.lombok)
 
-    aspectjAgent(libs.aspectj.weaver)
-    implementation(libs.aspectj.rt)
     runtimeOnly(libs.aspectj.weaver)
 
-    implementation(libs.javaparser.symbol.solver.core)
-    // Logging
-    testImplementation(libs.byteman)
+    annotationProcessor(libs.lombok)
 
-    // AspectJ
-    testRuntimeOnly(libs.aspectj.weaver)
-    testImplementation(libs.aspectj.weaver)
-
-    // Junit 5
     testImplementation(platform(libs.junit.bom))
+    testImplementation(platform(libs.mockito.bom))
+    testImplementation(libs.byteman)
+    testImplementation(libs.aspectj.weaver)
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.junit.jupiter.api)
-    testRuntimeOnly(libs.junit.jupiter.engine)
     testImplementation(libs.junit.platform.launcher)
-
     testImplementation(libs.assertj.core)
-
-    // Mockito
-    testImplementation(platform(libs.mockito.bom))
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.junit.jupiter)
-
-    // Arch-unit
     testImplementation(libs.archunit.junit)
-
-    //Byte Man
     testImplementation(libs.byte.buddy.agent)
-
     testImplementation(gradleTestKit())
 
-    //lombok
-    compileOnly(libs.lombok)
-    annotationProcessor(libs.lombok)
+    testRuntimeOnly(libs.aspectj.weaver)
+    testRuntimeOnly(libs.junit.jupiter.engine)
 
     testCompileOnly(libs.lombok)
     testAnnotationProcessor(libs.lombok)

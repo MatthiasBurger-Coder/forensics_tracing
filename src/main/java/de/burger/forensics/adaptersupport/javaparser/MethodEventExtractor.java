@@ -105,8 +105,8 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
     }
 
     Set<String> localVariableNames(MethodDeclaration declaration) {
-        Set<String> locals = declaration.findAll(VariableDeclarator.class, var ->
-                        var.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true))
+        Set<String> locals = declaration.findAll(VariableDeclarator.class, declarator ->
+                        declarator.getParentNode().map(parent -> !(parent instanceof FieldDeclaration)).orElse(true))
                 .stream()
                 .map(VariableDeclarator::getNameAsString)
                 .filter(name -> !name.isBlank())
