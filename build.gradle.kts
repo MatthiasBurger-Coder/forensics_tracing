@@ -426,8 +426,12 @@ tasks.check {
 }
 
 sonar {
-    val sonarToken = providers.environmentVariable("SONAR_TOKEN").orNull
-        ?: providers.gradleProperty("sonar.token").orNull
+    val sonarToken = sequenceOf(
+        providers.environmentVariable("SONAR_TOKEN").orNull,
+        providers.gradleProperty("sonar.token").orNull
+    )
+        .mapNotNull { it?.trim() }
+        .firstOrNull { it.isNotEmpty() }
 
     if (sonarToken == null) {
         // Skip Sonar when no token is configured to avoid failing local or CI builds.
