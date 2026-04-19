@@ -9,6 +9,7 @@ public final class IfTrueRuleStrategy extends AbstractBytemanStrategy implements
     @Override public String id() { return "IF_TRUE"; }
     @Override public String render(RuleParams p) {
         String ruleId = safeId(p.id());
+        int sourceLine = requireSourceLine(p, id());
         String condition = sanitizeCondition(p.condition());
         condition = resolveClassPlaceholder(p.className(), condition);
         condition = qualifyStaticNullCheck(p.className(), condition);
@@ -19,7 +20,7 @@ public final class IfTrueRuleStrategy extends AbstractBytemanStrategy implements
             CLASS %s
             METHOD %s
             HELPER %s
-            AT ENTRY
+            AT LINE %d
             IF %s
             DO
                 onBranch(%s.class, "%s", "IF_TRUE");
@@ -29,6 +30,7 @@ public final class IfTrueRuleStrategy extends AbstractBytemanStrategy implements
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 p.helperFqn(),
+                sourceLine,
                 cond,
                 p.className(), p.methodName()
         );

@@ -1,5 +1,7 @@
 package de.burger.forensics.plugin.btmgen.render.spi;
 
+import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
+
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -23,6 +25,19 @@ public abstract class AbstractBytemanStrategy {
                 .replace("\"", "\\\"");
     }
     protected static String methodSig(String name, String desc) { return name + (desc != null ? desc : ""); }
+
+    protected static int requireSourceLine(RuleParams params, String templateId) {
+        int sourceLine = params.sourceLine();
+        if (sourceLine > 0) {
+            return sourceLine;
+        }
+
+        String className = (params.className() == null || params.className().isBlank()) ? "<unknown>" : params.className();
+        String methodName = (params.methodName() == null || params.methodName().isBlank()) ? "<method>" : params.methodName();
+        throw new IllegalArgumentException(
+                templateId + " rule requires a valid source line for " + className + "#" + methodName
+        );
+    }
 
     protected static String sanitizeCondition(String condition) {
         if (condition == null) {

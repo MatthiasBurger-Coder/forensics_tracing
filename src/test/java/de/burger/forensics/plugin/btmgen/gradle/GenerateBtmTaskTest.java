@@ -118,8 +118,12 @@ class GenerateBtmTaskTest {
                 strategies.get("IF_TRUE").calls.stream().map(RuleParams::methodName).collect(Collectors.toSet()));
         assertEquals(List.of("true", "false"),
                 strategies.get("IF_TRUE").calls.stream().map(RuleParams::condition).toList());
+        assertEquals(List.of(4, 9),
+                strategies.get("IF_TRUE").calls.stream().map(RuleParams::sourceLine).toList());
         assertEquals(List.of("true", "false"),
                 strategies.get("IF_FALSE").calls.stream().map(RuleParams::condition).toList());
+        assertEquals(List.of(4, 9),
+                strategies.get("IF_FALSE").calls.stream().map(RuleParams::sourceLine).toList());
         assertEquals(2, strategies.get("SWITCH").calls.size());
         assertEquals(2, strategies.get("SWITCH_CASE").calls.size());
         assertEquals(List.of("1", "2"),

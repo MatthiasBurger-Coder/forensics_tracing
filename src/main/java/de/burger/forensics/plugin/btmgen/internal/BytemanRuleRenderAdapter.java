@@ -43,7 +43,8 @@ public final class BytemanRuleRenderAdapter implements RuleRenderPort {
                 displayName,
                 condition,
                 null,
-                rule.helperFqn()
+                rule.helperFqn(),
+                location.line()
         );
         return renderer.render(template.name(), params);
     }

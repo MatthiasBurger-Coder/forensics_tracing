@@ -14,6 +14,12 @@ class RuleIdTest {
     }
 
     @Test
+    void rejectsNullValues() {
+        assertThatThrownBy(() -> new RuleId(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void acceptsNonBlankValues() {
         assertThatCode(() -> new RuleId("abc"))
             .doesNotThrowAnyException();
