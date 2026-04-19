@@ -26,25 +26,25 @@ public record TracingConditionRenderingStrategy(ConditionRenderingStrategy deleg
     @Override
     public String renderCondition(Expression condition, MethodScanContext context) {
         String rendered = delegate.renderCondition(condition, context);
-        record("condition", rendered);
+        appendTrace("condition", rendered);
         return rendered;
     }
 
     @Override
     public String renderReturn(ReturnStmt returnStmt, MethodScanContext context) {
         String rendered = delegate.renderReturn(returnStmt, context);
-        record("return", rendered);
+        appendTrace("return", rendered);
         return rendered;
     }
 
     @Override
     public String renderSwitchLabel(SwitchEntry entry, MethodScanContext context) {
         String rendered = delegate.renderSwitchLabel(entry, context);
-        record("switch", rendered);
+        appendTrace("switch", rendered);
         return rendered;
     }
 
-    void record(String kind, String renderedValue) {
+    void appendTrace(String kind, String renderedValue) {
         traces.add(kind + ":" + renderedValue);
     }
 }

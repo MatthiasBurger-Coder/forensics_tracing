@@ -39,11 +39,11 @@ class TracingConditionRenderingStrategyTest {
     }
 
     @Test
-    void recordAppendsKindAndRenderedValue() {
+    void appendTraceAppendsKindAndRenderedValue() {
         List<String> traces = new ArrayList<>();
         TracingConditionRenderingStrategy strategy = new TracingConditionRenderingStrategy(new StubStrategy(), traces);
 
-        strategy.record("custom", "value");
+        strategy.appendTrace("custom", "value");
 
         assertThat(traces).containsExactly("custom:value");
     }
