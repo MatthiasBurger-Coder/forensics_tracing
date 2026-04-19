@@ -27,6 +27,7 @@ import java.util.*;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AnalysisContext {
+    private static final String ENTRY_MUST_NOT_BE_NULL = "entry must not be null";
 
     // -------------------------------------------------------------------------
     // General metadata
@@ -90,12 +91,12 @@ public class AnalysisContext {
     }
 
     public void addFileEntry(FileEntry entry) {
-        Objects.requireNonNull(entry, "entry must not be null");
+        Objects.requireNonNull(entry, ENTRY_MUST_NOT_BE_NULL);
         fileEntries.add(entry);
     }
 
     public void addMethodEntry(MethodEntry entry) {
-        Objects.requireNonNull(entry, "entry must not be null");
+        Objects.requireNonNull(entry, ENTRY_MUST_NOT_BE_NULL);
         methodEntries.add(entry);
     }
 
@@ -136,7 +137,7 @@ public class AnalysisContext {
     }
 
     public void addEventEntry(EventEntry entry) {
-        Objects.requireNonNull(entry, "entry must not be null");
+        Objects.requireNonNull(entry, ENTRY_MUST_NOT_BE_NULL);
         eventEntries.add(entry);
     }
 
