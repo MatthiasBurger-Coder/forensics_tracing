@@ -65,25 +65,9 @@ public class MethodLoggingAspect {
     @AfterReturning("appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)")
     public void onReturn(final JoinPoint jp) {
         try {
-            final ArrayDeque<Long> stack = START_STACK.get();
-            final Long started = stack.poll();
-            final long elapsedMs;
-            if (started == null) {
-                final String warnMsg = "(unbalanced timing stack)";
-                loggerFor(jp).warn(warnMsg);
-                fileLog("WARN", warnMsg);
-                START_STACK.remove();
-                elapsedMs = 0L;
-            } else {
-                if (stack.isEmpty()) {
-                    START_STACK.remove();
-                }
-                final long elapsedNs = System.nanoTime() - started;
-                elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
-            }
+            final long elapsedMs = finishElapsedMillis(jp);
             final String msg = String.format("← %s OK in %d ms", shortSig(jp), elapsedMs);
-            loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
-            fileLog("WARN", msg);
+            warn(jp, msg); // WARN to be visible in Gradle console without --info
         } catch (Exception t) {
             swallow("Failed to log method return.", t);
         }
@@ -92,22 +76,7 @@ public class MethodLoggingAspect {
     @AfterThrowing(pointcut = "appOps() && !@annotation(de.burger.forensics.infrastructure.logging.SuppressLogging)", throwing = "ex")
     public void onThrow(final JoinPoint jp, final Throwable ex) {
         try {
-            final ArrayDeque<Long> stack = START_STACK.get();
-            final Long started = stack.poll();
-            final long elapsedMs;
-            if (started == null) {
-                final String warnMsg = "(unbalanced timing stack)";
-                loggerFor(jp).warn(warnMsg);
-                fileLog("WARN", warnMsg);
-                START_STACK.remove();
-                elapsedMs = 0L;
-            } else {
-                if (stack.isEmpty()) {
-                    START_STACK.remove();
-                }
-                final long elapsedNs = System.nanoTime() - started;
-                elapsedMs = TimeUnit.NANOSECONDS.toMillis(elapsedNs);
-            }
+            final long elapsedMs = finishElapsedMillis(jp);
             final String msg = String.format("✖ %s failed in %d ms: %s", shortSig(jp), elapsedMs, ex.getMessage());
             loggerFor(jp).error(msg, ex);
             fileLog("ERROR", msg + " (see stacktrace in console)");
@@ -144,6 +113,27 @@ public class MethodLoggingAspect {
 
     private String safeToString(Object o) {
         return java.util.Optional.ofNullable(o).map(Objects::toString).orElse("null");
+    }
+
+    private long finishElapsedMillis(JoinPoint jp) {
+        final ArrayDeque<Long> stack = START_STACK.get();
+        final Long started = stack.poll();
+        if (started == null) {
+            warn(jp, "(unbalanced timing stack)");
+            START_STACK.remove();
+            return 0L;
+        }
+
+        if (stack.isEmpty()) {
+            START_STACK.remove();
+        }
+        final long elapsedNs = System.nanoTime() - started;
+        return TimeUnit.NANOSECONDS.toMillis(elapsedNs);
+    }
+
+    private void warn(JoinPoint jp, String message) {
+        loggerFor(jp).warn(message);
+        fileLog("WARN", message);
     }
 
     private void fileLog(String level, String message) {

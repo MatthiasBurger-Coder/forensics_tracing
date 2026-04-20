@@ -1,38 +1,16 @@
 // de.burger.forensics.plugin.btmgen.render.impl.IfFalseRuleStrategy
 package de.burger.forensics.plugin.btmgen.render.impl;
 
-import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
-import de.burger.forensics.plugin.btmgen.render.api.RuleRenderStrategy;
-import de.burger.forensics.plugin.btmgen.render.spi.AbstractBytemanStrategy;
-
-public final class IfFalseRuleStrategy extends AbstractBytemanStrategy implements RuleRenderStrategy {
+public final class IfFalseRuleStrategy extends AbstractIfRuleStrategy {
     @Override public String id() { return "IF_FALSE"; }
-    @Override public String render(RuleParams p) {
-        String ruleId = safeId(p.id());
-        int sourceLine = requireSourceLine(p, id());
-        String condition = sanitizeCondition(p.condition());
-        condition = resolveClassPlaceholder(p.className(), condition);
-        condition = qualifyStaticNullCheck(p.className(), condition);
-        String booleanExpr = (condition == null) ? "false" : "!(" + condition + ")";
-        String cond = guardedCondition(ruleId, booleanExpr, booleanExpr);
-        return """
-            RULE %s : if-false %s#%s
-            CLASS %s
-            METHOD %s
-            HELPER %s
-            AT LINE %d
-            IF %s
-            DO
-                onBranch(%s.class, "%s", "IF_FALSE");
-            ENDRULE
-            """.formatted(
-                ruleId, or(p.displayName(), p.className()), p.methodName(),
-                p.className(),
-                methodSig(p.methodName(), p.methodDesc()),
-                p.helperFqn(),
-                sourceLine,
-                cond,
-                p.className(), p.methodName()
-        );
+
+    @Override
+    protected String branchLabel() {
+        return "if-false";
+    }
+
+    @Override
+    protected String booleanExpression(String condition) {
+        return condition == null ? "false" : "!(" + condition + ")";
     }
 }
