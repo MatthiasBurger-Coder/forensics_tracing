@@ -1,347 +1,403 @@
-# Forensics Tracing Toolkit
+# Forensics Tracing Gradle Plugin and Runtime Tracing Support
 
-`forensics-tracing` generates Byteman rules from Java source code and provides runtime helpers for low-overhead tracing.
+## What this project is
 
-## Quality Gate Badge
-[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=MatthiasBurger-Coder_forensics_tracing)](https://sonarcloud.io/summary/new_code?id=MatthiasBurger-Coder_forensics_tracing)
+This repository provides:
 
-## What is included
+- a Gradle plugin, `de.burger.forensics.btmgen`, that scans Java source code
+- generation of Byteman `.btm` rules
+- runtime tracing helpers centered around `de.burger.forensics.infrastructure.rt.RtTrace`
+- an application-facing tracing facade, `de.burger.forensics.application.tracing.Tracer`
+- optional AspectJ-based method logging via `de.burger.forensics.infrastructure.logging.MethodLoggingAspect`
 
-- Gradle plugin: `de.burger.forensics.btmgen`
-- Rule generation application service: `GenerateRulesUseCase`
-- JavaParser-based scanner with multi-file parallel scanning
-- Byteman renderer and `.btm` writer
-- Runtime tracing helper: `RtTrace` / `RtTraceHelper`
+Internally the repository is split into pragmatic hexagonal layers (`domain`, `application`, `adapters`, `plugin`, `infrastructure`). The Gradle plugin sits in the plugin adapter layer and drives the application service that generates rules.
 
-## Requirements
+## Architecture and execution flow
 
-- Java 17+
-- Gradle 9.1+
-- Byteman runtime when you want to load generated rules into a JVM
+The verified execution flow is:
 
-## Apply the Gradle plugin
+1. The Gradle task `generateBtmRules` (`GenerateBtmTask`) starts in scan mode by default.
+2. `GenerateBtmTask` resolves one or more Java source roots from its own task inputs and from the `btmGen` extension.
+3. `JavaParserScanner` scans those roots with JavaParser-based support classes and produces `ScanEvent` instances.
+4. `GenerateRulesUseCase` filters scan events by language and optional package prefixes, groups them by method, optionally adds synthetic `METHOD_ENTER` / `METHOD_EXIT` rules, and applies the `minBranchesPerMethod` filter.
+5. The application layer turns scan events into domain `Rule` objects typed by `RuleTemplate`.
+6. `BytemanRuleRenderAdapter` converts each domain rule into `RuleParams`, and `BytemanRuleRenderer` dispatches to the matching render strategy.
+7. `BtmFileWriter` writes one `.btm` file containing a generated header plus all rendered rule blocks.
+8. That `.btm` file is not active by itself. You must load it into a JVM with Byteman tooling.
+9. At runtime, generated rules call helper methods on the configured helper class. The default helper is `RtTraceHelper`, which delegates to `RtTrace`.
+10. `RtTrace` emits structured runtime events and manages correlation IDs and span state.
 
-```kotlin
-plugins {
-    id("de.burger.forensics.btmgen") version "0.0.3-SNAPSHOT"
-}
-```
+`GenerateBtmTask` also has a manual single-template mode. In that mode it skips source scanning entirely and renders one explicit template from task inputs.
 
-The plugin registers task `generateBtmRules` and wires it into `build`.
+## Supported generated rule types
 
-## Configure the plugin
+The renderer supports these `RuleTemplate` values:
 
-```kotlin
-btmGen {
-    scanSubprojects.set(true)
-    sourceRoot.set(file("src/main/java"))
-    sourceRoots.setFrom(
-        file("module-a/src/main/java"),
-        file("module-b/src/main/java")
-    )
-    outputFile.set(file("build/forensics/forensics.btm"))
-    helperFqn.set("de.burger.forensics.infrastructure.rt.RtTraceHelper")
-    minBranchesPerMethod.set(2)
-    includes.set("com.example,org.acme")
-}
-```
+| Rule type | Produced from source scanning | Produced in single-template mode | Runtime callback |
+| --- | --- | --- | --- |
+| `METHOD_ENTER` | Yes. Also synthesized per method when `includeEntryExit=true` and no explicit enter event exists. | Yes | `onEnter(...)` |
+| `METHOD_EXIT` | Yes. Also synthesized per method when `includeEntryExit=true` and no explicit exit event exists. | Yes | `onExit(..., null)` |
+| `RETURN` | Yes | Yes | `onExit(..., $!)` |
+| `THROW` | Yes | Yes | `onException($^)` |
+| `IF_TRUE` | Yes | Yes | `onBranch(..., "IF_TRUE")` with `eval(...)` guard logic |
+| `IF_FALSE` | Yes | Yes | `onBranch(..., "IF_FALSE")` with `eval(...)` guard logic |
+| `SWITCH` | Yes | Yes | `onSwitch(...)` |
+| `SWITCH_CASE` | Yes | Yes | `onCase(...)` |
+| `THREAD_LIFECYCLE` | No. `GenerateRulesUseCase` explicitly skips it in scan mode. | Yes | `threadFork(...)` / `threadJoin(...)` |
+| `JDBC_EXECUTE` | No. `GenerateRulesUseCase` explicitly skips it in scan mode. | Yes | `ioBegin(...)` / `ioEnd(...)` |
 
-- `sourceRoot`
-  - Purpose: root directory that is scanned recursively for `.java` files.
-  - Required: no (optional).
-  - Default: `src/main/java`.
-  - Effect: limits the scan scope to this directory tree only.
-- `sourceRoots`
-  - Purpose: optional list of multiple source roots (for example one `src/main/java` per module).
-  - Required: no (optional).
-  - Default: `src/main/java`.
-  - Effect: scans all configured roots in one run and merges generated rules into one output file.
-- `scanSubprojects`
-  - Purpose: automatically include `src/main/java` from root project and all subprojects.
-  - Required: no (optional).
-  - Default: `false`.
-  - Effect: removes the need to list each module manually; explicit `sourceRoots` are still respected.
-- `outputFile`
-  - Purpose: target path of the generated Byteman rules file.
-  - Required: no (optional).
-  - Default: `build/forensics/forensics.btm`.
-  - Effect: all rendered rules are written to this file (parent directory is created automatically).
-- `helperFqn`
-  - Purpose: fully qualified helper class name referenced by generated rules.
-  - Required: no (optional).
-  - Default: `de.burger.forensics.infrastructure.rt.RtTraceHelper`.
-  - Effect: generated rules call this helper at runtime; replace it if you need custom runtime behavior.
-- `minBranchesPerMethod`
-  - Purpose: minimum number of branch events per method (`IF_TRUE`, `IF_FALSE`, `SWITCH`, `SWITCH_CASE`) required to keep rules for that method.
-  - Required: no (optional).
-  - Default: `2`.
-  - Effect: methods below this threshold are excluded from final output (including their entry/exit and event rules).
-- `includes`
-  - Purpose: comma-separated list of package/class prefixes used as scan filter (for example `com.example,org.acme`).
-  - Required: no (optional).
-  - Default: empty / not set (no prefix filter).
-  - Effect: only events whose fully qualified class name starts with one of the prefixes are processed.
+Notes:
 
-## Configure the task
+- `THREAD_LIFECYCLE` renders fixed rules for `java.lang.Thread.start()` and `java.lang.Thread.join(..)`.
+- `JDBC_EXECUTE` renders fixed rules for `java.sql.Statement` execute-style methods.
+- The scanner-backed path currently generates `METHOD_ENTER`, `METHOD_EXIT`, `RETURN`, `THROW`, `IF_TRUE`, `IF_FALSE`, `SWITCH`, and `SWITCH_CASE`.
 
-```kotlin
-tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateBtmTask>("generateBtmRules") {
-    // scan mode
-    sourceRoot.set(layout.projectDirectory.dir("src/main/java"))
-    sourceRoots.setFrom(
-        file("module-a/src/main/java"),
-        file("module-b/src/main/java")
-    )
-    outputFile.set(layout.buildDirectory.file("forensics/forensics.btm"))
-    outputDir.set(layout.buildDirectory.dir("forensics"))
-    helperFqn.set("de.burger.forensics.infrastructure.rt.RtTraceHelper")
-    includeEntryExit.set(false)
-    minBranchesPerMethod.set(2)
-    scanSubprojects.set(false)
+## Prerequisites
 
-    // optional single-template mode (instead of scan mode)
-    // templateId.set("METHOD_ENTER")
-    // className.set("com.example.Foo")
-    // methodName.set("bar")
-    // methodDesc.set("(Ljava/lang/String;)V")
-}
-```
+- Java 21 for the consumer-project examples in this README
+- Gradle 9.1
+- a Java project to analyze
+- Byteman agent/tooling if you want the generated rules to execute inside a JVM
 
-Task properties (`GenerateBtmTask`):
+Important baseline note:
 
-- Requirement summary:
-  - Scan mode: no additional required properties (defaults are available).
-  - Single-template mode: `templateId`, `className`, and `methodName` are required together.
+- The plugin project in this repository is compiled and tested with a Java 17 toolchain in `build.gradle.kts`.
+- The examples below assume a consumer build running on Java 21 and Gradle 9.1, because that is the target documentation baseline for this README.
 
-- `sourceRoot`
-  - Purpose: single source root used for scanning.
-  - Required: no (optional).
-  - Default: `src/main/java`.
-  - Effect: used as fallback root when no explicit `sourceRoots` are provided.
-- `sourceRoots`
-  - Purpose: multiple source roots for one generation run.
-  - Required: no (optional).
-  - Default: contains `sourceRoot`.
-  - Effect: all existing directories are scanned and merged into one output.
-- `outputFile`
-  - Purpose: output `.btm` file.
-  - Required: no (optional).
-  - Default: `build/forensics/forensics.btm`.
-  - Effect: generated rules are written to this file.
-- `outputDir`
-  - Purpose: output directory marker for Gradle task outputs.
-  - Required: no (optional).
-  - Default: `build/forensics`.
-  - Effect: used by Gradle output tracking; parent folder for default output file.
-- `helperFqn`
-  - Purpose: helper class referenced by generated Byteman rules.
-  - Required: no (optional).
-  - Default: `de.burger.forensics.infrastructure.rt.RtTraceHelper`.
-  - Effect: controls which helper receives callbacks at runtime.
-- `includeEntryExit`
-  - Purpose: control whether `METHOD_ENTER` and `METHOD_EXIT` rules are generated per method.
-  - Required: no (optional).
-  - Default: `true`.
-  - Effect: when `false`, only event rules (for example `IF_*`, `SWITCH*`, `RETURN`, `THROW`) are generated.
-- `minBranchesPerMethod`
-  - Purpose: minimum number of branch events required per method.
-  - Required: no (optional).
-  - Default: `2`.
-  - Effect: methods below threshold are excluded from final output.
-- `scanSubprojects`
-  - Purpose: include `src/main/java` of all projects in the current Gradle build.
-  - Required: no (optional).
-  - Default: `false`.
-  - Effect: adds discovered subproject roots to the scan set.
-- `templateId`
-  - Purpose: template id for single-template rendering mode.
-  - Required: conditional.
-  - Default: `METHOD_ENTER` (if blank).
-  - Effect: required together with `className` and `methodName` to activate single-template mode.
-- `className`
-  - Purpose: target class for single-template mode.
-  - Required: conditional.
-  - Default: none.
-  - Effect: required together with `templateId` and `methodName` to activate single-template mode.
-- `methodName`
-  - Purpose: target method for single-template mode.
-  - Required: conditional.
-  - Default: none.
-  - Effect: required together with `templateId` and `className` to activate single-template mode.
-- `methodDesc`
-  - Purpose: optional JVM/Byteman method descriptor/signature for single-template mode.
-  - Required: no (optional).
-  - Default: not set.
-  - Effect: narrows method matching when provided.
+## Build this project
 
-Relationship to `btmGen` extension:
+Use `./gradlew` on Unix-like shells or `.\gradlew.bat` on Windows PowerShell.
 
-- Task properties can be set directly on `generateBtmRules`.
-- If omitted, task conventions are taken from defaults and/or `btmGen` extension where available.
-- `includes` is extension-only (`btmGen { includes.set(...) }`) and not a direct task property.
-
-Minimal task-only example:
-
-```kotlin
-tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateBtmTask>("generateBtmRules") {
-    includeEntryExit.set(false)
-}
-```
-
-Runtime trace output is configured on the JVM process (`Test`, `bootRun`, app start), not in `btmGen` / `GenerateBtmTask`.
-For Gradle tests, configure it like this:
-
-```kotlin
-tasks.withType<Test>().configureEach {
-    systemProperty("forensics.rt.enabled", "true")
-    systemProperty("forensics.rt.output", "logs/trace.json")
-}
-```
-
-## Generate rules
-
-```bash
-./gradlew generateBtmRules
-```
-
-Generated output default:
-
-- `build/forensics/forensics.btm`
-
-## How scanning works
-
-- Scans `.java` files below `sourceRoot` / all configured `sourceRoots`
-- If `scanSubprojects` is enabled, automatically adds `src/main/java` from all subprojects
-- Skips non-Java files
-- Ignores parse errors per file to keep generation resilient
-- Parses files in parallel batches
-- Uses isolated parser/symbol-solver instances per worker to stay thread-safe
-
-## Supported rule templates
-
-- `IF_TRUE`
-- `IF_FALSE`
-- `SWITCH`
-- `SWITCH_CASE`
-- `RETURN`
-- `THROW`
-- `METHOD_ENTER`
-- `METHOD_EXIT`
-- `THREAD_LIFECYCLE`
-- `JDBC_EXECUTE`
-
-## Application service usage
-
-```java
-GenerateRulesUseCase useCase = new GenerateRulesUseCase(
-    scanner,
-    renderer,
-    clock,
-    log,
-    strategyFactory
-);
-
-GenerationRequest request = new GenerationRequest(
-    rootPath,
-    "de.burger.forensics.infrastructure.rt.RtTraceHelper",
-    false,
-    true,
-    List.of("com.example"),
-    2,
-    List.of()
-);
-
-RuleGenerationResult result = useCase.generate(request);
-List<String> rules = result.renderedRules();
-```
-
-## Runtime tracing
-
-Enable runtime tracing:
-
-- JVM property: `-Dforensics.rt.enabled=true`
-- or env var: `FORENSICS_RT_ENABLED=true`
-- Optional file output: `-Dforensics.rt.output=logs/trace.json`
-
-Example for Gradle `test`:
-
-```kotlin
-tasks.withType<Test>().configureEach {
-    systemProperty("forensics.rt.enabled", "true")
-    systemProperty("forensics.rt.output", "logs/trace.json")
-}
-```
-
-`RtTrace` emits one JSON line per event to stdout.
-If `forensics.rt.output` is set, events are also appended to that JSONL file.
-
-For runtime tracing output, set JVM properties on the process that runs with Byteman (for example `test`, `bootRun`, application start).
-
-## Runtime trace -> PlantUML activity
-
-If your trace JSON is generated during runtime, evaluate it in a second step:
-
-1. Run your application/tests with runtime tracing enabled so `logs/trace.json` is produced.
-2. Generate PlantUML from the recorded trace:
-
-```bash
-./gradlew generateActivityPumlFromTrace
-```
-
-Defaults:
-
-- Input trace: `logs/trace.json`
-- Output diagram: `build/forensics/trace-activity.puml`
-
-Optional (in your consumer `build.gradle.kts`) to point to another trace file:
-
-```kotlin
-tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateActivityPumlFromTraceTask>("generateActivityPumlFromTrace") {
-    inputTrace.set(file("D:/Projects/legacy-demo-shop/logs/trace.json"))
-    outputPuml.set(layout.buildDirectory.file("forensics/source.puml"))
-    // optional endpoint override:
-    // rootClass.set("com.acme.legacy.OrderService")
-    // rootMethod.set("sumGross")
-}
-```
-
-Legacy runtime property compatibility (still supported):
-
-- `-Dforensics.btmgen.logToFile=true`
-- `-Dforensics.btmgen.logFilePath=...`
-
-## Build and test
-
-```bash
-./gradlew test
-```
-
-This project is aligned to a Java 17 baseline.
-You can verify compilation explicitly with `--release 17` via Gradle init script:
-
-```kotlin
-// force-release-17.init.gradle.kts
-allprojects {
-    tasks.withType<JavaCompile>().configureEach {
-        options.release.set(17)
-    }
-}
-```
-
-```bash
-./gradlew clean compileJava compileTestJava -I force-release-17.init.gradle.kts
-```
-
-## Local development
-
-Build plugin and library artifacts:
+Verified commands for this repository:
 
 ```bash
 ./gradlew build
 ```
 
-Publish locally:
+- Compiles the repository
+- runs the test suite
+- produces the plugin and library artifacts
 
 ```bash
-./gradlew publishToMavenLocal
+./gradlew test
 ```
+
+- Runs the JUnit 5 test suite
+- covers plugin wiring, task behavior, renderer behavior, runtime tracing, and AspectJ logging support
+
+```bash
+./gradlew clean test jacocoTestReport checkPackageCoverage
+```
+
+- Runs the stricter repository quality gate from `QUALITY.md`
+- generates the JaCoCo XML report
+- writes the per-package coverage report to `build/reports/coverage/package-coverage.txt`
+
+## Use the plugin in a consumer project
+
+The safest verified local-development path is a composite build. This repository is a Gradle plugin project, so another Gradle build can resolve it directly with `includeBuild(...)`.
+
+Consumer `settings.gradle.kts`:
+
+```kotlin
+pluginManagement {
+    includeBuild("../forensics_tracing")
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+```
+
+Consumer `build.gradle.kts`:
+
+```kotlin
+plugins {
+    java
+    id("de.burger.forensics.btmgen")
+}
+```
+
+Practical notes:
+
+- `de.burger.forensics.btmgen` is the verified plugin ID.
+- `btmGen` is the verified extension name.
+- `generateBtmRules` is the verified task name.
+- Applying a Java plugin (`java`, `java-library`, or another plugin based on `JavaPlugin`) is the practical default.
+- When a Java plugin is present, `BtmGenPlugin` automatically attaches the plugin runtime artifact to `runtimeOnly` and `testRuntimeOnly`.
+- The plugin also wires `generateBtmRules` into `build` when a `build` task exists.
+
+This repository also exposes Gradle publishing tasks, but this README documents the composite-build path first because it is the most direct repository-backed development flow.
+
+## Configure the plugin
+
+The verified configuration split is:
+
+- Extension `btmGen`
+  - `sourceRoot`
+  - `outputFile`
+  - `helperFqn`
+  - `includes`
+  - `minBranchesPerMethod`
+  - also verified: `sourceRoots`, `scanSubprojects`
+- Task `generateBtmRules`
+  - `includeEntryExit`
+  - `minBranchesPerMethod`
+  - single-template inputs such as `templateId`, `className`, `methodName`, `methodDesc`
+
+`minBranchesPerMethod` is important: it exists on both the extension and the task. The plugin copies the extension value into the task as a convention, and the task can override it explicitly.
+
+Verified Kotlin DSL example:
+
+```kotlin
+btmGen {
+    sourceRoot.set(file("src/main/java"))
+    outputFile.set(file("build/forensics/forensics.btm"))
+    helperFqn.set("de.burger.forensics.infrastructure.rt.RtTraceHelper")
+    includes.set("com.example,org.acme")
+    minBranchesPerMethod.set(2)
+}
+
+tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateBtmTask>("generateBtmRules") {
+    includeEntryExit.set(true)
+    minBranchesPerMethod.set(2)
+}
+```
+
+Property behavior:
+
+- `sourceRoot`
+  - Default: `src/main/java`
+  - Used as the fallback scan root
+- `outputFile`
+  - Default: `build/forensics/forensics.btm`
+  - The task writes exactly one `.btm` file there by default
+- `helperFqn`
+  - Default: `de.burger.forensics.infrastructure.rt.RtTraceHelper`
+  - Blank values normalize back to that default
+- `includes`
+  - Extension-only
+  - Comma-separated fully qualified package or class prefixes
+  - Example: `com.example,org.acme`
+- `includeEntryExit`
+  - Task-only
+  - Default: `true`
+  - When `false`, scan mode does not add `METHOD_ENTER` / `METHOD_EXIT` rules
+- `minBranchesPerMethod`
+  - Default: `2`
+  - Methods with fewer than that many branch events (`IF_TRUE`, `IF_FALSE`, `SWITCH`, `SWITCH_CASE`) are filtered out from the final output
+
+Also verified but optional:
+
+- `sourceRoots`: explicit multi-root scan input
+- `scanSubprojects`: automatically adds `src/main/java` from the root project and all subprojects
+
+## Generate the `.btm` rules
+
+Run:
+
+```bash
+./gradlew generateBtmRules
+```
+
+Verified behavior:
+
+- The default output file is `build/forensics/forensics.btm`.
+- The file is a single Byteman script containing a generated header and all rendered rule blocks.
+- Scan mode is the default mode.
+- The plugin also hooks `generateBtmRules` into `build`.
+
+## Single-template mode
+
+`GenerateBtmTask` switches from scan mode to manual single-template mode only when all of these task inputs are present:
+
+- `templateId`
+- `className`
+- `methodName`
+
+`methodDesc` is optional.
+
+Minimal example:
+
+```kotlin
+tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateBtmTask>("generateBtmRules") {
+    templateId.set("METHOD_ENTER")
+    className.set("com.example.OrderService")
+    methodName.set("placeOrder")
+    methodDesc.set("(Ljava/lang/String;)V")
+}
+```
+
+Notes:
+
+- This mode bypasses Java source scanning.
+- If `templateId` is blank but still present, the task normalizes it to `METHOD_ENTER`.
+- `THREAD_LIFECYCLE` and `JDBC_EXECUTE` are primarily useful in this mode because scan mode skips them.
+- The checked-in renderers for `THREAD_LIFECYCLE` and `JDBC_EXECUTE` emit fixed targets (`java.lang.Thread` and `java.sql.Statement` execute methods), even though the task still requires `className` and `methodName` to enter single-template mode.
+
+## Run with Byteman and enable runtime tracing
+
+The generated output is a Byteman script. Generating `build/forensics/forensics.btm` does not instrument any JVM by itself.
+
+To execute the rules:
+
+- load the generated `.btm` file into a JVM with Byteman tooling or the Byteman agent
+- make sure the helper class referenced by the rules is on the runtime classpath
+
+The default helper is `de.burger.forensics.infrastructure.rt.RtTraceHelper`. That helper forwards events to `RtTrace`.
+
+Enable runtime tracing with either:
+
+- `-Dforensics.rt.enabled=true`
+- `FORENSICS_RT_ENABLED=true`
+
+Optional file output:
+
+- `-Dforensics.rt.output=logs/trace.json`
+
+Verified runtime output behavior:
+
+- `RtTrace` emits one JSON line per event to a dedicated JUL console logger
+- with the standard JDK `ConsoleHandler`, that is console output and is typically written to stderr rather than stdout
+- when `forensics.rt.output` is set, the same JSON lines are also appended to the configured file
+- the payload includes timestamp, event name, thread, optional correlation ID, optional span ID, a `details` object, and optional error fields
+
+This repository does not provide a single canonical JVM startup command for Byteman. Use your normal Byteman loading mechanism for the target application or test process.
+
+## Use the tracing facade in application code
+
+Use `de.burger.forensics.application.tracing.Tracer` when application code should stay independent from direct `RtTrace` calls.
+
+The current interface exposes:
+
+- `enter(...)`
+- `exit(...)`
+- `span(...)`
+- `branch(...)`
+- `setVariable(...)`
+- `error(...)`
+- `setCorrelationId(...)`
+- `newCorrelationId()`
+
+The repository already contains a concrete implementation:
+
+- `de.burger.forensics.infrastructure.rt.RtTracer`
+
+Typical usage:
+
+```java
+Tracer tracer = new de.burger.forensics.infrastructure.rt.RtTracer();
+
+String correlationId = tracer.newCorrelationId();
+tracer.setCorrelationId(correlationId);
+
+try (AutoCloseable span = tracer.span("checkout")) {
+    tracer.enter(OrderService.class, "placeOrder", orderId);
+    tracer.branch("discountApplied", true);
+    tracer.setVariable("orderTotal", total);
+    tracer.exit(OrderService.class, "placeOrder", result);
+} catch (Exception ex) {
+    tracer.error(ex);
+    throw ex;
+}
+```
+
+The repository also contains `examples/RtTracerAdapter.java`, which shows the same adapter pattern. However, that example still uses the older `var(...)` method name. The current `Tracer` interface uses `setVariable(...)`, so align the example with the interface before copying it into production code.
+
+## Optional AspectJ method logging
+
+`MethodLoggingAspect` is separate from Byteman rule generation and separate from runtime tracing.
+
+Verified behavior:
+
+- It logs method entry, successful return, and thrown exceptions.
+- It targets public methods matching:
+  - `de.burger.forensics..*`
+  - `org.example.trace..*`
+- It skips methods annotated with `de.burger.forensics.infrastructure.logging.SuppressLogging`.
+- It writes through the target class logger and also mirrors log lines to a file.
+
+Verified file-logging properties:
+
+- `forensics.btmgen.logToFile`
+  - Default in the aspect implementation: `true`
+- `forensics.btmgen.logFile`
+  - Default in the aspect implementation: `logs/forensics-btmgen.log`
+
+Verified weaving setup in this repository:
+
+- `src/main/resources/META-INF/aop.xml` includes `de.burger.forensics..*`
+- the same `aop.xml` excludes `de.burger.forensics.infrastructure.logging..*`
+- repository tests run with the AspectJ weaver as a Java agent
+
+About `forensics.aspect.enabled`:
+
+- The repository build sets `forensics.aspect.enabled=true` in test configuration.
+- The checked-in `MethodLoggingAspect` class does not read that property directly.
+- Treat that flag as part of the surrounding build or weaving setup, not as a property consumed by the aspect implementation itself.
+
+## Troubleshooting
+
+- Wrong task name:
+  Use `generateBtmRules`. Old names from earlier documentation are stale.
+
+- Wrong extension name:
+  Use `btmGen`, not a lowercase or differently spelled variant.
+
+- No useful output because of the wrong source root:
+  `GenerateBtmTask` filters source roots that do not exist. If you configured the wrong `sourceRoot` or `sourceRoots`, the task can still create the output file but it may contain only the generated header and no real rules.
+
+- No runtime trace appears:
+  Generating `.btm` files is not enough. You must both load the script with Byteman and enable tracing with `-Dforensics.rt.enabled=true` or `FORENSICS_RT_ENABLED=true`.
+
+- Confusing rule generation with instrumentation:
+  `./gradlew generateBtmRules` only writes a Byteman script. It does not attach Byteman, instrument a JVM, or start runtime tracing by itself.
+
+- Confusing plugin-generated rules with AspectJ logging:
+  `MethodLoggingAspect` is separate from Byteman. You can use one without the other.
+
+- Package filtering matches nothing:
+  `includes` is a comma-separated prefix filter over fully qualified class names. If no class name starts with one of those prefixes, scan mode produces no matching rules.
+
+- Blank helper FQCN does not stay blank:
+  Both `GenerationRequest` and `RuleParams` normalize blank helper values back to `de.burger.forensics.infrastructure.rt.RtTraceHelper`.
+
+- `THREAD_LIFECYCLE` or `JDBC_EXECUTE` do not appear during scanning:
+  That is expected. The scan path skips those templates. Use single-template mode for them.
+
+- `includeEntryExit=false` still leaves some rules:
+  That flag only suppresses generated `METHOD_ENTER` and `METHOD_EXIT` rules. It does not suppress `IF_*`, `SWITCH*`, `RETURN`, or `THROW`.
+
+## Development and testing notes
+
+The test suite in `src/test/java` verifies the behavior described above. In particular:
+
+- `BtmGenPluginTest`
+  - plugin ID application
+  - extension/task registration
+  - default conventions
+  - runtime helper attachment to `runtimeClasspath` and `testRuntimeClasspath`
+  - `build` wiring
+
+- `GenerateBtmTaskTest`
+  - scan mode
+  - single-template mode
+  - multi-root and subproject scanning
+  - helper FQCN normalization
+  - duplicate `RULE` header deduplication
+  - `THREAD_LIFECYCLE` and `JDBC_EXECUTE` manual rendering paths
+
+- `IfRuleStrategyTest`
+  - `IF_TRUE` / `IF_FALSE` rendering at source lines
+  - `eval(...)` expression generation
+  - placeholder stripping and static field qualification
+
+- `GenerationRequestTest`
+  - blank helper normalization
+  - null handling
+  - immutable copies of optional collections
+
+- `QUALITY.md`
+  - explains the repository quality gate
+  - documents `checkPackageCoverage`
+  - points to the SOLID-oriented and architecture-oriented test suites
