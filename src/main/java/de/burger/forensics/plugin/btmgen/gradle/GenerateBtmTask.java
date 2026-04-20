@@ -14,6 +14,7 @@ import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
 import de.burger.forensics.plugin.btmgen.writer.BtmFileWriter;
 import org.gradle.api.DefaultTask;
+import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.ProjectLayout;
@@ -25,6 +26,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -111,7 +113,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         try {
             Files.createDirectories(outFile.getParent());
         } catch (IOException e) {
-            throw new RuntimeException("Failed to create output directory for " + outFile, e);
+            throw new GradleException("Failed to create output directory for " + outFile, e);
         }
 
         List<String> allRules = new ArrayList<>();
@@ -158,18 +160,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         List<String> dedupedRuleNames = dedupeRuleHeaders(uniqueRules);
 
         // Write output once
-        try {
-            // Support both writer ctors to avoid signature drift issues
-            BtmFileWriter writer;
-            try {
-                writer = new BtmFileWriter(Clock.systemDefaultZone(), outFile);
-            } catch (NoSuchMethodError | NoClassDefFoundError e) {
-                writer = new BtmFileWriter(outFile);
-            }
-            writer.write(dedupedRuleNames);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed writing BTM file " + outFile, e);
-        }
+        writeRules(outFile, dedupedRuleNames);
 
         getLogger().lifecycle("Generated {} rules -> {}", dedupedRuleNames.size(), outFile.toAbsolutePath());
     }
@@ -274,20 +265,16 @@ public abstract class GenerateBtmTask extends DefaultTask {
         List<String> out = new ArrayList<>(rules.size());
         for (String rule : rules) {
             RuleHeader header = findRuleHeader(rule);
-            if (header == null) {
-                out.add(rule);
-                continue;
+            String rewrittenRule = rule;
+            if (header != null) {
+                String originalName = header.name();
+                int index = seen.merge(originalName, 1, Integer::sum);
+                if (index > 1) {
+                    String replacement = header.prefix() + originalName + "_" + index;
+                    rewrittenRule = rule.substring(0, header.startIndex()) + replacement + rule.substring(header.endIndex());
+                }
             }
-            String prefix = header.prefix();
-            String originalName = header.name();
-            int index = seen.merge(originalName, 1, Integer::sum);
-            if (index == 1) {
-                out.add(rule);
-                continue;
-            }
-            String replacement = prefix + originalName + "_" + index;
-            String rewritten = rule.substring(0, header.startIndex()) + replacement + rule.substring(header.endIndex());
-            out.add(rewritten);
+            out.add(rewrittenRule);
         }
         return out;
     }
@@ -368,6 +355,22 @@ public abstract class GenerateBtmTask extends DefaultTask {
             return lineEnd + 2;
         }
         return lineEnd + 1;
+    }
+
+    private void writeRules(Path outFile, List<String> rules) {
+        try {
+            createWriter(outFile).write(rules);
+        } catch (UncheckedIOException e) {
+            throw new GradleException("Failed writing BTM file " + outFile, e);
+        }
+    }
+
+    private static BtmFileWriter createWriter(Path outFile) {
+        try {
+            return new BtmFileWriter(Clock.systemDefaultZone(), outFile);
+        } catch (NoSuchMethodError | NoClassDefFoundError e) {
+            return new BtmFileWriter(outFile);
+        }
     }
 
     private record RuleHeader(int startIndex, int endIndex, String prefix, String name) { }

@@ -1,7 +1,6 @@
 package de.burger.forensics.application.service;
 
 import de.burger.forensics.application.AnalysisContext;
-import de.burger.forensics.domain.model.Rule;
 import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.SourceLocation;
@@ -16,7 +15,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

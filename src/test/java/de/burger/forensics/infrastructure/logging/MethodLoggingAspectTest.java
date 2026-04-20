@@ -45,17 +45,17 @@ class MethodLoggingAspectTest {
     }
 
     @Test
-    void doesNotReportUptimeLikeDurationsForNestedCalls() throws Exception {
+    void doesNotReportUptimeLikeDurationsForNestedCalls() {
         final MethodLoggingAspect aspect = new MethodLoggingAspect();
         final JoinPoint outer = joinPoint("TestTarget.outer(..)");
         final JoinPoint inner = joinPoint("TestTarget.inner(..)");
 
         aspect.onEnter(outer);
-        Thread.sleep(10);
+        waitAtLeastMillis(10);
         aspect.onEnter(inner);
-        Thread.sleep(5);
+        waitAtLeastMillis(5);
         aspect.onReturn(inner);
-        Thread.sleep(5);
+        waitAtLeastMillis(5);
         aspect.onReturn(outer);
 
         final List<Long> durations = readMessages().stream()
@@ -63,8 +63,9 @@ class MethodLoggingAspectTest {
                 .flatMap(java.util.Optional::stream)
                 .toList();
 
-        assertThat(durations).hasSize(2);
-        assertThat(durations).allMatch(value -> value >= 0 && value < Duration.ofMinutes(1).toMillis());
+        assertThat(durations)
+                .hasSize(2)
+                .allMatch(value -> value >= 0 && value < Duration.ofMinutes(1).toMillis());
     }
 
     @Test
@@ -140,6 +141,13 @@ class MethodLoggingAspectTest {
 
     private static final class TestTarget {
         private TestTarget() {
+        }
+    }
+
+    private static void waitAtLeastMillis(long millis) {
+        long end = System.nanoTime() + Duration.ofMillis(millis).toNanos();
+        while (System.nanoTime() < end) {
+            Thread.onSpinWait();
         }
     }
 }

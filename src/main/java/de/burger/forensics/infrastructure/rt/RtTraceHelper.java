@@ -19,7 +19,7 @@ public class RtTraceHelper extends Helper {
     public void onEnter(Class<?> clazz, String method, Object... args) {
         try {
             RtTrace.onEnter(clazz, method, args);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace method entry.", t);
         }
     }
@@ -27,7 +27,7 @@ public class RtTraceHelper extends Helper {
     public void onExit(Class<?> clazz, String method, Object result) {
         try {
             RtTrace.onExit(clazz, method, result);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace method exit.", t);
         }
     }
@@ -35,7 +35,7 @@ public class RtTraceHelper extends Helper {
     public void onBranch(Class<?> clazz, String method, String branchLabel) {
         try {
             RtTrace.onBranch(clazz, method, branchLabel);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace branch.", t);
         }
     }
@@ -43,7 +43,7 @@ public class RtTraceHelper extends Helper {
     public void onSwitch(Class<?> clazz, String method, String displayName) {
         try {
             RtTrace.onSwitch(clazz, method, displayName);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace switch.", t);
         }
     }
@@ -51,7 +51,7 @@ public class RtTraceHelper extends Helper {
     public void onCase(Class<?> clazz, String method, String label) {
         try {
             RtTrace.onCase(clazz, method, label);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace case.", t);
         }
     }
@@ -59,7 +59,7 @@ public class RtTraceHelper extends Helper {
     public void onException(Throwable throwable) {
         try {
             RtTrace.onException(throwable);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace exception.", t);
         }
     }
@@ -67,7 +67,7 @@ public class RtTraceHelper extends Helper {
     public void ioBegin(String op, String target) {
         try {
             RtTrace.ioBegin(op, target);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace io begin.", t);
         }
     }
@@ -75,7 +75,7 @@ public class RtTraceHelper extends Helper {
     public void ioEnd(String op, String target) {
         try {
             RtTrace.ioEnd(op, target);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace io end.", t);
         }
     }
@@ -83,7 +83,7 @@ public class RtTraceHelper extends Helper {
     public void threadFork(String threadName) {
         try {
             RtTrace.threadFork(threadName);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace thread fork.", t);
         }
     }
@@ -91,7 +91,7 @@ public class RtTraceHelper extends Helper {
     public void threadJoin(String threadName) {
         try {
             RtTrace.threadJoin(threadName);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to trace thread join.", t);
         }
     }
@@ -102,10 +102,10 @@ public class RtTraceHelper extends Helper {
             boolean value = supplier.getAsBoolean();
             RtTrace.branch(label, value);
             return value;
-        } catch (Throwable t) {
+        } catch (Exception t) {
             try {
                 RtTrace.conditionError(ruleId, expression, t);
-            } catch (Throwable ignored) {
+            } catch (Exception ignored) {
                 // ignore
             }
             return false;
@@ -135,7 +135,7 @@ public class RtTraceHelper extends Helper {
             de.burger.forensics.infrastructure.logging.PluginLogger
                     .getLogger(RtTraceHelper.class)
                     .debug(message, t);
-        } catch (Throwable ignored) {
+        } catch (Exception ignored) {
             // never fail application due to logging failures
         }
     }

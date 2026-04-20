@@ -36,7 +36,7 @@ class StaticFieldQualifierTest {
         boolean replaced = qualifier.qualifyStaticFieldAccess(staticField, ranges);
 
         assertThat(replaced).isTrue();
-        assertThat(condition.toString()).isEqualTo("$CLASS.VALUE > limit");
+        assertThat(condition).hasToString("$CLASS.VALUE > limit");
     }
 
     @Test
@@ -106,7 +106,8 @@ class StaticFieldQualifierTest {
 
         assertThat(qualifier.declaresStaticField(staticField, "VALUE")).isTrue();
         assertThat(qualifier.declaresStaticField(staticField, "")).isFalse();
-        assertThat(qualifier.resolvesToStaticField(StaticJavaParser.parseExpression("missing").asNameExpr())).isFalse();
+        NameExpr missing = StaticJavaParser.parseExpression("missing").asNameExpr();
+        assertThat(qualifier.resolvesToStaticField(missing)).isFalse();
     }
 
     @Test

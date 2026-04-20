@@ -34,8 +34,9 @@ class BytemanRuleRendererTest {
     @Test
     void rejectsUnknownTemplateIds() {
         BytemanRuleRenderer renderer = BytemanRuleRenderer.of(StrategyRegistry.builder().build());
+        RuleParams params = params();
 
-        assertThatThrownBy(() -> renderer.render("UNKNOWN", params()))
+        assertThatThrownBy(() -> renderer.render("UNKNOWN", params))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("No strategy for template: UNKNOWN");
     }

@@ -15,7 +15,7 @@ class RtTracerTest {
     }
 
     @Test
-    void spanAutoCloseableEndsSpan() throws Exception {
+    void spanAutoCloseableEndsSpan() {
         RtTracer tracer = new RtTracer();
 
         String output = captureStdout(() -> {
@@ -27,9 +27,10 @@ class RtTracerTest {
             }
         });
 
-        assertThat(output).contains("\"event\":\"TIMER_START\"");
-        assertThat(output).contains("\"event\":\"TIMER_END\"");
-        assertThat(output).contains("\"event\":\"METHOD_ENTER\"");
+        assertThat(output)
+            .contains("\"event\":\"TIMER_START\"")
+            .contains("\"event\":\"TIMER_END\"")
+            .contains("\"event\":\"METHOD_ENTER\"");
     }
 
     private static String captureStdout(Runnable runnable) {

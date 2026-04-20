@@ -121,8 +121,9 @@ class BtmFileWriterTest {
         Files.createFile(blockingParent);
         Path output = blockingParent.resolve("cannotCreate.btm");
         var writer = writerVariant.factory().create(fixedClock(), output);
+        List<String> testRule = List.of("RULE test");
 
-        UncheckedIOException exception = assertThrows(UncheckedIOException.class, () -> writer.write(List.of("RULE test")));
+        UncheckedIOException exception = assertThrows(UncheckedIOException.class, () -> writer.write(testRule));
         assertNotNull(exception.getCause(), "The original IOException should be preserved as cause");
     }
 
@@ -223,9 +224,8 @@ class BtmFileWriterTest {
     @Test
     void constructorValidatesArguments() {
         Path dummy = tempDir.resolve("dummy.btm");
-
-        assertThrows(NullPointerException.class, () -> new BtmFileWriter(null, dummy));
-        assertThrows(NullPointerException.class, () -> new BtmFileWriter(Clock.systemUTC(), null));
+        assertThrows(NullPointerException.class, () -> createWriterWithNullClock(dummy));
+        assertThrows(NullPointerException.class, BtmFileWriterTest::createWriterWithNullOutput);
     }
 
     @Test
@@ -234,8 +234,9 @@ class BtmFileWriterTest {
         Files.createFile(file);
         Path output = file.resolve("illegal.btm");
         BtmFileWriter writer = new BtmFileWriter(Clock.systemUTC(), output);
+        List<String> rules = List.of("RULE X");
 
-        assertThrows(UncheckedIOException.class, () -> writer.write(List.of("RULE X")));
+        assertThrows(UncheckedIOException.class, () -> writer.write(rules));
     }
 
     private static void assertHeaderSection(List<String> lines) {
@@ -253,6 +254,14 @@ class BtmFileWriterTest {
 
     private static String safeFileName(String raw) {
         return raw.replaceAll("[^A-Za-z0-9]+", "_");
+    }
+
+    private static BtmFileWriter createWriterWithNullClock(Path output) {
+        return new BtmFileWriter(null, output);
+    }
+
+    private static BtmFileWriter createWriterWithNullOutput() {
+        return new BtmFileWriter(Clock.systemUTC(), null);
     }
 
     private record WriterVariant(String name, WriterFactory factory, boolean deterministicTimestamp) {
@@ -273,4 +282,5 @@ class BtmFileWriterTest {
     private interface WriterFactory {
         BtmFileWriter create(Clock clock, Path output);
     }
+
 }

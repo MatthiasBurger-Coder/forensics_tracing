@@ -25,6 +25,12 @@ import java.util.Map;
 import java.util.Objects;
 
 public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
+    private static final String CLASS_KEY = "class";
+    private static final String METHOD_KEY = "method";
+    private static final String METHOD_EXIT_EVENT = "METHOD_EXIT";
+    private static final String BRANCH_TAKEN_EVENT = "BRANCH_TAKEN";
+    private static final String LABEL_KEY = "label";
+
     @InputFile
     public abstract RegularFileProperty getInputTrace();
 
@@ -71,73 +77,7 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
             throw new GradleException("Selected path is empty.");
         }
 
-        Instant t0 = path.get(0).timestamp();
-        StringBuilder sb = new StringBuilder();
-        String firstLane = simpleName(endpoint.className());
-        sb.append("@startuml\n");
-        sb.append("|").append(firstLane).append("|\n");
-        sb.append("start\n\n");
-
-        String pendingConditionExpr = null;
-        String pendingConditionValue = null;
-        for (TraceEvent event : path) {
-            if ("BRANCH_TAKEN".equals(event.event())) {
-                String kind = event.details().get("kind");
-                if ("if".equalsIgnoreCase(kind)) {
-                    String cls = event.details().getOrDefault("class", endpoint.className());
-                    String method = event.details().getOrDefault("method", "unknown");
-                    String branch = event.details().getOrDefault("branch", "UNKNOWN");
-                    String conditionText = pendingConditionExpr != null ? pendingConditionExpr : cls + "#" + method;
-                    appendIfBlock(
-                            sb,
-                            simpleName(cls),
-                            conditionText,
-                            branch,
-                            pendingConditionValue,
-                            elapsedMs(t0, event.timestamp()),
-                            event.tsRaw()
-                    );
-                    pendingConditionExpr = null;
-                    pendingConditionValue = null;
-                } else {
-                    String label = event.details().get("label");
-                    String value = event.details().get("value");
-                    if (label != null) {
-                        pendingConditionExpr = normalizeLabel(label);
-                        pendingConditionValue = value;
-                    }
-                }
-                continue;
-            }
-
-            if ("METHOD_EXIT".equals(event.event())) {
-                String cls = event.details().get("class");
-                String method = event.details().get("method");
-                if (cls == null || method == null) {
-                    continue;
-                }
-                String result = event.details().get("result");
-                sb.append("|").append(simpleName(cls)).append("|\n");
-                if (result != null && !result.isBlank()) {
-                    sb.append(":").append(escape(method)).append("() -> ").append(escape(result)).append(";\n");
-                } else {
-                    sb.append(":").append(escape(method)).append("();\n");
-                }
-                appendNote(sb, elapsedMs(t0, event.timestamp()), event.tsRaw());
-                sb.append("\n");
-            }
-        }
-
-        sb.append("|").append(firstLane).append("|\n");
-        sb.append("note right\n");
-        sb.append("Trace limits:\\n");
-        sb.append("- visible events are METHOD_EXIT and BRANCH_TAKEN\\n");
-        sb.append("- exact input parameters are not observable\\n");
-        sb.append("- times are event offsets from t0, not self-time\\n");
-        sb.append("- internal calls may exist but are not visible\n");
-        sb.append("end note\n");
-        sb.append("stop\n");
-        sb.append("@enduml\n");
+        StringBuilder sb = renderTraceActivity(path, endpoint);
 
         Path out = getOutputPuml().get().getAsFile().toPath();
         try {
@@ -148,6 +88,106 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
         }
 
         getLogger().lifecycle("Generated trace activity PUML -> {}", out.toAbsolutePath());
+    }
+
+    private static StringBuilder renderTraceActivity(List<TraceEvent> path, MethodRef endpoint) {
+        Instant t0 = path.get(0).timestamp();
+        StringBuilder sb = new StringBuilder();
+        String firstLane = simpleName(endpoint.className());
+        appendDiagramHeader(sb, firstLane);
+
+        PendingCondition pendingCondition = new PendingCondition();
+        for (TraceEvent event : path) {
+            renderEvent(sb, endpoint, t0, pendingCondition, event);
+        }
+
+        appendDiagramFooter(sb, firstLane);
+        return sb;
+    }
+
+    private static void appendDiagramHeader(StringBuilder sb, String firstLane) {
+        sb.append("@startuml\n");
+        sb.append("|").append(firstLane).append("|\n");
+        sb.append("start\n\n");
+    }
+
+    private static void appendDiagramFooter(StringBuilder sb, String firstLane) {
+        sb.append("|").append(firstLane).append("|\n");
+        sb.append("note right\n");
+        sb.append("Trace limits:\\n");
+        sb.append("- visible events are METHOD_EXIT and BRANCH_TAKEN\\n");
+        sb.append("- exact input parameters are not observable\\n");
+        sb.append("- times are event offsets from t0, not self-time\\n");
+        sb.append("- internal calls may exist but are not visible\n");
+        sb.append("end note\n");
+        sb.append("stop\n");
+        sb.append("@enduml\n");
+    }
+
+    private static void renderEvent(
+            StringBuilder sb,
+            MethodRef endpoint,
+            Instant t0,
+            PendingCondition pendingCondition,
+            TraceEvent event
+    ) {
+        if (BRANCH_TAKEN_EVENT.equals(event.event())) {
+            renderBranchEvent(sb, endpoint, t0, pendingCondition, event);
+        } else if (METHOD_EXIT_EVENT.equals(event.event())) {
+            renderMethodExit(sb, t0, event);
+        }
+    }
+
+    private static void renderBranchEvent(
+            StringBuilder sb,
+            MethodRef endpoint,
+            Instant t0,
+            PendingCondition pendingCondition,
+            TraceEvent event
+    ) {
+        String kind = event.details().get("kind");
+        if ("if".equalsIgnoreCase(kind)) {
+            String cls = event.details().getOrDefault(CLASS_KEY, endpoint.className());
+            String method = event.details().getOrDefault(METHOD_KEY, "unknown");
+            String branch = event.details().getOrDefault("branch", "UNKNOWN");
+            String conditionText = pendingCondition.expression != null
+                    ? pendingCondition.expression
+                    : cls + "#" + method;
+            appendIfBlock(
+                    sb,
+                    simpleName(cls),
+                    conditionText,
+                    branch,
+                    pendingCondition.value,
+                    elapsedMs(t0, event.timestamp()),
+                    event.tsRaw()
+            );
+            pendingCondition.clear();
+            return;
+        }
+
+        String label = event.details().get(LABEL_KEY);
+        if (label != null) {
+            pendingCondition.expression = normalizeLabel(label);
+            pendingCondition.value = event.details().get("value");
+        }
+    }
+
+    private static void renderMethodExit(StringBuilder sb, Instant t0, TraceEvent event) {
+        String cls = event.details().get(CLASS_KEY);
+        String method = event.details().get(METHOD_KEY);
+        if (cls == null || method == null) {
+            return;
+        }
+        String result = event.details().get("result");
+        sb.append("|").append(simpleName(cls)).append("|\n");
+        if (result != null && !result.isBlank()) {
+            sb.append(":").append(escape(method)).append("() -> ").append(escape(result)).append(";\n");
+        } else {
+            sb.append(":").append(escape(method)).append("();\n");
+        }
+        appendNote(sb, elapsedMs(t0, event.timestamp()), event.tsRaw());
+        sb.append("\n");
     }
 
     private static void appendIfBlock(
@@ -194,7 +234,7 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
         }
 
         List<TraceEvent> exits = events.stream()
-                .filter(e -> "METHOD_EXIT".equals(e.event()))
+                .filter(e -> METHOD_EXIT_EVENT.equals(e.event()))
                 .toList();
         if (exits.isEmpty()) {
             throw new GradleException("Trace does not contain METHOD_EXIT events.");
@@ -202,21 +242,21 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
 
         TraceEvent preferred = exits.stream()
                 .filter(e -> {
-                    String cls = e.details().get("class");
+                    String cls = e.details().get(CLASS_KEY);
                     return cls != null && cls.contains("Service");
                 })
                 .max(Comparator.comparing(TraceEvent::timestamp))
                 .orElseGet(() -> exits.get(exits.size() - 1));
 
-        return new MethodRef(preferred.details().get("class"), preferred.details().get("method"));
+        return new MethodRef(preferred.details().get(CLASS_KEY), preferred.details().get(METHOD_KEY));
     }
 
     private static int findLastMethodExitIndex(List<TraceEvent> events, MethodRef endpoint) {
         for (int i = events.size() - 1; i >= 0; i--) {
             TraceEvent e = events.get(i);
-            if ("METHOD_EXIT".equals(e.event())
-                    && endpoint.className().equals(e.details().get("class"))
-                    && endpoint.methodName().equals(e.details().get("method"))) {
+            if (METHOD_EXIT_EVENT.equals(e.event())
+                    && endpoint.className().equals(e.details().get(CLASS_KEY))
+                    && endpoint.methodName().equals(e.details().get(METHOD_KEY))) {
                 return i;
             }
         }
@@ -226,9 +266,9 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
     private static int findPreviousMethodExitIndex(List<TraceEvent> events, MethodRef endpoint, int before) {
         for (int i = before - 1; i >= 0; i--) {
             TraceEvent e = events.get(i);
-            if ("METHOD_EXIT".equals(e.event())
-                    && endpoint.className().equals(e.details().get("class"))
-                    && endpoint.methodName().equals(e.details().get("method"))) {
+            if (METHOD_EXIT_EVENT.equals(e.event())
+                    && endpoint.className().equals(e.details().get(CLASS_KEY))
+                    && endpoint.methodName().equals(e.details().get(METHOD_KEY))) {
                 return i;
             }
         }
@@ -248,8 +288,9 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
         try {
             List<TraceEvent> out = new ArrayList<>();
             for (String line : Files.readAllLines(input)) {
-                if (line.isBlank()) continue;
-                parseLine(line).ifPresent(out::add);
+                if (!line.isBlank()) {
+                    parseLine(line).ifPresent(out::add);
+                }
             }
             out.sort(Comparator.comparing(TraceEvent::timestamp));
             return out;
@@ -288,34 +329,43 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
                 return map;
             }
 
-            ParsedString key = parseJsonString(source, index);
-            if (key == null) {
+            ParsedField field = parseObjectField(source, index);
+            if (field == null) {
                 return map;
             }
-
-            index = skipWhitespace(source, key.nextIndex());
-            if (index >= source.length() || source.charAt(index) != ':') {
-                return map;
+            if (field.value() != null) {
+                map.put(field.key(), field.value());
             }
-
-            index = skipWhitespace(source, index + 1);
-            if (index >= source.length()) {
-                return map;
-            }
-
-            if (source.charAt(index) == '"') {
-                ParsedString value = parseJsonString(source, index);
-                if (value == null) {
-                    return map;
-                }
-                map.put(key.value(), value.value());
-                index = value.nextIndex();
-                continue;
-            }
-
-            index = skipJsonValue(source, index);
+            index = field.nextIndex();
         }
         return map;
+    }
+
+    private static ParsedField parseObjectField(String source, int index) {
+        ParsedString key = parseJsonString(source, index);
+        if (key == null) {
+            return null;
+        }
+
+        int next = skipWhitespace(source, key.nextIndex());
+        if (next >= source.length() || source.charAt(next) != ':') {
+            return null;
+        }
+
+        next = skipWhitespace(source, next + 1);
+        if (next >= source.length()) {
+            return null;
+        }
+
+        return parseFieldValue(source, key.value(), next);
+    }
+
+    private static ParsedField parseFieldValue(String source, String key, int index) {
+        if (source.charAt(index) == '"') {
+            ParsedString value = parseJsonString(source, index);
+            return value == null ? null : new ParsedField(key, value.value(), value.nextIndex());
+        }
+        return new ParsedField(key, null, skipJsonValue(source, index));
     }
 
     private static Map<String, String> parseNestedObjectFields(String source, String fieldName) {
@@ -423,10 +473,7 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
                 } else if (current == '"') {
                     inString = false;
                 }
-                continue;
-            }
-
-            if (current == '"') {
+            } else if (current == '"') {
                 inString = true;
             } else if (current == open) {
                 depth++;
@@ -453,16 +500,13 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
             if (escaping) {
                 value.append(unescapeJsonChar(current));
                 escaping = false;
-                continue;
-            }
-            if (current == '\\') {
+            } else if (current == '\\') {
                 escaping = true;
-                continue;
-            }
-            if (current == '"') {
+            } else if (current == '"') {
                 return new ParsedString(value.toString(), i + 1);
+            } else {
+                value.append(current);
             }
-            value.append(current);
         }
         return null;
     }
@@ -504,6 +548,8 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
 
     private record ParsedString(String value, int nextIndex) { }
 
+    private record ParsedField(String key, String value, int nextIndex) { }
+
     private record TraceEvent(
             String tsRaw,
             Instant timestamp,
@@ -511,4 +557,14 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
             String thread,
             Map<String, String> details
     ) { }
+
+    private static final class PendingCondition {
+        private String expression;
+        private String value;
+
+        private void clear() {
+            expression = null;
+            value = null;
+        }
+    }
 }

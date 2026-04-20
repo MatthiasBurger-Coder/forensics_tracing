@@ -93,18 +93,19 @@ class GenerateActivityPumlFromBtmTaskTest {
         task.generate();
 
         String rendered = Files.readString(output);
-        assertThat(rendered).contains("@startuml");
-        assertThat(rendered).contains("title Forensics 'Diagram' View");
-        assertThat(rendered).contains("|Service|");
-        assertThat(rendered).contains(":METHOD_ENTER x1;");
-        assertThat(rendered).contains("if (true) then (true)");
-        assertThat(rendered).contains(":IF_TRUE rule x1;");
-        assertThat(rendered).contains(":IF_FALSE rule x1;");
-        assertThat(rendered).contains(":SWITCH rule x1;");
-        assertThat(rendered).contains(":SWITCH_CASE rule x1;");
-        assertThat(rendered).contains(":THROW rule x1;");
-        assertThat(rendered).contains(":RETURN rule x1;");
-        assertThat(rendered).contains(":METHOD_EXIT x1;");
+        assertThat(rendered)
+            .contains("@startuml")
+            .contains("title Forensics 'Diagram' View")
+            .contains("|Service|")
+            .contains(":METHOD_ENTER x1;")
+            .contains("if (true) then (true)")
+            .contains(":IF_TRUE rule x1;")
+            .contains(":IF_FALSE rule x1;")
+            .contains(":SWITCH rule x1;")
+            .contains(":SWITCH_CASE rule x1;")
+            .contains(":THROW rule x1;")
+            .contains(":RETURN rule x1;")
+            .contains(":METHOD_EXIT x1;");
     }
 
     @Test
@@ -164,15 +165,15 @@ class GenerateActivityPumlFromBtmTaskTest {
         assertThat(extractCondition.invoke(null, "IF eval(\"rule-1\", \"status == \\\"OK\\\"\", $1)")).isEqualTo("status == \"OK\"");
         assertThat(extractCondition.invoke(null, "IF eval(\"rule-1\")")).isEqualTo("eval(\"rule-1\")");
         assertThat(extractCondition.invoke(null, "IF someCheck()")).isEqualTo("someCheck()");
-        assertThat(detectEvent.invoke(null, "DO onEnter(com.example.Service.class, \"handle\")").toString()).isEqualTo("METHOD_ENTER");
-        assertThat(detectEvent.invoke(null, "DO onExit(com.example.Service.class, \"handle\", \"ok\")").toString()).isEqualTo("METHOD_EXIT");
-        assertThat(detectEvent.invoke(null, "DO onSwitch(com.example.Service.class, \"handle\", \"branch\")").toString()).isEqualTo("SWITCH");
-        assertThat(detectEvent.invoke(null, "DO onCase(com.example.Service.class, \"handle\", \"A\")").toString()).isEqualTo("SWITCH_CASE");
-        assertThat(detectEvent.invoke(null, "DO onException(new IllegalStateException(\"boom\"))").toString()).isEqualTo("THROW");
-        assertThat(detectEvent.invoke(null, "DO onReturn(com.example.Service.class, \"handle\", \"ok\")").toString()).isEqualTo("RETURN");
-        assertThat(detectEvent.invoke(null, "DO onBranch(com.example.Service.class, \"handle\", \"IF_TRUE\")").toString()).isEqualTo("IF_TRUE");
-        assertThat(detectEvent.invoke(null, "DO onBranch(com.example.Service.class, \"handle\", \"IF_FALSE\")").toString()).isEqualTo("IF_FALSE");
-        assertThat(detectEvent.invoke(null, "DO onUnknown()").toString()).isEqualTo("OTHER");
+        assertThat(detectEvent.invoke(null, "DO onEnter(com.example.Service.class, \"handle\")")).hasToString("METHOD_ENTER");
+        assertThat(detectEvent.invoke(null, "DO onExit(com.example.Service.class, \"handle\", \"ok\")")).hasToString("METHOD_EXIT");
+        assertThat(detectEvent.invoke(null, "DO onSwitch(com.example.Service.class, \"handle\", \"branch\")")).hasToString("SWITCH");
+        assertThat(detectEvent.invoke(null, "DO onCase(com.example.Service.class, \"handle\", \"A\")")).hasToString("SWITCH_CASE");
+        assertThat(detectEvent.invoke(null, "DO onException(new IllegalStateException(\"boom\"))")).hasToString("THROW");
+        assertThat(detectEvent.invoke(null, "DO onReturn(com.example.Service.class, \"handle\", \"ok\")")).hasToString("RETURN");
+        assertThat(detectEvent.invoke(null, "DO onBranch(com.example.Service.class, \"handle\", \"IF_TRUE\")")).hasToString("IF_TRUE");
+        assertThat(detectEvent.invoke(null, "DO onBranch(com.example.Service.class, \"handle\", \"IF_FALSE\")")).hasToString("IF_FALSE");
+        assertThat(detectEvent.invoke(null, "DO onUnknown()")).hasToString("OTHER");
         assertThat(sanitize.invoke(null, "A\"B\r\nC")).isEqualTo("A'B  C");
         assertThat(simpleName.invoke(null, "")).isEqualTo("Unknown");
         assertThat(simpleName.invoke(null, "Service")).isEqualTo("Service");
@@ -221,8 +222,8 @@ class GenerateActivityPumlFromBtmTaskTest {
 
         assertThat(parsedRules).hasSize(2);
         assertThat(conditionAccessor.invoke(parsedRules.get(0))).isEqualTo("orderId != null");
-        assertThat(eventTypeAccessor.invoke(parsedRules.get(0)).toString()).isEqualTo("METHOD_ENTER");
-        assertThat(eventTypeAccessor.invoke(parsedRules.get(1)).toString()).isEqualTo("METHOD_EXIT");
+        assertThat(eventTypeAccessor.invoke(parsedRules.get(0))).hasToString("METHOD_ENTER");
+        assertThat(eventTypeAccessor.invoke(parsedRules.get(1))).hasToString("METHOD_EXIT");
 
         Class<?> methodSummaryType = Class.forName("de.burger.forensics.plugin.btmgen.gradle.GenerateActivityPumlFromBtmTask$MethodSummary");
         Constructor<?> constructor = methodSummaryType.getDeclaredConstructor(String.class);

@@ -67,11 +67,17 @@ class AnalysisContextTest {
         assertThat(context.getErrors()).containsExactly(error);
         assertThat(context.getSettings()).containsEntry("safeMode", true);
 
-        assertThatThrownBy(() -> context.getSourceRoots().add(Path.of("other")))
+        List<Path> sourceRoots = context.getSourceRoots();
+        var methodContexts = context.getMethodContexts();
+        var settings = context.getSettings();
+        Path otherRoot = Path.of("other");
+        MethodScanContext otherContext = new MethodScanContext();
+
+        assertThatThrownBy(() -> sourceRoots.add(otherRoot))
                 .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> context.getMethodContexts().put("other", new MethodScanContext()))
+        assertThatThrownBy(() -> methodContexts.put("other", otherContext))
                 .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> context.getSettings().put("other", false))
+        assertThatThrownBy(() -> settings.put("other", false))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 

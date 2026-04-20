@@ -24,10 +24,12 @@ class RtTraceTest {
 
         String[] lines = output.trim().split("\\R");
         assertThat(lines).hasSize(2);
-        assertThat(lines[0]).contains("\"event\":\"TIMER_START\"");
-        assertThat(lines[0]).contains("\"name\":\"load\"");
-        assertThat(lines[1]).contains("\"event\":\"TIMER_END\"");
-        assertThat(lines[1]).contains("\"durationNanos\"");
+        assertThat(lines[0])
+            .contains("\"event\":\"TIMER_START\"")
+            .contains("\"name\":\"load\"");
+        assertThat(lines[1])
+            .contains("\"event\":\"TIMER_END\"")
+            .contains("\"durationNanos\"");
     }
 
     @Test
@@ -37,9 +39,10 @@ class RtTraceTest {
             RtTrace.trace(RtEvent.CUSTOM, Map.of("k", "v"));
         });
 
-        assertThat(output).contains("\"event\":\"CUSTOM\"");
-        assertThat(output).contains("\"correlationId\":\"corr-123\"");
-        assertThat(output).contains("\"k\":\"v\"");
+        assertThat(output)
+            .contains("\"event\":\"CUSTOM\"")
+            .contains("\"correlationId\":\"corr-123\"")
+            .contains("\"k\":\"v\"");
     }
 
     @Test
@@ -53,17 +56,19 @@ class RtTraceTest {
 
         String output = captureStdout(() -> RtTrace.varSet("answer", bad));
 
-        assertThat(output).contains("\"event\":\"VAR_SET\"");
-        assertThat(output).contains("\"value\":\"<unprintable>\"");
+        assertThat(output)
+            .contains("\"event\":\"VAR_SET\"")
+            .contains("\"value\":\"<unprintable>\"");
     }
 
     @Test
     void onExceptionEmitsErrorDetails() {
         String output = captureStdout(() -> RtTrace.onException(new IllegalStateException("boom")));
 
-        assertThat(output).contains("\"event\":\"EXCEPTION_THROWN\"");
-        assertThat(output).contains("\"error\":\"java.lang.IllegalStateException\"");
-        assertThat(output).contains("\"errorMsg\":\"boom\"");
+        assertThat(output)
+            .contains("\"event\":\"EXCEPTION_THROWN\"")
+            .contains("\"error\":\"java.lang.IllegalStateException\"")
+            .contains("\"errorMsg\":\"boom\"");
     }
 
     private static String captureStdout(Runnable runnable) {

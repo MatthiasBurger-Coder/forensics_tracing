@@ -34,8 +34,8 @@ class SrSingleResponsibilityTest {
 
     private void assertDependencyLimit(Class<?> type) {
         Set<Class<?>> dependencies = ClassDependencyInspector.collectDependencies(type);
-        assertThat(dependencies.size())
+        assertThat(dependencies)
             .withFailMessage("Class %s depends on %s types: %s", type.getName(), dependencies.size(), dependencies)
-            .isLessThanOrEqualTo(12);
+            .hasSizeLessThanOrEqualTo(12);
     }
 }

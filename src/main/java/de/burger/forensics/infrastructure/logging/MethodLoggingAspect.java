@@ -26,8 +26,9 @@ public class MethodLoggingAspect {
 
     // Provide code-style aspect accessors to satisfy LTW expectations in test runtime
     private static final MethodLoggingAspect INSTANCE = new MethodLoggingAspect();
+    private static final boolean HAS_ASPECT = true;
     public static MethodLoggingAspect aspectOf() { return INSTANCE; }
-    public static boolean hasAspect() { return true; }
+    public static boolean hasAspect() { return HAS_ASPECT; }
 
     /**
      * Per-target logger cache to avoid repeated lookups.
@@ -62,7 +63,7 @@ public class MethodLoggingAspect {
             final String msg = String.format("→ %s %s", shortSig(jp), argsOf(jp));
             loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
             fileLog("WARN", msg);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to log method entry.", t);
         }
     }
@@ -89,7 +90,7 @@ public class MethodLoggingAspect {
             final String msg = String.format("← %s OK in %d ms", shortSig(jp), elapsedMs);
             loggerFor(jp).warn(msg); // WARN to be visible in Gradle console without --info
             fileLog("WARN", msg);
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to log method return.", t);
         }
     }
@@ -116,7 +117,7 @@ public class MethodLoggingAspect {
             final String msg = String.format("✖ %s failed in %d ms: %s", shortSig(jp), elapsedMs, ex.getMessage());
             loggerFor(jp).error(msg, ex);
             fileLog("ERROR", msg + " (see stacktrace in console)");
-        } catch (Throwable t) {
+        } catch (Exception t) {
             swallow("Failed to log method exception.", t);
         }
     }
@@ -169,7 +170,7 @@ public class MethodLoggingAspect {
             try (java.io.FileWriter fw = new java.io.FileWriter(file, true)) {
                 fw.write(line);
             }
-        } catch (Throwable ignored) {
+        } catch (Exception ignored) {
             // never fail application due to file logging
         }
     }
@@ -178,7 +179,7 @@ public class MethodLoggingAspect {
         try {
             // Logging is backend-agnostic via SLF4J, so failures remain local.
             PluginLogger.getLogger(MethodLoggingAspect.class).debug(message, t);
-        } catch (Throwable ignored) {
+        } catch (Exception ignored) {
             // never fail application due to logging failures
         }
     }

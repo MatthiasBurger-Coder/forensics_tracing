@@ -22,6 +22,10 @@ public final class RtTrace {
     private static final boolean FILE_LOG_ENABLED = isFileLogEnabled();
     private static final AtomicLong SPAN_SEQ = new AtomicLong(1);
     private static final Object FILE_LOCK = new Object();
+    private static final String CLASS_KEY = "class";
+    private static final String METHOD_KEY = "method";
+    private static final String LABEL_KEY = "label";
+    private static final String THREAD_KEY = "thread";
 
     private static final ThreadLocal<String> CORR_ID = ThreadLocal.withInitial(() -> null);
     private static final ThreadLocal<SpanStack> SPANS = ThreadLocal.withInitial(SpanStack::new);
@@ -92,8 +96,8 @@ public final class RtTrace {
     public static void onEnter(Class<?> clazz, String method, Object... args) {
         if (!ENABLED) return;
         emit(RtEvent.METHOD_ENTER, Map.of(
-                "class", safeClass(clazz),
-                "method", method,
+                CLASS_KEY, safeClass(clazz),
+                METHOD_KEY, method,
                 "args", Safe.toString(args)
         ), null);
     }
@@ -102,8 +106,8 @@ public final class RtTrace {
     public static void onExit(Class<?> clazz, String method, Object result) {
         if (!ENABLED) return;
         emit(RtEvent.METHOD_EXIT, Map.of(
-                "class", safeClass(clazz),
-                "method", method,
+                CLASS_KEY, safeClass(clazz),
+                METHOD_KEY, method,
                 "result", Safe.toString(result)
         ), null);
     }
@@ -112,7 +116,7 @@ public final class RtTrace {
     public static void branch(String label, Object value) {
         if (!ENABLED) return;
         emit(RtEvent.BRANCH_TAKEN, Map.of(
-                "label", label,
+                LABEL_KEY, label,
                 "value", Safe.toString(value)
         ), null);
     }
@@ -121,8 +125,8 @@ public final class RtTrace {
     public static void onBranch(Class<?> clazz, String method, String branch) {
         if (!ENABLED) return;
         emit(RtEvent.BRANCH_TAKEN, Map.of(
-                "class", safeClass(clazz),
-                "method", method,
+                CLASS_KEY, safeClass(clazz),
+                METHOD_KEY, method,
                 "kind", "if",
                 "branch", branch
         ), null);
@@ -132,10 +136,10 @@ public final class RtTrace {
     public static void onSwitch(Class<?> clazz, String method, String displayName) {
         if (!ENABLED) return;
         emit(RtEvent.BRANCH_TAKEN, Map.of(
-                "class", safeClass(clazz),
-                "method", method,
+                CLASS_KEY, safeClass(clazz),
+                METHOD_KEY, method,
                 "kind", "switch",
-                "label", Objects.toString(displayName, "")
+                LABEL_KEY, Objects.toString(displayName, "")
         ), null);
     }
 
@@ -143,10 +147,10 @@ public final class RtTrace {
     public static void onCase(Class<?> clazz, String method, String label) {
         if (!ENABLED) return;
         emit(RtEvent.BRANCH_TAKEN, Map.of(
-                "class", safeClass(clazz),
-                "method", method,
+                CLASS_KEY, safeClass(clazz),
+                METHOD_KEY, method,
                 "kind", "case",
-                "label", Objects.toString(label, "")
+                LABEL_KEY, Objects.toString(label, "")
         ), null);
     }
 
@@ -181,12 +185,12 @@ public final class RtTrace {
     /** Threads / locks helpers. */
     public static void threadFork(String threadName) {
         if (!ENABLED) return;
-        emit(RtEvent.THREAD_FORK, Map.of("thread", threadName), null);
+        emit(RtEvent.THREAD_FORK, Map.of(THREAD_KEY, threadName), null);
     }
 
     public static void threadJoin(String threadName) {
         if (!ENABLED) return;
-        emit(RtEvent.THREAD_JOIN, Map.of("thread", threadName), null);
+        emit(RtEvent.THREAD_JOIN, Map.of(THREAD_KEY, threadName), null);
     }
 
     public static void lockAcquire(String lockId) {
@@ -229,7 +233,7 @@ public final class RtTrace {
             sb.append('{');
             kv(sb, "@ts", Instant.now().toString()); sb.append(',');
             kv(sb, "event", event.name()); sb.append(',');
-            kv(sb, "thread", Thread.currentThread().getName()); sb.append(',');
+            kv(sb, THREAD_KEY, Thread.currentThread().getName()); sb.append(',');
 
             if (corr != null) { kv(sb, "correlationId", corr); sb.append(','); }
             if (top != null && event != RtEvent.TIMER_START) { // TIMER_START already sets span explicitly
@@ -260,7 +264,7 @@ public final class RtTrace {
 
             sb.append('}');
             String line = sb.toString();
-            System.out.println(line);
+            stdout().println(line);
             appendToFile(line);
         } finally {
             if (corr == null) {
@@ -342,6 +346,10 @@ public final class RtTrace {
         return Boolean.parseBoolean(value);
     }
 
+    private static java.io.PrintStream stdout() {
+        return System.out;
+    }
+
     private static void appendToFile(String line) {
         if (!FILE_LOG_ENABLED) return;
         String logPath = FILE_LOG_PATH;
@@ -359,7 +367,7 @@ public final class RtTrace {
                     fw.write(System.lineSeparator());
                 }
             }
-        } catch (Throwable ignored) {
+        } catch (Exception ignored) {
             // never fail application due to tracing sink issues
         }
     }
@@ -391,7 +399,7 @@ public final class RtTrace {
     private static final class Safe {
         static String toString(Object o) {
             try { return Objects.toString(o, ""); }
-            catch (Throwable ignored) { return "<unprintable>"; }
+            catch (Exception ignored) { return "<unprintable>"; }
         }
         static String toString(Object[] arr) {
             if (arr == null) return "";

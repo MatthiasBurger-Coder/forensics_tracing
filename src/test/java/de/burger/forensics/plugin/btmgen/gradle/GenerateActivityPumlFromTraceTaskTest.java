@@ -42,12 +42,13 @@ class GenerateActivityPumlFromTraceTaskTest {
         task.generate();
 
         String rendered = Files.readString(output);
-        assertThat(rendered).contains("@startuml");
-        assertThat(rendered).contains("|OrderService|");
-        assertThat(rendered).contains("if (orderId != null) then (true)");
-        assertThat(rendered).contains(":IF_TRUE taken (observed=true);");
-        assertThat(rendered).contains(":handle() -> ok;");
-        assertThat(rendered).contains("Trace limits:");
+        assertThat(rendered)
+            .contains("@startuml")
+            .contains("|OrderService|")
+            .contains("if (orderId != null) then (true)")
+            .contains(":IF_TRUE taken (observed=true);")
+            .contains(":handle() -> ok;")
+            .contains("Trace limits:");
     }
 
     @Test
@@ -143,9 +144,10 @@ class GenerateActivityPumlFromTraceTaskTest {
         task.generate();
 
         String rendered = Files.readString(output);
-        assertThat(rendered).contains("if (com.example.Job#run) then (true)");
-        assertThat(rendered).contains(":IF_FALSE taken;");
-        assertThat(rendered).contains(":run();");
+        assertThat(rendered)
+            .contains("if (com.example.Job#run) then (true)")
+            .contains(":IF_FALSE taken;")
+            .contains(":run();");
     }
 
     @Test
@@ -172,9 +174,10 @@ class GenerateActivityPumlFromTraceTaskTest {
         task.generate();
 
         String rendered = Files.readString(output);
-        assertThat(rendered).contains(":run() -> second;");
-        assertThat(rendered).doesNotContain(":run() -> first;");
-        assertThat(rendered).contains("if (latest) then (true)");
+        assertThat(rendered)
+            .contains(":run() -> second;")
+            .doesNotContain(":run() -> first;")
+            .contains("if (latest) then (true)");
     }
 
     @Test
@@ -201,12 +204,13 @@ class GenerateActivityPumlFromTraceTaskTest {
         task.generate();
 
         String rendered = Files.readString(output);
-        assertThat(rendered).contains("|Worker|");
-        assertThat(rendered).contains("if (com.example.Worker#unknown) then (true)");
-        assertThat(rendered).contains(":IF_TRUE taken;");
-        assertThat(rendered).contains(":finish();");
-        assertThat(rendered).doesNotContain(":null();");
-        assertThat(rendered).doesNotContain("observed=ignored");
+        assertThat(rendered)
+            .contains("|Worker|")
+            .contains("if (com.example.Worker#unknown) then (true)")
+            .contains(":IF_TRUE taken;")
+            .contains(":finish();")
+            .doesNotContain(":null();")
+            .doesNotContain("observed=ignored");
     }
 
     @Test
@@ -235,10 +239,11 @@ class GenerateActivityPumlFromTraceTaskTest {
         Method escape = GenerateActivityPumlFromTraceTask.class.getDeclaredMethod("escape", String.class);
         escape.setAccessible(true);
 
-        assertThat(parseLine.invoke(null, "{\"event\":\"METHOD_EXIT\"}").toString()).isEqualTo("Optional.empty");
-        assertThat(parseLine.invoke(null, "{\"@ts\":\"bad\",\"event\":\"METHOD_EXIT\",\"thread\":\"main\"}").toString()).isEqualTo("Optional.empty");
-        assertThat(parseLine.invoke(null, "{\"@ts\":\"2026-01-01T00:00:00Z\",\"event\":\"METHOD_EXIT\",\"thread\":\"main\"}").toString())
-            .startsWith("Optional[");
+        assertThat(parseLine.invoke(null, "{\"event\":\"METHOD_EXIT\"}")).hasToString("Optional.empty");
+        assertThat(parseLine.invoke(null, "{\"@ts\":\"bad\",\"event\":\"METHOD_EXIT\",\"thread\":\"main\"}")).hasToString("Optional.empty");
+        Object parsedMethodExit = parseLine.invoke(null, "{\"@ts\":\"2026-01-01T00:00:00Z\",\"event\":\"METHOD_EXIT\",\"thread\":\"main\"}");
+        assertThat(parsedMethodExit)
+            .satisfies(value -> assertThat(value.toString()).startsWith("Optional["));
 
         String repeatedPayload = ("value\\\\with\\\"escapes\\n").repeat(2048);
         @SuppressWarnings("unchecked")

@@ -18,7 +18,7 @@ public final class RtTracer implements Tracer {
 
     @Override public void branch(String label, Object value) { RtTrace.branch(label, value); }
 
-    @Override public void var(String name, Object value) { RtTrace.varSet(name, value); }
+    @Override public void setVariable(String name, Object value) { RtTrace.varSet(name, value); }
 
     @Override public void error(Throwable t) { RtTrace.onException(t); }
 

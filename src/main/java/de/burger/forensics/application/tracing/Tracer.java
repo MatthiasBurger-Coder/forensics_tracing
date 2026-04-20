@@ -9,7 +9,7 @@ public interface Tracer {
     void exit(Class<?> clazz, String method, Object result);
     AutoCloseable span(String name);
     void branch(String label, Object value);
-    void var(String name, Object value);
+    void setVariable(String name, Object value);
     void error(Throwable t);
     void setCorrelationId(String correlationId);
     String newCorrelationId();

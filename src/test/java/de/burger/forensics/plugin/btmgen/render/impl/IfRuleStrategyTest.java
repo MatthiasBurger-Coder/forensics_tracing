@@ -123,11 +123,13 @@ class IfRuleStrategyTest {
     void failsExplicitlyWhenSourceLineIsMissing() {
         RuleParams ifTrueParams = params("rule-8", "$1 > 0");
         RuleParams ifFalseParams = params("rule-9", "$1 <= 0");
+        IfTrueRuleStrategy ifTrueStrategy = new IfTrueRuleStrategy();
+        IfFalseRuleStrategy ifFalseStrategy = new IfFalseRuleStrategy();
 
-        assertThatThrownBy(() -> new IfTrueRuleStrategy().render(ifTrueParams))
+        assertThatThrownBy(() -> ifTrueStrategy.render(ifTrueParams))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("IF_TRUE rule requires a valid source line");
-        assertThatThrownBy(() -> new IfFalseRuleStrategy().render(ifFalseParams))
+        assertThatThrownBy(() -> ifFalseStrategy.render(ifFalseParams))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("IF_FALSE rule requires a valid source line");
     }

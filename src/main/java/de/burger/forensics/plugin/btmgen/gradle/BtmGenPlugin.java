@@ -16,6 +16,8 @@ import java.util.Optional;
  * We map File -> Directory/RegularFile Providers without reading values eagerly.
  */
 public final class BtmGenPlugin implements Plugin<@NotNull Project> {
+    private static final String FORENSICS_GROUP = "forensics";
+    private static final String FORENSICS_DIR = "forensics";
 
     @Override
     public void apply(Project project) {
@@ -27,7 +29,7 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
                 "generateBtmRules",
                 GenerateBtmTask.class,
                 t -> {
-                    t.setGroup("forensics");
+                    t.setGroup(FORENSICS_GROUP);
                     t.setDescription("Generates Byteman (.btm) rules by scanning Java sources.");
                     t.setExtension(ext);
 
@@ -50,13 +52,13 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
                         }
                     } else {
                         t.getOutputFile().convention(
-                                project.getLayout().getBuildDirectory().file("forensics/forensics.btm")
+                                project.getLayout().getBuildDirectory().file(FORENSICS_DIR + "/forensics.btm")
                         );
                     }
 
                     if (!t.getOutputDir().isPresent()) {
                         t.getOutputDir().convention(
-                                project.getLayout().getBuildDirectory().dir("forensics")
+                                project.getLayout().getBuildDirectory().dir(FORENSICS_DIR)
                         );
                     }
                 }
@@ -65,10 +67,10 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
                 "generateActivityPumlFromBtm",
                 GenerateActivityPumlFromBtmTask.class,
                 t -> {
-                    t.setGroup("forensics");
+                    t.setGroup(FORENSICS_GROUP);
                     t.setDescription("Converts a Byteman (.btm) file into a PlantUML activity diagram with swimlanes.");
-                    t.getInputBtm().convention(project.getLayout().getBuildDirectory().file("forensics/forensics.btm"));
-                    t.getOutputPuml().convention(project.getLayout().getBuildDirectory().file("forensics/forensics-activity.puml"));
+                    t.getInputBtm().convention(project.getLayout().getBuildDirectory().file(FORENSICS_DIR + "/forensics.btm"));
+                    t.getOutputPuml().convention(project.getLayout().getBuildDirectory().file(FORENSICS_DIR + "/forensics-activity.puml"));
                     t.getDiagramTitle().convention("Forensics Activity from Byteman Rules");
                 }
         );
@@ -76,10 +78,10 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
                 "generateActivityPumlFromTrace",
                 GenerateActivityPumlFromTraceTask.class,
                 t -> {
-                    t.setGroup("forensics");
+                    t.setGroup(FORENSICS_GROUP);
                     t.setDescription("Converts runtime trace JSON (METHOD_EXIT/BRANCH_TAKEN) into a PlantUML activity diagram.");
                     t.getInputTrace().convention(project.getLayout().getProjectDirectory().file("logs/trace.json"));
-                    t.getOutputPuml().convention(project.getLayout().getBuildDirectory().file("forensics/trace-activity.puml"));
+                    t.getOutputPuml().convention(project.getLayout().getBuildDirectory().file(FORENSICS_DIR + "/trace-activity.puml"));
                 }
         );
         taskProvider.configure(task -> {

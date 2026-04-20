@@ -35,19 +35,20 @@ class RtTraceAdditionalTest {
             RtTrace.custom("custom", Map.of("payload", "line1\nline2"));
         });
 
-        assertThat(output).contains("\"event\":\"METHOD_ENTER\"");
-        assertThat(output).contains("\"event\":\"METHOD_EXIT\"");
-        assertThat(output).contains("\"event\":\"BRANCH_TAKEN\"");
-        assertThat(output).contains("\"event\":\"IO_BEGIN\"");
-        assertThat(output).contains("\"event\":\"IO_END\"");
-        assertThat(output).contains("\"event\":\"THREAD_FORK\"");
-        assertThat(output).contains("\"event\":\"THREAD_JOIN\"");
-        assertThat(output).contains("\"event\":\"LOCK_ACQUIRE\"");
-        assertThat(output).contains("\"event\":\"LOCK_RELEASE\"");
-        assertThat(output).contains("\"event\":\"CUSTOM\"");
-        assertThat(output).contains("value");
-        assertThat(output).contains("line1");
-        assertThat(output).contains("line2");
+        assertThat(output)
+            .contains("\"event\":\"METHOD_ENTER\"")
+            .contains("\"event\":\"METHOD_EXIT\"")
+            .contains("\"event\":\"BRANCH_TAKEN\"")
+            .contains("\"event\":\"IO_BEGIN\"")
+            .contains("\"event\":\"IO_END\"")
+            .contains("\"event\":\"THREAD_FORK\"")
+            .contains("\"event\":\"THREAD_JOIN\"")
+            .contains("\"event\":\"LOCK_ACQUIRE\"")
+            .contains("\"event\":\"LOCK_RELEASE\"")
+            .contains("\"event\":\"CUSTOM\"")
+            .contains("value")
+            .contains("line1")
+            .contains("line2");
     }
 
     @Test
@@ -56,11 +57,12 @@ class RtTraceAdditionalTest {
             () -> RtTrace.conditionError("rule-77", "x > 0", new IllegalArgumentException("bad"))
         );
 
-        assertThat(output).contains("\"event\":\"CONDITION_ERROR\"");
-        assertThat(output).contains("\"rule\":\"rule-77\"");
-        assertThat(output).contains("\"expression\":\"x > 0\"");
-        assertThat(output).contains("\"error\":\"java.lang.IllegalArgumentException\"");
-        assertThat(output).contains("\"errorMsg\":\"bad\"");
+        assertThat(output)
+            .contains("\"event\":\"CONDITION_ERROR\"")
+            .contains("\"rule\":\"rule-77\"")
+            .contains("\"expression\":\"x > 0\"")
+            .contains("\"error\":\"java.lang.IllegalArgumentException\"")
+            .contains("\"errorMsg\":\"bad\"");
     }
 
     @Test
@@ -78,11 +80,12 @@ class RtTraceAdditionalTest {
             RtTrace.trace(RtEvent.CUSTOM, Map.of("value", "tab\tvalue", "path", "C:\\temp"));
         });
 
-        assertThat(output).contains("\"details\":\"\"");
-        assertThat(output).contains("\"span\"");
-        assertThat(output).contains("\"class\":\"\"");
-        assertThat(output).contains("tab\\tvalue");
-        assertThat(output).contains("C:\\\\temp");
+        assertThat(output)
+            .contains("\"details\":\"\"")
+            .contains("\"span\"")
+            .contains("\"class\":\"\"")
+            .contains("tab\\tvalue")
+            .contains("C:\\\\temp");
     }
 
     @Test
@@ -96,8 +99,9 @@ class RtTraceAdditionalTest {
             RtTrace.newCorrelationId();
         });
 
-        assertThat(output).contains("\"event\":\"EXCEPTION_THROWN\"");
-        assertThat(output).contains("\"topFrame\":\"\"");
+        assertThat(output)
+            .contains("\"event\":\"EXCEPTION_THROWN\"")
+            .contains("\"topFrame\":\"\"");
     }
 
     private static String captureStdout(Runnable runnable) {

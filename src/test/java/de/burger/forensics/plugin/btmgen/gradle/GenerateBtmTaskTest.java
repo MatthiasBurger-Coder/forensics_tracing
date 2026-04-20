@@ -94,46 +94,8 @@ class GenerateBtmTaskTest {
         assertTrue(Files.exists(outputFile), "Output file should be created");
         String content = Files.readString(outputFile);
 
-        assertTrue(content.contains("METHOD_ENTER:com.example.Sample#alpha"));
-        assertTrue(content.contains("METHOD_ENTER:com.example.Sample#beta"));
-        assertTrue(content.contains("METHOD_EXIT:com.example.Sample#alpha"));
-        assertTrue(content.contains("METHOD_EXIT:com.example.Sample#beta"));
-        assertTrue(content.contains("RETURN:com.example.Sample#alpha"));
-        assertTrue(content.contains("THROW:com.example.Sample#beta"));
-        assertTrue(content.contains("IF_TRUE:com.example.Sample#alpha:true"));
-        assertTrue(content.contains("IF_FALSE:com.example.Sample#alpha:true"));
-        assertTrue(content.contains("IF_TRUE:com.example.Sample#beta:false"));
-        assertTrue(content.contains("IF_FALSE:com.example.Sample#beta:false"));
-        assertTrue(content.contains("SWITCH:com.example.Sample#alpha:1"));
-        assertTrue(content.contains("SWITCH:com.example.Sample#beta:2"));
-        assertTrue(content.contains("SWITCH_CASE:1"));
-        assertTrue(content.contains("SWITCH_CASE:2"));
-
-        assertEquals(2, strategies.get("METHOD_ENTER").calls.size());
-        assertEquals(2, strategies.get("METHOD_EXIT").calls.size());
-        assertEquals(1, strategies.get("RETURN").calls.size());
-        assertEquals("alpha", strategies.get("RETURN").calls.get(0).methodName());
-        assertEquals(1, strategies.get("THROW").calls.size());
-        assertEquals("beta", strategies.get("THROW").calls.get(0).methodName());
-
-        assertEquals(Set.of("alpha", "beta"),
-                strategies.get("IF_TRUE").calls.stream().map(RuleParams::methodName).collect(Collectors.toSet()));
-        assertEquals(List.of("true", "false"),
-                strategies.get("IF_TRUE").calls.stream().map(RuleParams::condition).toList());
-        assertEquals(List.of(4, 9),
-                strategies.get("IF_TRUE").calls.stream().map(RuleParams::sourceLine).toList());
-        assertEquals(List.of("true", "false"),
-                strategies.get("IF_FALSE").calls.stream().map(RuleParams::condition).toList());
-        assertEquals(List.of(4, 9),
-                strategies.get("IF_FALSE").calls.stream().map(RuleParams::sourceLine).toList());
-        assertEquals(2, strategies.get("SWITCH").calls.size());
-        assertEquals(2, strategies.get("SWITCH_CASE").calls.size());
-        assertEquals(List.of("1", "2"),
-                strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::displayName).toList());
-
-        strategies.values().forEach(recording ->
-                recording.calls.forEach(params ->
-                        assertEquals(RuleParams.DEFAULT_HELPER_FQN, params.helperFqn())));
+        assertRenderedRuleContent(content);
+        assertStrategyInvocations(strategies);
     }
 
     @Test
@@ -439,7 +401,7 @@ class GenerateBtmTaskTest {
     }
 
     @Test
-    void generateCreatesDefaultExtensionWhenMissing(@TempDir Path tempDir) throws IOException {
+    void generateCreatesDefaultExtensionWhenMissing(@TempDir Path tempDir) {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
         var task = project.getTasks().register("generateBtmDefaultExtension", GenerateBtmTask.class).get();
         task.getTemplateId().set("METHOD_ENTER");
@@ -537,6 +499,51 @@ class GenerateBtmTaskTest {
         }
         extension.setRegistry(builder.build());
         return strategies;
+    }
+
+    private static void assertRenderedRuleContent(String content) {
+        assertTrue(content.contains("METHOD_ENTER:com.example.Sample#alpha"));
+        assertTrue(content.contains("METHOD_ENTER:com.example.Sample#beta"));
+        assertTrue(content.contains("METHOD_EXIT:com.example.Sample#alpha"));
+        assertTrue(content.contains("METHOD_EXIT:com.example.Sample#beta"));
+        assertTrue(content.contains("RETURN:com.example.Sample#alpha"));
+        assertTrue(content.contains("THROW:com.example.Sample#beta"));
+        assertTrue(content.contains("IF_TRUE:com.example.Sample#alpha:true"));
+        assertTrue(content.contains("IF_FALSE:com.example.Sample#alpha:true"));
+        assertTrue(content.contains("IF_TRUE:com.example.Sample#beta:false"));
+        assertTrue(content.contains("IF_FALSE:com.example.Sample#beta:false"));
+        assertTrue(content.contains("SWITCH:com.example.Sample#alpha:1"));
+        assertTrue(content.contains("SWITCH:com.example.Sample#beta:2"));
+        assertTrue(content.contains("SWITCH_CASE:1"));
+        assertTrue(content.contains("SWITCH_CASE:2"));
+    }
+
+    private static void assertStrategyInvocations(Map<String, RecordingStrategy> strategies) {
+        assertEquals(2, strategies.get("METHOD_ENTER").calls.size());
+        assertEquals(2, strategies.get("METHOD_EXIT").calls.size());
+        assertEquals(1, strategies.get("RETURN").calls.size());
+        assertEquals("alpha", strategies.get("RETURN").calls.get(0).methodName());
+        assertEquals(1, strategies.get("THROW").calls.size());
+        assertEquals("beta", strategies.get("THROW").calls.get(0).methodName());
+
+        assertEquals(Set.of("alpha", "beta"),
+                strategies.get("IF_TRUE").calls.stream().map(RuleParams::methodName).collect(Collectors.toSet()));
+        assertEquals(List.of("true", "false"),
+                strategies.get("IF_TRUE").calls.stream().map(RuleParams::condition).toList());
+        assertEquals(List.of(4, 9),
+                strategies.get("IF_TRUE").calls.stream().map(RuleParams::sourceLine).toList());
+        assertEquals(List.of("true", "false"),
+                strategies.get("IF_FALSE").calls.stream().map(RuleParams::condition).toList());
+        assertEquals(List.of(4, 9),
+                strategies.get("IF_FALSE").calls.stream().map(RuleParams::sourceLine).toList());
+        assertEquals(2, strategies.get("SWITCH").calls.size());
+        assertEquals(2, strategies.get("SWITCH_CASE").calls.size());
+        assertEquals(List.of("1", "2"),
+                strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::displayName).toList());
+
+        strategies.values().forEach(recording ->
+                recording.calls.forEach(params ->
+                        assertEquals(RuleParams.DEFAULT_HELPER_FQN, params.helperFqn())));
     }
 
     private static final class RecordingStrategy implements RuleRenderStrategy {

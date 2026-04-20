@@ -119,6 +119,7 @@ class MethodLoggingAspectAdditionalTest {
             try {
                 Files.deleteIfExists(logFile);
             } catch (Exception ignored) {
+                // Best-effort cleanup for a flat temporary log file.
             }
         }
     }
@@ -136,7 +137,7 @@ class MethodLoggingAspectAdditionalTest {
     private static List<String> readMessages(Path logFile) throws Exception {
         return Files.readAllLines(logFile).stream()
             .map(MethodLoggingAspectAdditionalTest::extractMessage)
-            .filter(message -> message != null)
+            .filter(java.util.Objects::nonNull)
             .toList();
     }
 

@@ -30,47 +30,65 @@ final class InstanceOfPatternSanitizer {
             sanitized.append(expression, index, match);
             sanitized.append(KEYWORD);
             int cursor = match + KEYWORD.length();
-
-            // Preserve whitespace between keyword and type declaration
-            while (cursor < length && Character.isWhitespace(expression.charAt(cursor))) {
-                sanitized.append(expression.charAt(cursor));
-                cursor++;
-            }
-
-            // Copy the full type portion, including generics or array suffixes.
-            int genericDepth = 0;
-            while (cursor < length) {
-                char c = expression.charAt(cursor);
-                if (c == '<') {
-                    genericDepth++;
-                } else if (c == '>') {
-                    if (genericDepth > 0) {
-                        genericDepth--;
-                    }
-                } else if (Character.isWhitespace(c) && genericDepth == 0) {
-                    break;
-                }
-                sanitized.append(c);
-                cursor++;
-            }
-
-            // Skip whitespace between the type and the pattern variable name.
-            int afterType = cursor;
-            while (afterType < length && Character.isWhitespace(expression.charAt(afterType))) {
-                afterType++;
-            }
-
-            // Drop the pattern variable (e.g. "foo" in "instanceof Bar foo").
-            if (afterType < length && Character.isJavaIdentifierStart(expression.charAt(afterType))) {
-                cursor = afterType + 1;
-                while (cursor < length && Character.isJavaIdentifierPart(expression.charAt(cursor))) {
-                    cursor++;
-                }
-                index = cursor;
-            } else {
-                index = afterType;
-            }
+            cursor = appendWhitespace(expression, sanitized, cursor, length);
+            cursor = appendType(expression, sanitized, cursor, length);
+            int afterType = skipWhitespace(expression, cursor, length);
+            index = skipPatternVariable(expression, afterType, length);
         }
         return sanitized.toString();
+    }
+
+    private static int appendWhitespace(String expression, StringBuilder sanitized, int cursor, int length) {
+        int next = cursor;
+        while (next < length && Character.isWhitespace(expression.charAt(next))) {
+            sanitized.append(expression.charAt(next));
+            next++;
+        }
+        return next;
+    }
+
+    private static int appendType(String expression, StringBuilder sanitized, int cursor, int length) {
+        int next = cursor;
+        int genericDepth = 0;
+        while (next < length && isTypeCharacter(expression.charAt(next), genericDepth)) {
+            char current = expression.charAt(next);
+            genericDepth = updateGenericDepth(current, genericDepth);
+            sanitized.append(current);
+            next++;
+        }
+        return next;
+    }
+
+    private static boolean isTypeCharacter(char current, int genericDepth) {
+        return !Character.isWhitespace(current) || genericDepth > 0;
+    }
+
+    private static int updateGenericDepth(char current, int genericDepth) {
+        if (current == '<') {
+            return genericDepth + 1;
+        }
+        if (current == '>' && genericDepth > 0) {
+            return genericDepth - 1;
+        }
+        return genericDepth;
+    }
+
+    private static int skipWhitespace(String expression, int cursor, int length) {
+        int next = cursor;
+        while (next < length && Character.isWhitespace(expression.charAt(next))) {
+            next++;
+        }
+        return next;
+    }
+
+    private static int skipPatternVariable(String expression, int cursor, int length) {
+        if (cursor < length && Character.isJavaIdentifierStart(expression.charAt(cursor))) {
+            int next = cursor + 1;
+            while (next < length && Character.isJavaIdentifierPart(expression.charAt(next))) {
+                next++;
+            }
+            return next;
+        }
+        return cursor;
     }
 }

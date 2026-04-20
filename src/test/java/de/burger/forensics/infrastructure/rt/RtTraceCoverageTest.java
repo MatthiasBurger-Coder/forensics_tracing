@@ -55,14 +55,15 @@ class RtTraceCoverageTest {
             helper.threadJoin("worker-1");
         });
 
-        assertThat(output).contains("\"event\":\"METHOD_ENTER\"");
-        assertThat(output).contains("\"event\":\"METHOD_EXIT\"");
-        assertThat(output).contains("\"event\":\"BRANCH_TAKEN\"");
-        assertThat(output).contains("\"event\":\"EXCEPTION_THROWN\"");
-        assertThat(output).contains("\"event\":\"IO_BEGIN\"");
-        assertThat(output).contains("\"event\":\"IO_END\"");
-        assertThat(output).contains("\"event\":\"THREAD_FORK\"");
-        assertThat(output).contains("\"event\":\"THREAD_JOIN\"");
+        assertThat(output)
+            .contains("\"event\":\"METHOD_ENTER\"")
+            .contains("\"event\":\"METHOD_EXIT\"")
+            .contains("\"event\":\"BRANCH_TAKEN\"")
+            .contains("\"event\":\"EXCEPTION_THROWN\"")
+            .contains("\"event\":\"IO_BEGIN\"")
+            .contains("\"event\":\"IO_END\"")
+            .contains("\"event\":\"THREAD_FORK\"")
+            .contains("\"event\":\"THREAD_JOIN\"");
     }
 
     @Test
@@ -76,9 +77,10 @@ class RtTraceCoverageTest {
         });
 
         assertThat(RtTrace.correlationId()).startsWith("corr-");
-        assertThat(output).contains("\"event\":\"TIMER_START\"");
-        assertThat(output).contains("\"event\":\"TIMER_END\"");
-        assertThat(output).contains("\"payload\":\"value\"");
+        assertThat(output)
+            .contains("\"event\":\"TIMER_START\"")
+            .contains("\"event\":\"TIMER_END\"")
+            .contains("\"payload\":\"value\"");
     }
 
     @Test
@@ -116,9 +118,10 @@ class RtTraceCoverageTest {
             RtTrace.conditionError("rule-1", "a\tb", new IllegalArgumentException("bad"));
         });
 
-        assertThat(output).contains("rule:\\\"1\\\"");
-        assertThat(output).contains("line\\nvalue");
-        assertThat(output).contains("a\\tb");
+        assertThat(output)
+            .contains("rule:\\\"1\\\"")
+            .contains("line\\nvalue")
+            .contains("a\\tb");
     }
 
     @Test
@@ -142,9 +145,10 @@ class RtTraceCoverageTest {
         String followUp = captureStdout(() -> RtTrace.trace(RtEvent.CUSTOM, Map.of("check", "done")));
 
         assertThat(secondStack).isNotSameAs(firstStack);
-        assertThat(followUp).contains("\"event\":\"CUSTOM\"");
-        assertThat(followUp).doesNotContain("\"correlationId\"");
-        assertThat(followUp).doesNotContain("\"span\"");
+        assertThat(followUp)
+            .contains("\"event\":\"CUSTOM\"")
+            .doesNotContain("\"correlationId\"")
+            .doesNotContain("\"span\"");
 
         spans.remove();
         correlationIds.remove();

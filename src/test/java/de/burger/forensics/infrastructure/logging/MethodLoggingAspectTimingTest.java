@@ -53,8 +53,9 @@ class MethodLoggingAspectTimingTest {
         aspect.onReturn(outer);
 
         List<Long> elapsed = extractElapsedMs();
-        assertThat(elapsed).hasSize(2);
-        assertThat(elapsed).allMatch(value -> value < 60_000L);
+        assertThat(elapsed)
+            .hasSize(2)
+            .allMatch(value -> value < 60_000L);
     }
 
     @Test

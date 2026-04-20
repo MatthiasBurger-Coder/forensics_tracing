@@ -63,7 +63,9 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
                 case SWITCH_CASE -> summary.switchCaseCount++;
                 case RETURN -> summary.returnCount++;
                 case THROW -> summary.throwCount++;
-                case OTHER -> { }
+                case OTHER -> {
+                    // Ignore unsupported rule actions in the static activity summary.
+                }
             }
             if (rule.condition() != null && !rule.condition().isBlank()) {
                 summary.conditions.add(rule.condition());
@@ -158,18 +160,17 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
                     .map(String::trim)
                     .filter(s -> !s.isBlank())
                     .toList();
-            if (lines.stream().noneMatch(s -> s.startsWith("RULE "))) {
-                continue;
+            boolean hasRuleHeader = lines.stream().anyMatch(s -> s.startsWith("RULE "));
+            if (hasRuleHeader) {
+                String className = firstValue(lines, "CLASS ");
+                String methodName = firstValue(lines, "METHOD ");
+                if (className != null && methodName != null) {
+                    String ifLine = lines.stream().filter(s -> s.startsWith("IF ")).findFirst().orElse(null);
+                    String condition = extractCondition(ifLine);
+                    String doLine = lines.stream().filter(s -> s.startsWith("on") || s.startsWith("DO on")).findFirst().orElse("");
+                    rules.add(new ParsedRule(className, methodName, detectEvent(doLine), condition));
+                }
             }
-            String className = firstValue(lines, "CLASS ");
-            String methodName = firstValue(lines, "METHOD ");
-            if (className == null || methodName == null) {
-                continue;
-            }
-            String ifLine = lines.stream().filter(s -> s.startsWith("IF ")).findFirst().orElse(null);
-            String condition = extractCondition(ifLine);
-            String doLine = lines.stream().filter(s -> s.startsWith("on") || s.startsWith("DO on")).findFirst().orElse("");
-            rules.add(new ParsedRule(className, methodName, detectEvent(doLine), condition));
         }
         return rules;
     }
@@ -184,7 +185,10 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
         if (evalCondition != null) {
             return evalCondition;
         }
-        return trimmed.startsWith("IF ") ? trimmed.substring(3).trim() : trimmed;
+        if (trimmed.startsWith("IF ")) {
+            return trimmed.substring(3).trim();
+        }
+        return trimmed;
     }
 
     private static String extractEvalCondition(String ifLine) {
@@ -234,16 +238,13 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
             if (escaping) {
                 value.append(unescapeQuotedChar(current));
                 escaping = false;
-                continue;
-            }
-            if (current == '\\') {
+            } else if (current == '\\') {
                 escaping = true;
-                continue;
-            }
-            if (current == '"') {
+            } else if (current == '"') {
                 return new ParsedQuotedSegment(value.toString(), index + 1);
+            } else {
+                value.append(current);
             }
-            value.append(current);
         }
         return null;
     }

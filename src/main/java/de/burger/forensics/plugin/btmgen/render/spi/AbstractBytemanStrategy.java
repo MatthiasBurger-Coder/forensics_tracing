@@ -7,6 +7,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public abstract class AbstractBytemanStrategy {
+    protected AbstractBytemanStrategy() {}
+
     protected static String safeId(String id) {
         return (id == null || id.isBlank()) ? UUID.randomUUID().toString() : id;
     }
@@ -79,8 +81,8 @@ public abstract class AbstractBytemanStrategy {
             return condition;
         }
 
-        String identifier = matcher.group("identifier");
-        String operator = matcher.group("operator");
+        String identifier = matcher.group(1);
+        String operator = matcher.group(2);
         return "%s.%s %s null".formatted(className, identifier, operator);
     }
 
@@ -95,7 +97,7 @@ public abstract class AbstractBytemanStrategy {
     }
 
     private static final Pattern STATIC_NULL_CHECK = Pattern.compile(
-            "^\\(?\\s*(?<identifier>[A-Z][A-Z0-9_]*)\\s*(?<operator>==|!=)\\s*null\\s*\\)?$"
+            "^\\(?\\s*([A-Z][A-Z0-9_]*)\\s*(==|!=)\\s*null\\s*\\)?$"
     );
 
     private static String unwrapParentheses(String expression) {

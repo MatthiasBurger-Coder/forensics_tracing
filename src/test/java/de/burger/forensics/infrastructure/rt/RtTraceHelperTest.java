@@ -47,8 +47,9 @@ class RtTraceHelperTest {
                 result.set(helper.eval("rule-3", "flag", () -> { throw new IllegalStateException("boom"); })));
 
         assertThat(result.get()).isFalse();
-        assertThat(output).contains("\"event\":\"CONDITION_ERROR\"");
-        assertThat(output).contains("\"rule\":\"rule-3\"");
+        assertThat(output)
+            .contains("\"event\":\"CONDITION_ERROR\"")
+            .contains("\"rule\":\"rule-3\"");
     }
 
     @Test

@@ -59,24 +59,26 @@ class GenerationRequestTest {
 
     @Test
     void requiresMandatoryFields() {
+        List<String> emptyList = List.of();
         assertThatThrownBy(() -> new GenerationRequest(
             null,
             "helper",
             true,
             true,
-            List.of(),
+            emptyList,
             0,
-            List.of()
+            emptyList
         )).isInstanceOf(NullPointerException.class);
 
+        Path root = Path.of("src");
         assertThatThrownBy(() -> new GenerationRequest(
-            Path.of("src"),
+            root,
             null,
             true,
             true,
-            List.of(),
+            emptyList,
             0,
-            List.of()
+            emptyList
         )).isInstanceOf(NullPointerException.class);
     }
 }
