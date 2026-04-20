@@ -6,11 +6,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.net.URL;
@@ -42,7 +39,7 @@ class RtTraceCoverageTest {
     void helperDelegatesCoverRuntimeWrapperMethods() {
         RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
 
-        String output = captureStdout(() -> {
+        String output = RtTraceLogCapture.capture(() -> {
             helper.onEnter(RtTraceCoverageTest.class, "run", "a");
             helper.onExit(RtTraceCoverageTest.class, "run", "ok");
             helper.onBranch(RtTraceCoverageTest.class, "run", "IF_TRUE");
@@ -68,7 +65,7 @@ class RtTraceCoverageTest {
 
     @Test
     void correlationIdsAndSpanTokensRemainObservable() {
-        String output = captureStdout(() -> {
+        String output = RtTraceLogCapture.capture(() -> {
             String correlationId = RtTrace.newCorrelationId();
             RtTrace.setCorrelationId(correlationId);
             RtSpanToken token = RtTrace.beginSpan("work");
@@ -113,7 +110,7 @@ class RtTraceCoverageTest {
 
     @Test
     void conditionErrorAndBranchHelpersEscapeSpecialCharacters() {
-        String output = captureStdout(() -> {
+        String output = RtTraceLogCapture.capture(() -> {
             RtTrace.branch("rule:\"1\"", "line\nvalue");
             RtTrace.conditionError("rule-1", "a\tb", new IllegalArgumentException("bad"));
         });
@@ -135,14 +132,14 @@ class RtTraceCoverageTest {
         correlationIds.remove();
 
         Object firstStack = spans.get();
-        captureStdout(() -> {
+        RtTraceLogCapture.capture(() -> {
             RtTrace.setCorrelationId("corr-cleanup");
             RtSpanToken token = RtTrace.beginSpan("cleanup");
             RtTrace.setCorrelationId(null);
             RtTrace.endSpan(token);
         });
         Object secondStack = spans.get();
-        String followUp = captureStdout(() -> RtTrace.trace(RtEvent.CUSTOM, Map.of("check", "done")));
+        String followUp = RtTraceLogCapture.capture(() -> RtTrace.trace(RtEvent.CUSTOM, Map.of("check", "done")));
 
         assertThat(secondStack).isNotSameAs(firstStack);
         assertThat(followUp)
@@ -159,7 +156,7 @@ class RtTraceCoverageTest {
         withRtTraceLoader(
             Map.of("forensics.rt.enabled", "false"),
             (loader, rtTraceClass) -> {
-                String output = captureStdout(() -> {
+                String output = RtTraceLogCapture.capture(() -> {
                     try {
                         Object noop = noopToken(loader);
                         invoke(rtTraceClass, "setCorrelationId", new Class<?>[]{String.class}, "corr-disabled");
@@ -220,18 +217,6 @@ class RtTraceCoverageTest {
             Files.deleteIfExists(logFile);
             Files.deleteIfExists(logFile.getParent());
         }
-    }
-
-    private static String captureStdout(Runnable runnable) {
-        PrintStream original = System.out;
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        try (PrintStream replacement = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
-            System.setOut(replacement);
-            runnable.run();
-        } finally {
-            System.setOut(original);
-        }
-        return buffer.toString(StandardCharsets.UTF_8);
     }
 
     private static void withRtTraceLoader(

@@ -1,9 +1,5 @@
 package de.burger.forensics.infrastructure.rt;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,7 +14,7 @@ class RtTracerTest {
     void spanAutoCloseableEndsSpan() {
         RtTracer tracer = new RtTracer();
 
-        String output = captureStdout(() -> {
+        String output = RtTraceLogCapture.capture(() -> {
             try (AutoCloseable span = tracer.span("work")) {
                 assertThat(span).isNotNull();
                 tracer.enter(RtTracerTest.class, "spanAutoCloseableEndsSpan");
@@ -31,17 +27,5 @@ class RtTracerTest {
             .contains("\"event\":\"TIMER_START\"")
             .contains("\"event\":\"TIMER_END\"")
             .contains("\"event\":\"METHOD_ENTER\"");
-    }
-
-    private static String captureStdout(Runnable runnable) {
-        PrintStream original = System.out;
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        try (PrintStream replacement = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
-            System.setOut(replacement);
-            runnable.run();
-        } finally {
-            System.setOut(original);
-        }
-        return buffer.toString(StandardCharsets.UTF_8);
     }
 }

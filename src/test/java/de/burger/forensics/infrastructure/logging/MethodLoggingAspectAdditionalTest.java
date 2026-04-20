@@ -31,9 +31,8 @@ class MethodLoggingAspectAdditionalTest {
     }
 
     @Test
-    void aspectAccessorsExposeTheSingletonInstance() {
-        assertThat(MethodLoggingAspect.aspectOf()).isSameAs(MethodLoggingAspect.aspectOf());
-        assertThat(MethodLoggingAspect.hasAspect()).isTrue();
+    void aspectCanBeConstructedForDirectInvocation() {
+        assertThat(new MethodLoggingAspect()).isNotNull();
     }
 
     @Test

@@ -30,7 +30,7 @@ class GenerateBtmTaskTest {
 
         var task = project.getTasks().register("generateBtmMinimal", GenerateBtmTask.class).get();
 
-        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        var extension = newExtension(project);
         var strategy = new RecordingStrategy("CUSTOM");
         extension.setRegistry(StrategyRegistry.builder().register(strategy).build());
         extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
@@ -81,7 +81,7 @@ class GenerateBtmTaskTest {
 
         var task = project.getTasks().register("generateBtmScan", GenerateBtmTask.class).get();
 
-        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        var extension = newExtension(project);
         Map<String, RecordingStrategy> strategies = registerDefaultStrategies(extension);
         extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
         Path outputFile = tempDir.resolve("build/forensics/scanned.btm");
@@ -129,7 +129,7 @@ class GenerateBtmTaskTest {
                 """);
 
         var task = project.getTasks().register("generateBtmMultiModule", GenerateBtmTask.class).get();
-        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        var extension = newExtension(project);
         extension.getSourceRoots().setFrom(
             tempDir.resolve("module-a/src/main/java").toFile(),
             tempDir.resolve("module-b/src/main/java").toFile()
@@ -183,7 +183,7 @@ class GenerateBtmTaskTest {
                 """);
 
         var task = rootProject.getTasks().register("generateBtmAutoModules", GenerateBtmTask.class).get();
-        var extension = rootProject.getObjects().newInstance(BtmGenExtension.class);
+        var extension = newExtension(rootProject);
         extension.getScanSubprojects().set(true);
         Path outputFile = rootDir.resolve("build/forensics/auto-modules.btm");
         extension.getOutputFile().set(outputFile.toFile());
@@ -221,7 +221,7 @@ class GenerateBtmTaskTest {
 
         Path scanOutput = tempDir.resolve("build/forensics/helpers-scan.btm");
         var scanTask = project.getTasks().register("generateBtmHelpersScan", GenerateBtmTask.class).get();
-        var scanExtension = project.getObjects().newInstance(BtmGenExtension.class);
+        var scanExtension = newExtension(project);
         scanExtension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
         scanExtension.getOutputFile().set(scanOutput.toFile());
         scanTask.setExtension(scanExtension);
@@ -240,7 +240,7 @@ class GenerateBtmTaskTest {
 
         Path jdbcOutput = tempDir.resolve("build/forensics/helpers-jdbc.btm");
         var jdbcTask = project.getTasks().register("generateBtmHelpersJdbc", GenerateBtmTask.class).get();
-        var jdbcExtension = project.getObjects().newInstance(BtmGenExtension.class);
+        var jdbcExtension = newExtension(project);
         jdbcExtension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
         jdbcExtension.getOutputFile().set(jdbcOutput.toFile());
         jdbcTask.setExtension(jdbcExtension);
@@ -258,7 +258,7 @@ class GenerateBtmTaskTest {
 
         Path threadOutput = tempDir.resolve("build/forensics/helpers-thread.btm");
         var threadTask = project.getTasks().register("generateBtmHelpersThread", GenerateBtmTask.class).get();
-        var threadExtension = project.getObjects().newInstance(BtmGenExtension.class);
+        var threadExtension = newExtension(project);
         threadExtension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
         threadExtension.getOutputFile().set(threadOutput.toFile());
         threadTask.setExtension(threadExtension);
@@ -282,7 +282,7 @@ class GenerateBtmTaskTest {
 
         var task = project.getTasks().register("generateBtmCustomHelper", GenerateBtmTask.class).get();
 
-        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        var extension = newExtension(project);
         var strategy = new RecordingStrategy("CUSTOM");
         extension.setRegistry(StrategyRegistry.builder().register(strategy).build());
         extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
@@ -307,7 +307,7 @@ class GenerateBtmTaskTest {
 
         var task = project.getTasks().register("generateBtmBlankHelper", GenerateBtmTask.class).get();
 
-        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        var extension = newExtension(project);
         var strategy = new RecordingStrategy("CUSTOM");
         extension.setRegistry(StrategyRegistry.builder().register(strategy).build());
         extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
@@ -341,7 +341,7 @@ class GenerateBtmTaskTest {
                 """);
 
         var task = project.getTasks().register("generateBtmDedupHeaders", GenerateBtmTask.class).get();
-        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        var extension = newExtension(project);
         extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
         extension.getMinBranchesPerMethod().set(0);
         Path outputFile = tempDir.resolve("build/forensics/dedup-headers.btm");
@@ -417,7 +417,7 @@ class GenerateBtmTaskTest {
     void privateHelpersCoverFallbackConfigurationBranches(@TempDir Path tempDir) throws Exception {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
         var task = project.getTasks().register("generateBtmPrivateHelpers", GenerateBtmTask.class).get();
-        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+        var extension = newExtension(project);
         extension.getIncludes().set("com.example , org.example");
         extension.getScanSubprojects().set(true);
         task.setExtension(extension);
@@ -499,6 +499,10 @@ class GenerateBtmTaskTest {
         }
         extension.setRegistry(builder.build());
         return strategies;
+    }
+
+    private static BtmGenExtension newExtension(org.gradle.api.Project project) {
+        return project.getObjects().newInstance(BtmGenExtension.class);
     }
 
     private static void assertRenderedRuleContent(String content) {

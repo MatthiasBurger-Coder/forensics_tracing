@@ -5,9 +5,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,7 +40,7 @@ class RtTraceHelperTest {
         RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
 
         AtomicBoolean result = new AtomicBoolean(true);
-        String output = captureStdout(() ->
+        String output = RtTraceLogCapture.capture(() ->
                 result.set(helper.eval("rule-3", "flag", () -> { throw new IllegalStateException("boom"); })));
 
         assertThat(result.get()).isFalse();
@@ -64,17 +61,5 @@ class RtTraceHelperTest {
         } finally {
             MDC.clear();
         }
-    }
-
-    private static String captureStdout(Runnable runnable) {
-        PrintStream original = System.out;
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        try (PrintStream replacement = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
-            System.setOut(replacement);
-            runnable.run();
-        } finally {
-            System.setOut(original);
-        }
-        return buffer.toString(StandardCharsets.UTF_8);
     }
 }

@@ -3,10 +3,8 @@ package de.burger.forensics.plugin.btmgen.gradle;
 import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
-import lombok.Getter;
-import lombok.Setter;
-import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
 import org.jetbrains.annotations.NotNull;
 
@@ -16,45 +14,14 @@ import java.io.File;
 /**
  * Extension to configure sourceRoot, outputFile and provide a StrategyRegistry.
  */
-@Getter
-public abstract class BtmGenExtension {
-
-    /**
-     * -- GETTER --
-     * Strategy registry used by tasks to render rules.
-     */
-    @Setter
+public class BtmGenExtension {
     private StrategyRegistry registry = StrategyRegistries.defaultRegistry();
-    /**
-     * -- GETTER --
-     * Where to scan sources (root folder).
-     */
     private final Property<@NotNull File> sourceRoot;
-    /**
-     * -- GETTER --
-     * Optional: multiple source roots to scan in one run (for multi-module layouts).
-     */
     private final ConfigurableFileCollection sourceRoots;
-    /**
-     * -- GETTER --
-     * Output .btm file location.
-     */
     private final Property<@NotNull File> outputFile;
     private final Property<@NotNull String> includes;
-    /**
-     * -- GETTER --
-     * Fully qualified helper class invoked from generated rules.
-     */
     private final Property<@NotNull String> helperFqn;
-    /**
-     * -- GETTER --
-     * Minimum number of branches required per method to include rules.
-     */
     private final Property<@NotNull Integer> minBranchesPerMethod;
-    /**
-     * -- GETTER --
-     * If true, automatically scan src/main/java in all projects of the current Gradle build.
-     */
     private final Property<@NotNull Boolean> scanSubprojects;
 
     @Inject
@@ -74,4 +41,39 @@ public abstract class BtmGenExtension {
         this.scanSubprojects.convention(false);
     }
 
+    public StrategyRegistry getRegistry() {
+        return registry;
+    }
+
+    public void setRegistry(StrategyRegistry registry) {
+        this.registry = registry == null ? StrategyRegistries.defaultRegistry() : registry;
+    }
+
+    public Property<@NotNull File> getSourceRoot() {
+        return sourceRoot;
+    }
+
+    public ConfigurableFileCollection getSourceRoots() {
+        return sourceRoots;
+    }
+
+    public Property<@NotNull File> getOutputFile() {
+        return outputFile;
+    }
+
+    public Property<@NotNull String> getIncludes() {
+        return includes;
+    }
+
+    public Property<@NotNull String> getHelperFqn() {
+        return helperFqn;
+    }
+
+    public Property<@NotNull Integer> getMinBranchesPerMethod() {
+        return minBranchesPerMethod;
+    }
+
+    public Property<@NotNull Boolean> getScanSubprojects() {
+        return scanSubprojects;
+    }
 }

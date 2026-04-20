@@ -4,11 +4,17 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Formatter;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 /**
  * Lightweight drop-in runtime tracing helper.
  * - No external dependencies
- * - Single JSON line per event to stdout
+ * - Single JSON line per event via the dedicated runtime trace logger
  * - Thread-local correlationId and nested spans
  * Enable via:
  *   -Dforensics.rt.enabled=true
@@ -22,6 +28,7 @@ public final class RtTrace {
     private static final boolean FILE_LOG_ENABLED = isFileLogEnabled();
     private static final AtomicLong SPAN_SEQ = new AtomicLong(1);
     private static final Object FILE_LOCK = new Object();
+    private static final Logger TRACE_LOGGER = createTraceLogger();
     private static final String CLASS_KEY = "class";
     private static final String METHOD_KEY = "method";
     private static final String LABEL_KEY = "label";
@@ -264,7 +271,7 @@ public final class RtTrace {
 
             sb.append('}');
             String line = sb.toString();
-            stdout().println(line);
+            emitConsole(line);
             appendToFile(line);
         } finally {
             if (corr == null) {
@@ -346,8 +353,24 @@ public final class RtTrace {
         return Boolean.parseBoolean(value);
     }
 
-    private static java.io.PrintStream stdout() {
-        return System.out;
+    private static Logger createTraceLogger() {
+        Logger logger = Logger.getLogger(RtTrace.class.getName() + ".events");
+        logger.setUseParentHandlers(false);
+        logger.setLevel(Level.INFO);
+        for (Handler handler : logger.getHandlers()) {
+            logger.removeHandler(handler);
+            handler.close();
+        }
+
+        ConsoleHandler handler = new ConsoleHandler();
+        handler.setLevel(Level.INFO);
+        handler.setFormatter(new PlainMessageFormatter());
+        logger.addHandler(handler);
+        return logger;
+    }
+
+    private static void emitConsole(String line) {
+        TRACE_LOGGER.log(Level.INFO, line);
     }
 
     private static void appendToFile(String line) {
@@ -411,6 +434,13 @@ public final class RtTrace {
             }
             sb.append(']');
             return sb.toString();
+        }
+    }
+
+    private static final class PlainMessageFormatter extends Formatter {
+        @Override
+        public String format(LogRecord record) {
+            return record.getMessage() + System.lineSeparator();
         }
     }
 }

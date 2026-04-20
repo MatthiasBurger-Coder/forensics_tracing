@@ -1,8 +1,5 @@
 package de.burger.forensics.infrastructure.rt;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -17,7 +14,7 @@ class RtTraceTest {
 
     @Test
     void beginAndEndSpanEmitTimerEvents() {
-        String output = captureStdout(() -> {
+        String output = RtTraceLogCapture.capture(() -> {
             RtSpanToken token = RtTrace.beginSpan("load");
             RtTrace.endSpan(token);
         });
@@ -34,7 +31,7 @@ class RtTraceTest {
 
     @Test
     void traceIncludesCorrelationIdWhenSet() {
-        String output = captureStdout(() -> {
+        String output = RtTraceLogCapture.capture(() -> {
             RtTrace.setCorrelationId("corr-123");
             RtTrace.trace(RtEvent.CUSTOM, Map.of("k", "v"));
         });
@@ -54,7 +51,7 @@ class RtTraceTest {
             }
         };
 
-        String output = captureStdout(() -> RtTrace.varSet("answer", bad));
+        String output = RtTraceLogCapture.capture(() -> RtTrace.varSet("answer", bad));
 
         assertThat(output)
             .contains("\"event\":\"VAR_SET\"")
@@ -63,23 +60,11 @@ class RtTraceTest {
 
     @Test
     void onExceptionEmitsErrorDetails() {
-        String output = captureStdout(() -> RtTrace.onException(new IllegalStateException("boom")));
+        String output = RtTraceLogCapture.capture(() -> RtTrace.onException(new IllegalStateException("boom")));
 
         assertThat(output)
             .contains("\"event\":\"EXCEPTION_THROWN\"")
             .contains("\"error\":\"java.lang.IllegalStateException\"")
             .contains("\"errorMsg\":\"boom\"");
-    }
-
-    private static String captureStdout(Runnable runnable) {
-        PrintStream original = System.out;
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        try (PrintStream replacement = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
-            System.setOut(replacement);
-            runnable.run();
-        } finally {
-            System.setOut(original);
-        }
-        return buffer.toString(StandardCharsets.UTF_8);
     }
 }

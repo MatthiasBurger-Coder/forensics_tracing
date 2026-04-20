@@ -20,15 +20,9 @@ import java.util.stream.Collectors;
  * are kept for consumers that may enable weaving in their own builds. We suppress the IDE inspection
  * to avoid a noisy "@AspectJ support isn't enabled" warning in this module.
  */
-@SuppressWarnings("AspectJ") // suppress IDE warning; weaving is opt-in for consumers
+@SuppressWarnings({"AspectJ", "java:S6548"}) // AspectJ weaving is opt-in and aspect instances are singleton-scoped.
 @Aspect
 public class MethodLoggingAspect {
-
-    // Provide code-style aspect accessors to satisfy LTW expectations in test runtime
-    private static final MethodLoggingAspect INSTANCE = new MethodLoggingAspect();
-    private static final boolean HAS_ASPECT = true;
-    public static MethodLoggingAspect aspectOf() { return INSTANCE; }
-    public static boolean hasAspect() { return HAS_ASPECT; }
 
     /**
      * Per-target logger cache to avoid repeated lookups.

@@ -1,8 +1,5 @@
 package de.burger.forensics.infrastructure.rt;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -19,7 +16,7 @@ class RtTraceAdditionalTest {
 
     @Test
     void emitsBranchAndIoEventsWithEscapedPayloads() {
-        String output = captureStdout(() -> {
+        String output = RtTraceLogCapture.capture(() -> {
             RtTrace.setCorrelationId("corr-101");
             RtTrace.onEnter(RtTraceAdditionalTest.class, "work", "value\"1", "line\nbreak");
             RtTrace.onExit(RtTraceAdditionalTest.class, "work", "done");
@@ -53,7 +50,7 @@ class RtTraceAdditionalTest {
 
     @Test
     void conditionErrorIncludesErrorDetails() {
-        String output = captureStdout(
+        String output = RtTraceLogCapture.capture(
             () -> RtTrace.conditionError("rule-77", "x > 0", new IllegalArgumentException("bad"))
         );
 
@@ -67,7 +64,7 @@ class RtTraceAdditionalTest {
 
     @Test
     void handlesEmptyDetailsAndSpanStackState() {
-        String output = captureStdout(() -> {
+        String output = RtTraceLogCapture.capture(() -> {
             RtSpanToken token = RtTrace.beginSpan("work");
             RtTrace.trace(RtEvent.CUSTOM, Map.of());
             RtTrace.trace(RtEvent.CUSTOM, null);
@@ -90,7 +87,7 @@ class RtTraceAdditionalTest {
 
     @Test
     void onExceptionHandlesNullAndEmptyStackTrace() {
-        String output = captureStdout(() -> {
+        String output = RtTraceLogCapture.capture(() -> {
             RtTrace.onException(null);
             Throwable empty = new IllegalStateException("boom");
             empty.setStackTrace(new StackTraceElement[0]);
@@ -102,17 +99,5 @@ class RtTraceAdditionalTest {
         assertThat(output)
             .contains("\"event\":\"EXCEPTION_THROWN\"")
             .contains("\"topFrame\":\"\"");
-    }
-
-    private static String captureStdout(Runnable runnable) {
-        PrintStream original = System.out;
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        try (PrintStream replacement = new PrintStream(buffer, true, StandardCharsets.UTF_8)) {
-            System.setOut(replacement);
-            runnable.run();
-        } finally {
-            System.setOut(original);
-        }
-        return buffer.toString(StandardCharsets.UTF_8);
     }
 }
