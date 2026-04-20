@@ -1,5 +1,8 @@
 # Forensics Tracing Gradle Plugin and Runtime Tracing Support
 
+## Quality Gate Badge
+[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=MatthiasBurger-Coder_forensics_tracing)](https://sonarcloud.io/summary/new_code?id=MatthiasBurger-Coder_forensics_tracing)
+
 ## What this project is
 
 This repository provides:
