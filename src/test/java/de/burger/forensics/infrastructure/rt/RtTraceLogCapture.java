@@ -56,18 +56,20 @@ final class RtTraceLogCapture {
         }
 
         @Override
-        public void publish(LogRecord record) {
-            if (isLoggable(record)) {
-                messages.append(record.getMessage()).append(System.lineSeparator());
+        public void publish(LogRecord logRecord) {
+            if (isLoggable(logRecord)) {
+                messages.append(logRecord.getMessage()).append(System.lineSeparator());
             }
         }
 
         @Override
         public void flush() {
+            // No buffering beyond the in-memory StringBuilder needs explicit flushing.
         }
 
         @Override
         public void close() {
+            // This test handler does not own external resources that need cleanup.
         }
 
         private String messages() {

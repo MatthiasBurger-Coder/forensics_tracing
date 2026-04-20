@@ -439,8 +439,8 @@ public final class RtTrace {
 
     private static final class PlainMessageFormatter extends Formatter {
         @Override
-        public String format(LogRecord record) {
-            return record.getMessage() + System.lineSeparator();
+        public String format(LogRecord logRecord) {
+            return logRecord.getMessage() + System.lineSeparator();
         }
     }
 }
