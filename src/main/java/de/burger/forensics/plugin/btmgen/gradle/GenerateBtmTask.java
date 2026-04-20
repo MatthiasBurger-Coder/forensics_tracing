@@ -294,7 +294,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
     private static RuleHeader parseRuleHeader(String rule, int lineStart, int lineEnd) {
         int contentStart = skipInlineWhitespace(rule, lineStart, lineEnd);
-        if (!matchesKeyword(rule, contentStart, lineEnd, "RULE")) {
+        if (!matchesKeyword(rule, contentStart, lineEnd)) {
             return null;
         }
 
@@ -314,9 +314,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
         return new RuleHeader(lineStart, lineEnd, prefix, name);
     }
 
-    private static boolean matchesKeyword(String rule, int start, int lineEnd, String keyword) {
-        int keywordEnd = start + keyword.length();
-        return keywordEnd <= lineEnd && rule.regionMatches(start, keyword, 0, keyword.length());
+    private static boolean matchesKeyword(String rule, int start, int lineEnd) {
+        int keywordEnd = start + "RULE".length();
+        return keywordEnd <= lineEnd && rule.regionMatches(start, "RULE", 0, "RULE".length());
     }
 
     private static int skipInlineWhitespace(String rule, int start, int end) {
