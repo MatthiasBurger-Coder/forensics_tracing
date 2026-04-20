@@ -18,7 +18,7 @@ public record GenerationRequest(Path root,
 
     public GenerationRequest {
         Objects.requireNonNull(root, "root");
-        helperFqcn = Objects.requireNonNull(helperFqcn, "helperFqcn");
+        Objects.requireNonNull(helperFqcn, "helperFqcn");
         if (helperFqcn.isBlank()) {
             helperFqcn = DEFAULT_HELPER_FQCN;
         }

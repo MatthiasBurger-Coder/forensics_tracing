@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
  * Falls back to GenericUnsafeStrategy for unknown/complex expressions.
  */
 public final class DefaultStrategyFactory implements StrategyFactory {
+    private static final String RETURN_KEYWORD = "return";
 
     private static final Pattern NULL_CHECK =
             Pattern.compile("==\\s*null|!=\\s*null", Pattern.CASE_INSENSITIVE);
@@ -71,8 +72,8 @@ public final class DefaultStrategyFactory implements StrategyFactory {
 
     private static String stripReturnKeyword(String expression) {
         String result = expression;
-        if (result.regionMatches(true, 0, "return", 0, "return".length())) {
-            result = result.substring("return".length()).trim();
+        if (result.regionMatches(true, 0, RETURN_KEYWORD, 0, RETURN_KEYWORD.length())) {
+            result = result.substring(RETURN_KEYWORD.length()).trim();
         }
         return result;
     }
