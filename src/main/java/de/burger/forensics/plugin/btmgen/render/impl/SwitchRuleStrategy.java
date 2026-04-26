@@ -8,7 +8,7 @@ import de.burger.forensics.plugin.btmgen.render.spi.AbstractBytemanStrategy;
 public final class SwitchRuleStrategy extends AbstractBytemanStrategy implements RuleRenderStrategy {
     @Override public String id() { return "SWITCH"; }
     @Override public String render(RuleParams p) {
-        // p.displayName() optional als Label/Vorschau
+        // p.displayName() is optional and acts as the label preview.
         return """
             RULE %s : switch %s#%s
             CLASS %s

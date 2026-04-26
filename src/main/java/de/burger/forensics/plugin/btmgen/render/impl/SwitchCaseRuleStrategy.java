@@ -8,7 +8,7 @@ import de.burger.forensics.plugin.btmgen.render.spi.AbstractBytemanStrategy;
 public final class SwitchCaseRuleStrategy extends AbstractBytemanStrategy implements RuleRenderStrategy {
     @Override public String id() { return "SWITCH_CASE"; }
     @Override public String render(RuleParams p) {
-        // Nutze p.displayName() als Case-Label; alternativ eigenes Feld/Meta
+        // Use p.displayName() as the case label; otherwise provide dedicated metadata.
         String label = p.displayName() == null ? "<case>" : esc(p.displayName());
         return """
             RULE %s : switch-case %s#%s
