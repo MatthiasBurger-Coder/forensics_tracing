@@ -57,14 +57,14 @@ Notes:
 
 ## Prerequisites
 
-- Java 21 for the consumer-project examples in this README
+- Java 21
 - Gradle 9.1
 - a Java project to analyze
 - Byteman agent/tooling if you want the generated rules to execute inside a JVM
 
 Important baseline note:
 
-- The plugin project in this repository is compiled and tested with a Java 17 toolchain in `build.gradle.kts`.
+- The plugin project in this repository is compiled and tested with a Java 21 toolchain in `build.gradle.kts`.
 - The examples below assume a consumer build running on Java 21 and Gradle 9.1, because that is the target documentation baseline for this README.
 
 ## Build this project
@@ -126,8 +126,10 @@ Practical notes:
 - `de.burger.forensics.btmgen` is the verified plugin ID.
 - `btmGen` is the verified extension name.
 - `generateBtmRules` is the verified task name.
-- Applying a Java plugin (`java`, `java-library`, or another plugin based on `JavaPlugin`) is the practical default.
+- Applying a Java plugin (`java`, `java-library`, or another plugin based on `JavaPlugin`) is the practical default for projects whose own sources should be scanned.
+- For a monorepo root task, the root project itself does not need a Java plugin as long as the scanned subprojects expose Java `main` source sets.
 - When a Java plugin is present, `BtmGenPlugin` automatically attaches the plugin runtime artifact to `runtimeOnly` and `testRuntimeOnly`.
+- When `scanSubprojects=true` is configured on the project where the plugin is applied, Java subprojects in the same Gradle build also receive that runtime helper on `runtimeOnly` and `testRuntimeOnly`.
 - The plugin also wires `generateBtmRules` into `build` when a `build` task exists.
 
 This repository also exposes Gradle publishing tasks, but this README documents the composite-build path first because it is the most direct repository-backed development flow.
@@ -138,11 +140,12 @@ The verified configuration split is:
 
 - Extension `btmGen`
   - `sourceRoot`
+  - `sourceRoots`
+  - `scanSubprojects`
   - `outputFile`
   - `helperFqn`
   - `includes`
   - `minBranchesPerMethod`
-  - also verified: `sourceRoots`, `scanSubprojects`
 - Task `generateBtmRules`
   - `includeEntryExit`
   - `minBranchesPerMethod`
@@ -155,6 +158,7 @@ Verified Kotlin DSL example:
 ```kotlin
 btmGen {
     sourceRoot.set(file("src/main/java"))
+    sourceRoots.from(file("shared-generated/java"))
     outputFile.set(file("build/forensics/forensics.btm"))
     helperFqn.set("de.burger.forensics.infrastructure.rt.RtTraceHelper")
     includes.set("com.example,org.acme")
@@ -171,7 +175,18 @@ Property behavior:
 
 - `sourceRoot`
   - Default: `src/main/java`
-  - Used as the fallback scan root
+  - Legacy single-root alias kept for backward compatibility
+  - Missing directories are ignored instead of failing the task
+- `sourceRoots`
+  - Additional explicit scan roots
+  - Combined with `sourceRoot` and auto-discovered Gradle `SourceSet` roots
+  - Use this for legacy folders, external folders, and included/composite build sources
+- `scanSubprojects`
+  - Default: `false`
+  - Scans the `main` `SourceSet` of Java subprojects in the current Gradle build
+  - Non-Java subprojects are ignored
+  - The root project does not need its own `src/main/java`
+  - Composite or included builds are not auto-discovered through this flag; add those directories with `sourceRoots`
 - `outputFile`
   - Default: `build/forensics/forensics.btm`
   - The task writes exactly one `.btm` file there by default
@@ -190,10 +205,35 @@ Property behavior:
   - Default: `2`
   - Methods with fewer than that many branch events (`IF_TRUE`, `IF_FALSE`, `SWITCH`, `SWITCH_CASE`) are filtered out from the final output
 
-Also verified but optional:
+Monorepo example:
 
-- `sourceRoots`: explicit multi-root scan input
-- `scanSubprojects`: automatically adds `src/main/java` from the root project and all subprojects
+```kotlin
+plugins {
+    id("de.burger.forensics.btmgen")
+}
+
+btmGen {
+    scanSubprojects.set(true)
+    outputFile.set(layout.buildDirectory.file("forensics/all-modules.btm").get().asFile)
+}
+```
+
+Explicit external roots:
+
+```kotlin
+btmGen {
+    sourceRoots.from(
+        file("legacy-module/src/main/java"),
+        file("../included-build/some-module/src/main/java")
+    )
+}
+```
+
+Notes:
+
+- Normal `scanSubprojects` discovery scans Gradle subprojects of the current build by reading their `main` `SourceSet`.
+- Custom directories configured with `sourceSets.main.java.srcDirs(...)` are picked up automatically.
+- Included builds and composite builds are not introspected automatically. Supply their source directories explicitly through `sourceRoots`.
 
 ## Generate the `.btm` rules
 
@@ -350,6 +390,9 @@ About `forensics.aspect.enabled`:
 - No useful output because of the wrong source root:
   `GenerateBtmTask` filters source roots that do not exist. If you configured the wrong `sourceRoot` or `sourceRoots`, the task can still create the output file but it may contain only the generated header and no real rules.
 
+- `scanSubprojects` misses code from another build:
+  `scanSubprojects` only scans Gradle subprojects of the current build. For included builds, composite builds, or arbitrary external folders, add those directories explicitly with `sourceRoots`.
+
 - No runtime trace appears:
   Generating `.btm` files is not enough. You must both load the script with Byteman and enable tracing with `-Dforensics.rt.enabled=true` or `FORENSICS_RT_ENABLED=true`.
 
@@ -380,12 +423,20 @@ The test suite in `src/test/java` verifies the behavior described above. In part
   - extension/task registration
   - default conventions
   - runtime helper attachment to `runtimeClasspath` and `testRuntimeClasspath`
+  - monorepo runtime helper attachment to Java subprojects
   - `build` wiring
+
+- `BtmGenPluginFunctionalTest`
+  - root-project monorepo scanning without a root `src/main/java`
+  - custom `main` source-set directories in subprojects
+  - `UP-TO-DATE` behavior and reruns when sources change
 
 - `GenerateBtmTaskTest`
   - scan mode
   - single-template mode
   - multi-root and subproject scanning
+  - missing explicit roots and missing legacy `sourceRoot`
+  - subproject `SourceSet` discovery and custom `sourceSets.main.java.srcDirs(...)`
   - helper FQCN normalization
   - duplicate `RULE` header deduplication
   - `THREAD_LIFECYCLE` and `JDBC_EXECUTE` manual rendering paths

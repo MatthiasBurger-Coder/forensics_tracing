@@ -57,15 +57,18 @@ configurations.all {
     exclude(group = "org.slf4j", module = "slf4j-log4j12")
 }
 
-val java17 = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(17)) }
+val java21 = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
 plugins.withType<JavaPlugin>().configureEach {
     extensions.configure<JavaPluginExtension> {
-        toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+        toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
         withSourcesJar()
     }
 
     tasks.withType<JavaCompile>().configureEach {
         options.encoding = "UTF-8"
+        options.release.set(21)
         options.compilerArgs.addAll(listOf("-Xlint:all"))
     }
 }
@@ -79,16 +82,16 @@ val testLogFile = layout.buildDirectory.file("test-logs/forensics-btmgen.log")
 
 fun javaAgentArg(file: File): String {
     val p = file.absolutePath
-    // Falls Leerzeichen/Sonderzeichen: komplett in Anführungszeichen setzen
+    // Quote the full javaagent path when it contains whitespace.
     val quoted = if (p.any { it.isWhitespace() }) "\"$p\"" else p
     return "-javaagent:$quoted"
 }
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
-    javaLauncher.set(java17)
+    javaLauncher.set(java21)
     jvmArgumentProviders += CommandLineArgumentProvider {
         val weaverJar = aspectjAgent.resolve().firstOrNull { it.name.startsWith("aspectjweaver") }
-            ?: throw GradleException("aspectjweaver*.jar nicht gefunden. Füge 'aspectjAgent(libs.aspectj.weaver)' hinzu.")
+            ?: throw GradleException("aspectjweaver*.jar not found. Add 'aspectjAgent(libs.aspectj.weaver)'.")
         val arg = javaAgentArg(weaverJar)
         listOf(
             arg,
@@ -100,7 +103,7 @@ tasks.withType<Test>().configureEach {
     testLogging {
         events("FAILED", "SKIPPED")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-        showStandardStreams = true // zeigt Aspect-Logs in der Test-Konsole
+        showStandardStreams = true // Keep AspectJ output visible in the test console.
     }
 }
 
@@ -108,29 +111,29 @@ tasks.test {
     useJUnitPlatform()
 
     doFirst {
-        // Log-Ordner sicherstellen
+        // Ensure the test log directory exists.
         testLogFile.get().asFile.parentFile.mkdirs()
 
-        // Aspect-File-Mirror
+        // Mirror AspectJ output into a dedicated test log file.
         systemProperty("forensics.btmgen.logToFile", "true")
         systemProperty("forensics.btmgen.logFile", testLogFile.get().asFile.absolutePath)
 
         jvmArgs(
-            "-Xshare:off" // ok, optional
+            "-Xshare:off" // Optional, but keeps test JVM output predictable.
         )
 
-        // Weniger Weaver-Output
+        // Reduce AspectJ weaver noise during tests.
         systemProperty("org.aspectj.weaver.showWeaveInfo", "false")
         systemProperty("aj.weaving.verbose", "false")
 
-        // Explizit die aop.xml aus main laden (nur 1x vorhanden lassen)
+        // Load the main aop.xml explicitly to keep weaving configuration deterministic.
         systemProperty("org.aspectj.weaver.loadtime.configuration", "classpath:META-INF/aop.xml")
 
-        // Dein eigener Schalter
+        // Keep the repository-specific feature toggle enabled in tests.
         systemProperty("forensics.aspect.enabled", "true")
     }
 
-    // Test-Logging
+    // Keep test logging verbose enough for agent and weaving failures.
     testLogging {
         events("FAILED", "SKIPPED", "STANDARD_OUT", "STANDARD_ERROR")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
@@ -204,20 +207,20 @@ val mockitoAgentJar: Provider<String> = configurations.named("testRuntimeClasspa
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 
-    // Disabling CDS avoids noisy warnings when agents append to bootstrap classpath on some JDKs
+    // Disabling CDS avoids noisy warnings when agents append to the bootstrap classpath.
     jvmArgs("-Xshare:off")
     finalizedBy(tasks.jacocoTestReport)
 
-    // Use a Provider-based build directory (Gradle 7+; recommended for 8/9+)
+    // Keep the report directory lazy for Gradle 9.1 configuration avoidance.
     val reportsDir = layout.buildDirectory.dir("reports/spock")
 
-    // Pass absolute path lazily to the test JVM
+    // Pass the resolved report directory lazily to the test JVM.
     systemProperty(
         "com.athaydes.spockframework.report.outputDir",
         reportsDir.map { it.asFile.absolutePath }.get()
     )
 
-    // Optional extras
+    // Optional report metadata.
     systemProperty("com.athaydes.spockframework.report.projectName", "Customer Service Specs")
     systemProperty("com.athaydes.spockframework.report.projectVersion", "2.0-SNAPSHOT")
     systemProperty("com.athaydes.spockframework.report.outputFormats", "html")
@@ -236,7 +239,7 @@ tasks.jacocoTestReport {
         csv.required.set(false)
         html.required.set(true)
     }
-    // Exclude the application entry point from coverage reports
+    // Exclude the application entry point from coverage reports.
     classDirectories.setFrom(
         files(
             classDirectories.files.map {
@@ -386,18 +389,16 @@ tasks.register<PackageCoverageReportTask>("checkPackageCoverage") {
     branchThreshold.set(BigDecimal("0.80"))
 }
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
-    // Fail the build if coverage is below 86%
     violationRules {
         rule {
             limit {
-                // enforce 86% line coverage
                 counter = "LINE"
                 value = "COVEREDRATIO"
                 minimum = "0.00".toBigDecimal()
             }
         }
     }
-    // Exclude the application entry point from coverage verification
+    // Exclude the application entry point from coverage verification.
     classDirectories.setFrom(
         files(
             classDirectories.files.map {
@@ -430,7 +431,7 @@ sonar {
         property("sonar.projectKey", "MatthiasBurger-Coder_forensics_tracing")
         property("sonar.organization", "matthiasburger-coder")
         property("sonar.host.url", "https://sonarcloud.io")
-        // Coverage-Report-Pfad:
+        // Keep Sonar aligned with the JaCoCo XML report location.
         property(
             "sonar.coverage.jacoco.xmlReportPaths",
             layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml").get().asFile.absolutePath

@@ -11,13 +11,10 @@ import org.jetbrains.annotations.NotNull;
 import java.io.File;
 import java.util.Optional;
 
-/**
- * Compatible wiring when the extension exposes Property<File> rather than DirectoryProperty/RegularFileProperty.
- * We map File -> Directory/RegularFile Providers without reading values eagerly.
- */
 public final class BtmGenPlugin implements Plugin<@NotNull Project> {
     private static final String FORENSICS_GROUP = "forensics";
     private static final String FORENSICS_DIR = "forensics";
+    private static final String RUNTIME_HELPER_ATTACHED_MARKER = "de.burger.forensics.btmgen.runtimeHelperAttached";
 
     @Override
     public void apply(Project project) {
@@ -32,35 +29,6 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
                     t.setGroup(FORENSICS_GROUP);
                     t.setDescription("Generates Byteman (.btm) rules by scanning Java sources.");
                     t.setExtension(ext);
-
-                    // --- Conventions/Defaults ---
-                    // If extension provides explicit values -> set them directly (no providers)
-                    if (ext.getSourceRoot().isPresent()) {
-                        t.getSourceRoot().set(ext.getSourceRoot().get());
-                    } else {
-                        // Otherwise use a safe default provider from the layout
-                        t.getSourceRoot().convention(
-                                project.getLayout().getProjectDirectory().dir("src/main/java")
-                        );
-                    }
-
-                    if (ext.getOutputFile().isPresent()) {
-                        var file = ext.getOutputFile().get();
-                        t.getOutputFile().fileValue(file);
-                        if (file.getParentFile() != null) {
-                            t.getOutputDir().fileValue(file.getParentFile());
-                        }
-                    } else {
-                        t.getOutputFile().convention(
-                                project.getLayout().getBuildDirectory().file(FORENSICS_DIR + "/forensics.btm")
-                        );
-                    }
-
-                    if (!t.getOutputDir().isPresent()) {
-                        t.getOutputDir().convention(
-                                project.getLayout().getBuildDirectory().dir(FORENSICS_DIR)
-                        );
-                    }
                 }
         );
         project.getTasks().register(
@@ -90,12 +58,27 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
         });
 
         project.getPlugins().withType(JavaPlugin.class, ignored -> attachRuntimeHelper(project));
+        configureSubprojectRuntimeHelpers(project, ext);
 
         project.getTasks().matching(t -> t.getName().equals("build"))
                 .configureEach(t -> t.dependsOn(taskProvider));
     }
 
+    private void configureSubprojectRuntimeHelpers(Project project, BtmGenExtension ext) {
+        project.getSubprojects().forEach(subproject ->
+            subproject.getPlugins().withType(JavaPlugin.class, ignored -> {
+                if (ext.getScanSubprojects().getOrElse(false)) {
+                    attachRuntimeHelper(subproject);
+                }
+            })
+        );
+    }
+
     private void attachRuntimeHelper(Project project) {
+        if (runtimeHelperAlreadyAttached(project)) {
+            return;
+        }
+
         Optional<File> runtimeArtifact = PluginRuntimeLocator.locateFor(BtmGenPlugin.class);
         if (runtimeArtifact.isEmpty()) {
             project.getLogger().warn("forensics-btmgen: Unable to locate runtime helper artifact; helper will not be added to classpath.");
@@ -103,13 +86,22 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
         }
 
         FileCollection helperFiles = project.files(runtimeArtifact.get());
-        addDependencyIfPresent(project, "runtimeOnly", helperFiles);
-        addDependencyIfPresent(project, "testRuntimeOnly", helperFiles);
+        boolean attached = addDependencyIfPresent(project, "runtimeOnly", helperFiles);
+        attached = addDependencyIfPresent(project, "testRuntimeOnly", helperFiles) || attached;
+        if (attached) {
+            project.getExtensions().getExtraProperties().set(RUNTIME_HELPER_ATTACHED_MARKER, true);
+        }
     }
 
-    private void addDependencyIfPresent(Project project, String configurationName, FileCollection files) {
+    private boolean addDependencyIfPresent(Project project, String configurationName, FileCollection files) {
         if (project.getConfigurations().findByName(configurationName) != null) {
             project.getDependencies().add(configurationName, files);
+            return true;
         }
+        return false;
+    }
+
+    private boolean runtimeHelperAlreadyAttached(Project project) {
+        return project.getExtensions().getExtraProperties().has(RUNTIME_HELPER_ATTACHED_MARKER);
     }
 }

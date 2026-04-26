@@ -50,6 +50,24 @@ class BtmGenPluginTest {
     }
 
     @Test
+    void appliesRuntimeHelperToJavaSubprojectsWhenMonorepoScanningIsEnabled() {
+        Project rootProject = ProjectBuilder.builder().build();
+        Project subproject = ProjectBuilder.builder().withParent(rootProject).withName("module-a").build();
+
+        rootProject.getPlugins().apply("de.burger.forensics.btmgen");
+        rootProject.getExtensions().getByType(BtmGenExtension.class).getScanSubprojects().set(true);
+        subproject.getPlugins().apply("java-library");
+
+        Optional<File> runtimeArtifact = PluginRuntimeLocator.locateFor(BtmGenPlugin.class);
+        assertTrue(runtimeArtifact.isPresent(), "Expected plugin runtime artifact to be locatable");
+
+        assertTrue(subproject.getConfigurations().getByName("runtimeClasspath").resolve().contains(runtimeArtifact.get()),
+                "runtimeClasspath should include the plugin runtime helper in Java subprojects");
+        assertTrue(subproject.getConfigurations().getByName("testRuntimeClasspath").resolve().contains(runtimeArtifact.get()),
+                "testRuntimeClasspath should include the plugin runtime helper in Java subprojects");
+    }
+
+    @Test
     void realizeGenerateBtmRulesUsesDefaultConventions() {
         Project project = ProjectBuilder.builder().build();
         project.getPlugins().apply("de.burger.forensics.btmgen");
@@ -91,8 +109,9 @@ class BtmGenPluginTest {
         Method method = BtmGenPlugin.class.getDeclaredMethod("addDependencyIfPresent", Project.class, String.class, FileCollection.class);
         method.setAccessible(true);
 
-        method.invoke(plugin, project, "missingConfiguration", project.files("runtime.jar"));
+        Object attached = method.invoke(plugin, project, "missingConfiguration", project.files("runtime.jar"));
 
         assertNull(project.getConfigurations().findByName("missingConfiguration"));
+        assertEquals(false, attached);
     }
 }

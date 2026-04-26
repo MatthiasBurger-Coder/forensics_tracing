@@ -34,7 +34,6 @@ public class BtmGenExtension {
         this.minBranchesPerMethod = objects.property(Integer.class);
         this.scanSubprojects = objects.property(Boolean.class);
         this.sourceRoot.convention(new File("src/main/java"));
-        this.sourceRoots.from(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
         this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
         this.minBranchesPerMethod.convention(2);

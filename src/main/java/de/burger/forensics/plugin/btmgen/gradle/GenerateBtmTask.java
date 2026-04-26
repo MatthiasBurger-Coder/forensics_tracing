@@ -17,11 +17,15 @@ import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.FileTree;
+import org.gradle.api.Project;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.*;
 import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.SourceSet;
+import org.gradle.api.tasks.SourceSetContainer;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
@@ -45,21 +49,25 @@ import java.util.Set;
  */
 public abstract class GenerateBtmTask extends DefaultTask {
     // ---- Configurable inputs ----
-    @InputDirectory
-    @Optional
-    @PathSensitive(PathSensitivity.RELATIVE)
+    @Internal
     public abstract DirectoryProperty getSourceRoot();
+
+    @Internal
+    public abstract ConfigurableFileCollection getSourceRoots();
 
     @InputFiles
     @Optional
     @PathSensitive(PathSensitivity.RELATIVE)
-    public abstract ConfigurableFileCollection getSourceRoots();
+    public FileTree getSourceFiles() {
+        applyDefaultConventions();
+        return sourceFilesFor(resolveSourceRoots());
+    }
 
     @OutputFile
     @Optional
     public abstract RegularFileProperty getOutputFile();
 
-    @OutputDirectory
+    @Internal
     public abstract DirectoryProperty getOutputDir();
 
     /** Optional: render exactly one template with given class/method instead of scanning. */
@@ -81,13 +89,10 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
         applyDefaultConventions();
 
-        // ✅ Use direct setters (no Provider lambdas) to avoid "Provider is not a functional interface"
         if (ext.getSourceRoot().isPresent()) {
             getSourceRoot().set(ext.getSourceRoot().get());
         }
-        if (!ext.getSourceRoots().isEmpty()) {
-            getSourceRoots().setFrom(ext.getSourceRoots());
-        }
+        getSourceRoots().setFrom(ext.getSourceRoots());
         if (ext.getOutputFile().isPresent()) {
             var file = ext.getOutputFile().get();
             getOutputFile().fileValue(file);
@@ -180,9 +185,6 @@ public abstract class GenerateBtmTask extends DefaultTask {
         if (!getSourceRoot().isPresent()) {
             getSourceRoot().convention(layout.getProjectDirectory().dir("src/main/java"));
         }
-        if (getSourceRoots().isEmpty()) {
-            getSourceRoots().from(getSourceRoot());
-        }
         if (!getOutputFile().isPresent()) {
             getOutputFile().convention(
                     layout.getBuildDirectory().file("forensics/forensics.btm")
@@ -227,23 +229,14 @@ public abstract class GenerateBtmTask extends DefaultTask {
     }
 
     private List<Path> resolveSourceRoots() {
-        Set<Path> roots = new LinkedHashSet<>();
-        getSourceRoots().getFiles().stream()
-            .map(File::toPath)
-            .forEach(roots::add);
-        if (getScanSubprojects().getOrElse(false)) {
-            getProject().getRootProject().getAllprojects().forEach(project -> {
-                Path candidate = project.getLayout().getProjectDirectory().dir("src/main/java").getAsFile().toPath();
-                roots.add(candidate);
-            });
-        }
-        if (roots.isEmpty() && getSourceRoot().isPresent()) {
-            roots.add(getSourceRoot().get().getAsFile().toPath());
-        }
-        return roots.stream()
-            .filter(Files::exists)
-            .filter(Files::isDirectory)
-            .toList();
+        applyDefaultConventions();
+        File sourceRoot = getSourceRoot().isPresent() ? getSourceRoot().get().getAsFile() : null;
+        return new SourceRootResolver(
+            getProject(),
+            sourceRoot,
+            getSourceRoots().getFiles(),
+            getScanSubprojects().getOrElse(false)
+        ).resolve();
     }
 
     private List<String> packagePrefixes() {
@@ -373,5 +366,75 @@ public abstract class GenerateBtmTask extends DefaultTask {
         }
     }
 
+    private FileTree sourceFilesFor(List<Path> roots) {
+        ConfigurableFileCollection sourceFiles = getProject().files();
+        roots.forEach(root -> sourceFiles.from(sourceInputFor(root)));
+        return sourceFiles.getAsFileTree().matching(patterns -> patterns.include("**/*.java"));
+    }
+
+    private Object sourceInputFor(Path root) {
+        if (Files.isDirectory(root)) {
+            return getProject().fileTree(root.toFile(), spec -> spec.include("**/*.java"));
+        }
+        return root.toFile();
+    }
+
     private record RuleHeader(int startIndex, int endIndex, String prefix, String name) { }
+
+    private static final class SourceRootResolver {
+        private final Project project;
+        private final File sourceRootAlias;
+        private final Set<File> explicitSourceRoots;
+        private final boolean scanSubprojects;
+
+        private SourceRootResolver(
+            Project project,
+            File sourceRootAlias,
+            Set<File> explicitSourceRoots,
+            boolean scanSubprojects
+        ) {
+            this.project = project;
+            this.sourceRootAlias = sourceRootAlias;
+            this.explicitSourceRoots = explicitSourceRoots;
+            this.scanSubprojects = scanSubprojects;
+        }
+
+        private List<Path> resolve() {
+            Set<Path> roots = new LinkedHashSet<>();
+            addPath(roots, sourceRootAlias);
+            explicitSourceRoots.forEach(root -> addPath(roots, root));
+            addSourceSetRoots(project, roots);
+            if (scanSubprojects) {
+                project.getSubprojects().forEach(subproject -> addSourceSetRoots(subproject, roots));
+            }
+            return roots.stream()
+                .filter(SourceRootResolver::isExistingSourceLocation)
+                .toList();
+        }
+
+        private void addSourceSetRoots(Project candidate, Set<Path> roots) {
+            SourceSetContainer sourceSets = candidate.getExtensions().findByType(SourceSetContainer.class);
+            if (sourceSets == null) {
+                return;
+            }
+
+            SourceSet mainSourceSet = sourceSets.findByName(SourceSet.MAIN_SOURCE_SET_NAME);
+            if (mainSourceSet == null) {
+                return;
+            }
+
+            mainSourceSet.getAllJava().getSrcDirs().forEach(root -> addPath(roots, root));
+        }
+
+        private void addPath(Set<Path> roots, File root) {
+            if (root == null) {
+                return;
+            }
+            roots.add(root.toPath().toAbsolutePath().normalize());
+        }
+
+        private static boolean isExistingSourceLocation(Path path) {
+            return Files.exists(path) && (Files.isDirectory(path) || Files.isRegularFile(path));
+        }
+    }
 }
