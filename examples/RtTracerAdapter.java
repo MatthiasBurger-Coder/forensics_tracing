@@ -33,7 +33,7 @@ public final class RtTracerAdapter implements Tracer {
     }
 
     @Override
-    public void var(String name, Object value) {
+    public void setVariable(String name, Object value) {
         RtTrace.varSet(name, value);
     }
 
