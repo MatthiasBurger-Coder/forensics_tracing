@@ -13,6 +13,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BtmGenPluginTest {
+    private static final String RUNTIME_HELPER_ATTACHED_MARKER = "de.burger.forensics.btmgen.runtimeHelperAttached";
 
     @Test
     void registersActivityPumlTask() {
@@ -40,12 +41,11 @@ class BtmGenPluginTest {
         project.getPlugins().apply("java");
         project.getPlugins().apply("de.burger.forensics.btmgen");
 
-        Optional<File> runtimeArtifact = PluginRuntimeLocator.locateFor(BtmGenPlugin.class);
-        assertTrue(runtimeArtifact.isPresent(), "Expected plugin runtime artifact to be locatable");
+        File runtimeArtifact = runtimeArtifact();
 
-        assertTrue(project.getConfigurations().getByName("runtimeClasspath").resolve().contains(runtimeArtifact.get()),
+        assertTrue(project.getConfigurations().getByName("runtimeClasspath").resolve().contains(runtimeArtifact),
                 "runtimeClasspath should include the plugin runtime helper");
-        assertTrue(project.getConfigurations().getByName("testRuntimeClasspath").resolve().contains(runtimeArtifact.get()),
+        assertTrue(project.getConfigurations().getByName("testRuntimeClasspath").resolve().contains(runtimeArtifact),
                 "testRuntimeClasspath should include the plugin runtime helper");
     }
 
@@ -58,13 +58,27 @@ class BtmGenPluginTest {
         rootProject.getExtensions().getByType(BtmGenExtension.class).getScanSubprojects().set(true);
         subproject.getPlugins().apply("java-library");
 
-        Optional<File> runtimeArtifact = PluginRuntimeLocator.locateFor(BtmGenPlugin.class);
-        assertTrue(runtimeArtifact.isPresent(), "Expected plugin runtime artifact to be locatable");
+        File runtimeArtifact = runtimeArtifact();
 
-        assertTrue(subproject.getConfigurations().getByName("runtimeClasspath").resolve().contains(runtimeArtifact.get()),
+        assertTrue(subproject.getConfigurations().getByName("runtimeClasspath").resolve().contains(runtimeArtifact),
                 "runtimeClasspath should include the plugin runtime helper in Java subprojects");
-        assertTrue(subproject.getConfigurations().getByName("testRuntimeClasspath").resolve().contains(runtimeArtifact.get()),
+        assertTrue(subproject.getConfigurations().getByName("testRuntimeClasspath").resolve().contains(runtimeArtifact),
                 "testRuntimeClasspath should include the plugin runtime helper in Java subprojects");
+        assertEquals(1L, fileDependencyCount(subproject, "runtimeOnly"));
+        assertEquals(1L, fileDependencyCount(subproject, "testRuntimeOnly"));
+    }
+
+    @Test
+    void ignoresNonJavaSubprojectsWhenMonorepoScanningIsEnabled() {
+        Project rootProject = ProjectBuilder.builder().build();
+        Project subproject = ProjectBuilder.builder().withParent(rootProject).withName("docs").build();
+
+        rootProject.getPlugins().apply("de.burger.forensics.btmgen");
+        rootProject.getExtensions().getByType(BtmGenExtension.class).getScanSubprojects().set(true);
+
+        assertNull(subproject.getConfigurations().findByName("runtimeOnly"));
+        assertNull(subproject.getConfigurations().findByName("testRuntimeOnly"));
+        assertFalse(subproject.getExtensions().getExtraProperties().has(RUNTIME_HELPER_ATTACHED_MARKER));
     }
 
     @Test
@@ -108,13 +122,8 @@ class BtmGenPluginTest {
         project.getPlugins().apply("java");
         project.getPlugins().apply("de.burger.forensics.btmgen");
 
-        long runtimeFileDependencies = project.getConfigurations().getByName("runtimeOnly")
-                .getDependencies()
-                .stream()
-                .filter(dependency -> dependency.getGroup() == null)
-                .count();
-
-        assertEquals(1L, runtimeFileDependencies);
+        assertEquals(1L, fileDependencyCount(project, "runtimeOnly"));
+        assertEquals(1L, fileDependencyCount(project, "testRuntimeOnly"));
     }
 
     @Test
@@ -128,5 +137,19 @@ class BtmGenPluginTest {
 
         assertNull(project.getConfigurations().findByName("missingConfiguration"));
         assertEquals(false, attached);
+    }
+
+    private static File runtimeArtifact() {
+        Optional<File> runtimeArtifact = PluginRuntimeLocator.locateFor(BtmGenPlugin.class);
+        assertTrue(runtimeArtifact.isPresent(), "Expected plugin runtime artifact to be locatable");
+        return runtimeArtifact.get();
+    }
+
+    private static long fileDependencyCount(Project project, String configurationName) {
+        return project.getConfigurations().getByName(configurationName)
+                .getDependencies()
+                .stream()
+                .filter(dependency -> dependency.getGroup() == null)
+                .count();
     }
 }

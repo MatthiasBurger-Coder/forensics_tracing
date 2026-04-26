@@ -2,7 +2,9 @@ package de.burger.forensics.plugin.btmgen.gradle;
 
 import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
 import de.burger.forensics.plugin.btmgen.render.api.RuleRenderStrategy;
+import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
+import org.gradle.api.GradleException;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.testfixtures.ProjectBuilder;
@@ -277,6 +279,56 @@ class GenerateBtmTaskTest {
     }
 
     @Test
+    void resolveSourceRootsCombinesExplicitRootsWithAutoDiscoveredSubprojects(@TempDir Path tempDir) throws Exception {
+        Path rootDir = tempDir.resolve("root");
+        Path explicitRoot = tempDir.resolve("external/src/main/java");
+        Path moduleDir = rootDir.resolve("module-a");
+        Path moduleRoot = moduleDir.resolve("src/main/java");
+        Files.createDirectories(explicitRoot);
+        Files.createDirectories(moduleRoot);
+
+        var rootProject = ProjectBuilder.builder().withProjectDir(rootDir.toFile()).build();
+        var moduleProject = ProjectBuilder.builder().withParent(rootProject).withName("module-a").withProjectDir(moduleDir.toFile()).build();
+        moduleProject.getPlugins().apply("java-library");
+
+        var task = rootProject.getTasks().register("generateBtmCombinedRoots", GenerateBtmTask.class).get();
+        var extension = newExtension(rootProject);
+        extension.getSourceRoots().setFrom(explicitRoot.toFile());
+        extension.getScanSubprojects().set(true);
+        task.setExtension(extension);
+
+        Method resolveSourceRoots = GenerateBtmTask.class.getDeclaredMethod("resolveSourceRoots");
+        resolveSourceRoots.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        List<Path> roots = (List<Path>) resolveSourceRoots.invoke(task);
+
+        assertEquals(List.of(explicitRoot.toAbsolutePath().normalize(), moduleRoot.toAbsolutePath().normalize()), roots);
+    }
+
+    @Test
+    void resolveSourceRootsDeduplicatesDuplicateRootsAcrossInputs(@TempDir Path tempDir) throws Exception {
+        Path sourceRoot = tempDir.resolve("src/main/java");
+        Files.createDirectories(sourceRoot);
+
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        project.getPlugins().apply("java-library");
+        var task = project.getTasks().register("generateBtmDedupRoots", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        extension.getSourceRoot().set(sourceRoot.toFile());
+        extension.getSourceRoots().setFrom(sourceRoot.toFile(), tempDir.resolve("src/main/java").toFile());
+        task.setExtension(extension);
+
+        Method resolveSourceRoots = GenerateBtmTask.class.getDeclaredMethod("resolveSourceRoots");
+        resolveSourceRoots.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        List<Path> roots = (List<Path>) resolveSourceRoots.invoke(task);
+
+        assertEquals(List.of(sourceRoot.toAbsolutePath().normalize()), roots);
+    }
+
+    @Test
     void generatedRulesInvokeHelpersDirectly(@TempDir Path tempDir) throws IOException {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
         Path srcDir = tempDir.resolve("src/main/java/com/example");
@@ -490,6 +542,42 @@ class GenerateBtmTaskTest {
         task.generate();
 
         assertTrue(Files.exists(tempDir.resolve("build/forensics/forensics.btm")));
+    }
+
+    @Test
+    void activeRegistryFallsBackToBuiltInStrategiesWhenOnlyTheDefaultFingerprintRemains() throws Exception {
+        var project = ProjectBuilder.builder().build();
+        var task = project.getTasks().register("generateBtmRegistryFallback", GenerateBtmTask.class).get();
+
+        var registryField = GenerateBtmTask.class.getDeclaredField("registry");
+        registryField.setAccessible(true);
+        registryField.set(task, null);
+
+        Method activeRegistry = GenerateBtmTask.class.getDeclaredMethod("activeRegistry");
+        activeRegistry.setAccessible(true);
+
+        StrategyRegistry restoredRegistry = (StrategyRegistry) activeRegistry.invoke(task);
+        assertEquals(StrategyRegistries.defaultRegistry().ids(), restoredRegistry.ids());
+    }
+
+    @Test
+    void activeRegistryRejectsCustomFingerprintsWhenRegistryStateCannotBeRestored() throws Exception {
+        var project = ProjectBuilder.builder().build();
+        var task = project.getTasks().register("generateBtmCustomRegistryRestore", GenerateBtmTask.class).get();
+        task.getRegistryFingerprint().set("CUSTOM=com.example.CustomStrategy");
+
+        var registryField = GenerateBtmTask.class.getDeclaredField("registry");
+        registryField.setAccessible(true);
+        registryField.set(task, null);
+
+        Method activeRegistry = GenerateBtmTask.class.getDeclaredMethod("activeRegistry");
+        activeRegistry.setAccessible(true);
+
+        Exception thrown = assertThrows(Exception.class, () -> activeRegistry.invoke(task));
+        assertInstanceOf(GradleException.class, thrown.getCause());
+        assertTrue(thrown.getCause().getMessage().contains(
+                "Custom StrategyRegistry instances are not supported when the configuration cache restores this task."
+        ));
     }
 
     @Test

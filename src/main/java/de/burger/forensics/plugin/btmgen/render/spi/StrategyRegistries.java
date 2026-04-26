@@ -11,7 +11,7 @@ import de.burger.forensics.plugin.btmgen.render.impl.SwitchCaseRuleStrategy;
 public final class StrategyRegistries {
     private StrategyRegistries() {}
 
-    /** Default registry with the built-in strategies. */
+    /** Default registry with the built-in strategies and configuration-cache-safe defaults. */
     public static StrategyRegistry defaultRegistry() {
         return StrategyRegistry.builder()
                 .register(new ReturnRuleStrategy())

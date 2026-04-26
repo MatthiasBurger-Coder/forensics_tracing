@@ -53,6 +53,14 @@ import java.util.Set;
 public abstract class GenerateBtmTask extends DefaultTask {
     private StrategyRegistry registry = StrategyRegistries.defaultRegistry();
 
+    public GenerateBtmTask() {
+        getIncludeTimestampHeader().convention(false);
+        getOutputs().doNotCacheIf(
+                "Timestamp header is enabled and makes generated .btm output non-deterministic.",
+                task -> getIncludeTimestampHeader().getOrElse(false)
+        );
+    }
+
     // ---- Configurable inputs ----
     @Internal
     public abstract DirectoryProperty getSourceRoot();

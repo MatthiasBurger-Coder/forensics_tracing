@@ -12,7 +12,11 @@ import javax.inject.Inject;
 import java.io.File;
 
 /**
- * Extension to configure sourceRoot, outputFile and provide a StrategyRegistry.
+ * Extension to configure source roots, output location, and rendering strategies.
+ * <p>
+ * The built-in {@link StrategyRegistries#defaultRegistry()} is configuration-cache safe.
+ * Custom {@link StrategyRegistry} instances remain supported for normal builds, but they are
+ * not guaranteed to restore safely when Gradle reuses the configuration cache.
  */
 public class BtmGenExtension {
     private StrategyRegistry registry = StrategyRegistries.defaultRegistry();
@@ -47,6 +51,12 @@ public class BtmGenExtension {
         return registry;
     }
 
+    /**
+     * Sets a custom registry for rule rendering.
+     * <p>
+     * For configuration-cache-enabled builds, prefer the built-in registry unless the build
+     * is prepared to avoid cache reuse for this task.
+     */
     public void setRegistry(StrategyRegistry registry) {
         this.registry = registry == null ? StrategyRegistries.defaultRegistry() : registry;
     }
