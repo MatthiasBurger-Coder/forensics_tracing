@@ -53,6 +53,8 @@ import java.util.Set;
 public abstract class GenerateBtmTask extends DefaultTask {
     private StrategyRegistry registry = StrategyRegistries.defaultRegistry();
 
+    @Inject
+    @SuppressWarnings("java:S5993")
     public GenerateBtmTask() {
         getIncludeTimestampHeader().convention(false);
         getOutputs().doNotCacheIf(

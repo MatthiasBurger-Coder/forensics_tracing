@@ -63,7 +63,9 @@ class BtmFileWriterTest {
         Path blockingParent = tempDir.resolve("blockingParent");
         Files.createFile(blockingParent);
         Path output = blockingParent.resolve("cannotCreate.btm");
+        BtmFileWriter writer = new BtmFileWriter(Clock.systemUTC(), output);
+        List<String> rules = List.of("RULE X");
 
-        assertThrows(UncheckedIOException.class, () -> new BtmFileWriter(Clock.systemUTC(), output).write(List.of("RULE X")));
+        assertThrows(UncheckedIOException.class, () -> writer.write(rules));
     }
 }
