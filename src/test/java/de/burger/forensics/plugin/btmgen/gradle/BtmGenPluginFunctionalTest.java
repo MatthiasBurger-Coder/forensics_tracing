@@ -17,6 +17,44 @@ import static org.junit.jupiter.api.Assertions.*;
 class BtmGenPluginFunctionalTest {
 
     @Test
+    void generateBtmRulesWorksInASimpleJavaProject(@TempDir Path tempDir) throws IOException {
+        writeSimpleSettings(tempDir);
+        Files.writeString(tempDir.resolve("build.gradle.kts"), simpleBuildScript());
+        writeJavaSource(
+            tempDir.resolve("src/main/java"),
+            "com.example.simple",
+            "SimpleService",
+            "simpleMethod"
+        );
+
+        BuildResult result = runGradle(tempDir, ":generateBtmRules");
+
+        assertEquals(TaskOutcome.SUCCESS, taskOutcome(result, ":generateBtmRules"));
+        String output = Files.readString(tempDir.resolve("build/forensics/forensics.btm"));
+        assertTrue(output.contains("com.example.simple.SimpleService#simpleMethod"));
+    }
+
+    @Test
+    void generateBtmRulesReusesTheConfigurationCache(@TempDir Path tempDir) throws IOException {
+        writeSimpleSettings(tempDir);
+        Files.writeString(tempDir.resolve("build.gradle.kts"), simpleBuildScript());
+        writeJavaSource(
+            tempDir.resolve("src/main/java"),
+            "com.example.cache",
+            "CacheService",
+            "cacheMethod"
+        );
+
+        BuildResult firstRun = runGradle(tempDir, "--configuration-cache", ":generateBtmRules");
+        BuildResult secondRun = runGradle(tempDir, "--configuration-cache", ":generateBtmRules");
+
+        assertEquals(TaskOutcome.SUCCESS, taskOutcome(firstRun, ":generateBtmRules"));
+        assertTrue(firstRun.getOutput().contains("Configuration cache entry stored."));
+        assertEquals(TaskOutcome.UP_TO_DATE, taskOutcome(secondRun, ":generateBtmRules"));
+        assertTrue(secondRun.getOutput().contains("Configuration cache entry reused."));
+    }
+
+    @Test
     void generateBtmRulesScansJavaSubprojectsFromTheRootProject(@TempDir Path tempDir) throws IOException {
         writeMonorepoSettings(tempDir, "module-a", "module-b");
         Files.writeString(tempDir.resolve("build.gradle.kts"), rootBuildScript());
@@ -89,8 +127,8 @@ class BtmGenPluginFunctionalTest {
             "moduleA"
         );
 
-        BuildResult firstRun = runGradle(tempDir, ":generateBtmRules");
-        BuildResult secondRun = runGradle(tempDir, ":generateBtmRules");
+        BuildResult firstRun = runGradle(tempDir, "--build-cache", ":generateBtmRules");
+        BuildResult secondRun = runGradle(tempDir, "--build-cache", ":generateBtmRules");
 
         assertEquals(TaskOutcome.SUCCESS, taskOutcome(firstRun, ":generateBtmRules"));
         assertEquals(TaskOutcome.UP_TO_DATE, taskOutcome(secondRun, ":generateBtmRules"));
@@ -112,11 +150,30 @@ class BtmGenPluginFunctionalTest {
                 }
                 """);
 
-        BuildResult thirdRun = runGradle(tempDir, ":generateBtmRules");
+        BuildResult thirdRun = runGradle(tempDir, "--build-cache", ":generateBtmRules");
 
         assertEquals(TaskOutcome.SUCCESS, taskOutcome(thirdRun, ":generateBtmRules"));
         String output = Files.readString(tempDir.resolve("build/forensics/all-modules.btm"));
         assertTrue(output.contains("ModuleAService#moduleAUpdated"));
+    }
+
+    @Test
+    void generateBtmRulesIgnoresUnrelatedFileChanges(@TempDir Path tempDir) throws IOException {
+        writeSimpleSettings(tempDir);
+        Files.writeString(tempDir.resolve("build.gradle.kts"), simpleBuildScript());
+        writeJavaSource(
+            tempDir.resolve("src/main/java"),
+            "com.example.unrelated",
+            "UnrelatedService",
+            "unrelatedMethod"
+        );
+
+        BuildResult firstRun = runGradle(tempDir, "--build-cache", ":generateBtmRules");
+        Files.writeString(tempDir.resolve("README.md"), "This file must not invalidate Java source scanning.");
+        BuildResult secondRun = runGradle(tempDir, "--build-cache", ":generateBtmRules");
+
+        assertEquals(TaskOutcome.SUCCESS, taskOutcome(firstRun, ":generateBtmRules"));
+        assertEquals(TaskOutcome.UP_TO_DATE, taskOutcome(secondRun, ":generateBtmRules"));
     }
 
     private static Path writeJavaSource(Path sourceRoot, String packageName, String className, String methodName) throws IOException {
@@ -149,6 +206,19 @@ class BtmGenPluginFunctionalTest {
                 """;
     }
 
+    private static String simpleBuildScript() {
+        return """
+                plugins {
+                    java
+                    id("de.burger.forensics.btmgen")
+                }
+
+                java {
+                    toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+                }
+                """;
+    }
+
     private static String defaultJavaSubprojectBuildScript() {
         return """
                 plugins {
@@ -167,6 +237,10 @@ class BtmGenPluginFunctionalTest {
                 rootProject.name = "functional-root"
                 include(%s)
                 """.formatted(String.join(", ", includes)));
+    }
+
+    private static void writeSimpleSettings(Path rootDir) throws IOException {
+        Files.writeString(rootDir.resolve("settings.gradle.kts"), "rootProject.name = \"functional-simple\"");
     }
 
     private static BuildResult runGradle(Path projectDir, String... arguments) {

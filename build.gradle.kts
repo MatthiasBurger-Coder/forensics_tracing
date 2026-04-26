@@ -57,18 +57,18 @@ configurations.all {
     exclude(group = "org.slf4j", module = "slf4j-log4j12")
 }
 
-val java21 = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
+val java17 = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(17)) }
 plugins.withType<JavaPlugin>().configureEach {
     extensions.configure<JavaPluginExtension> {
-        toolchain.languageVersion.set(JavaLanguageVersion.of(21))
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
         withSourcesJar()
     }
 
     tasks.withType<JavaCompile>().configureEach {
         options.encoding = "UTF-8"
-        options.release.set(21)
+        options.release.set(17)
         options.compilerArgs.addAll(listOf("-Xlint:all"))
     }
 }
@@ -88,7 +88,7 @@ fun javaAgentArg(file: File): String {
 }
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
-    javaLauncher.set(java21)
+    javaLauncher.set(java17)
     jvmArgumentProviders += CommandLineArgumentProvider {
         val weaverJar = aspectjAgent.resolve().firstOrNull { it.name.startsWith("aspectjweaver") }
             ?: throw GradleException("aspectjweaver*.jar not found. Add 'aspectjAgent(libs.aspectj.weaver)'.")

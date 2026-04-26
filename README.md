@@ -57,15 +57,15 @@ Notes:
 
 ## Prerequisites
 
-- Java 21
+- Java 17
 - Gradle 9.1
 - a Java project to analyze
 - Byteman agent/tooling if you want the generated rules to execute inside a JVM
 
 Important baseline note:
 
-- The plugin project in this repository is compiled and tested with a Java 21 toolchain in `build.gradle.kts`.
-- The examples below assume a consumer build running on Java 21 and Gradle 9.1, because that is the target documentation baseline for this README.
+- The plugin project in this repository is compiled and tested with a Java 17 toolchain in `build.gradle.kts`.
+- The examples below assume a consumer build running on Java 17 and Gradle 9.1, because that is the target documentation baseline for this README.
 
 ## Build this project
 

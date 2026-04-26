@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -481,7 +480,7 @@ class GenerateBtmTaskTest {
     }
 
     @Test
-    void generateCreatesDefaultExtensionWhenMissing(@TempDir Path tempDir) {
+    void generateUsesDefaultTaskConventionsWhenExtensionIsNotInjected(@TempDir Path tempDir) {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
         var task = project.getTasks().register("generateBtmDefaultExtension", GenerateBtmTask.class).get();
         task.getTemplateId().set("METHOD_ENTER");
@@ -523,8 +522,6 @@ class GenerateBtmTaskTest {
         packagePrefixes.setAccessible(true);
         Method dedupeRuleHeaders = GenerateBtmTask.class.getDeclaredMethod("dedupeRuleHeaders", List.class);
         dedupeRuleHeaders.setAccessible(true);
-        Field extensionField = GenerateBtmTask.class.getDeclaredField("extension");
-        extensionField.setAccessible(true);
 
         assertEquals("METHOD_ENTER", templateIdOrDefault.invoke(task));
         task.getTemplateId().set(" ");
@@ -562,7 +559,7 @@ class GenerateBtmTaskTest {
         assertEquals("RULE    \nCLASS A\nENDRULE", deduped.get(4));
         assertEquals("RULER duplicate\nCLASS A\nENDRULE", deduped.get(5));
 
-        extensionField.set(task, null);
+        task.getIncludes().set("");
         assertEquals(List.of(), packagePrefixes.invoke(task));
     }
 
