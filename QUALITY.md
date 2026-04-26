@@ -1,114 +1,108 @@
-docs: fix QUALITY.md quality gate documentation
+# Code Quality & SOLID Checks
 
-## Context
+This repository contains automated checks for SOLID principles implemented as tests under `src/test/java/de/burger/forensics/quality/solid/`.
 
-File to change: QUALITY.md
-Java version: 17 (see build.gradle.kts: JavaLanguageVersion.of(17))
-Gradle version: 9.1
+`QUALITY.md` is the project-specific quality contract for contributors and agents.
 
-The current QUALITY.md has three concrete problems:
+Use `.\gradlew.bat` on Windows PowerShell and `./gradlew` on Unix-like shells.
 
-1. The documented quality gate command is incomplete.
-   Current: `./gradlew clean test jacocoTestReport checkPackageCoverage`
-   Missing: `jacocoTestCoverageVerification` — this task is wired into `check`
-   via `tasks.check { dependsOn("jacocoTestCoverageVerification") }` in build.gradle.kts
-   but is not mentioned anywhere in QUALITY.md.
+## Minimum Quality Command
 
-2. The example output shows package coverage below the 80% threshold
-   (domain: 72.50% / 65.00%) without marking it as a failing result.
-   A reader or agent cannot tell whether this is an acceptable or failing state.
+Run the documented minimum verification command before broader validation:
 
-3. There is no documented failure policy — no statement that a failing gate
-   blocks commits or pushes.
+```bash
+./gradlew test --console=plain --stacktrace
+```
 
-## Task
+This runs the full test suite, including JUnit 5 tests, ArchUnit checks, and the SOLID-oriented quality tests.
 
-Update QUALITY.md only.
+## Full Local Quality Gate
 
-Do NOT modify build.gradle.kts.
-Do NOT modify any production source files.
-Do NOT modify any test files.
-Do NOT lower coverage thresholds.
-Do NOT remove or disable any quality checks.
+The authoritative local quality gate for this repository is:
 
-## Required changes
-
-### 1. Replace the quality gate command section
-
-Replace:
-./gradlew clean test jacocoTestReport checkPackageCoverage
-
-With the complete explicit command:
+```bash
 ./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage --console=plain --stacktrace
+```
 
-Add a short explanation of why each task is listed explicitly:
-- `test` — runs the full test suite including ArchUnit and SOLID checks
-- `jacocoTestReport` — generates the JaCoCo XML report required by downstream tasks
-- `jacocoTestCoverageVerification` — verifies the configured JaCoCo coverage rules
-  (wired into `check` in build.gradle.kts, but listed explicitly here for clarity)
-- `checkPackageCoverage` — verifies per-package line and branch coverage against
-  the 80% thresholds; this task is NOT part of the default Gradle `check` lifecycle
-  and must always be called explicitly
+Each task is listed explicitly for a reason:
 
-Also document `./gradlew check` as a partial diagnostic command:
+- `test` runs the full test suite, including the architecture and SOLID checks.
+- `jacocoTestReport` generates the JaCoCo XML report required by downstream coverage checks.
+- `jacocoTestCoverageVerification` verifies the configured JaCoCo coverage rules.
+- `checkPackageCoverage` verifies per-package line and branch coverage against the repository thresholds.
+
+## Partial Diagnostic Command
+
+This command is useful for general build-health diagnostics:
+
+```bash
 ./gradlew clean check --console=plain --stacktrace
+```
 
-Mark it clearly as incomplete for this repository because `checkPackageCoverage`
-is not wired into `check`. The complete explicit command above remains
-the authoritative gate for contributors and agents.
+This command is intentionally incomplete for this repository.
 
-### 2. Fix the example output
+`checkPackageCoverage` is not wired into the default Gradle `check` lifecycle, so contributors and agents must still run the full explicit quality gate shown above.
 
-The current example shows:
-de.burger.forensics.domain    72.50%   65.00%   (below threshold)
+## Package Coverage Report
 
-Replace it with a passing example that does not mislead:
-de.burger.forensics.domain       86.20%    84.10%     0    1    40    20
-de.burger.forensics.adapters     91.40%    n/a        2    0    25     0
+The `checkPackageCoverage` task parses the JaCoCo XML report, writes a per-package report, and fails when a package is below 80% line coverage or 80% branch coverage when branch data exists.
 
-Keep the existing tab-separated column format to match the real task output.
-Add the header line as it appears in the actual task output:
+The report is written to:
+
+```text
+build/reports/coverage/package-coverage.txt
+```
+
+Example of a passing report:
+
+```text
 Package coverage report
 Line threshold: 80.00%
 Branch threshold: 80.00%
-packageName  lineCoverage  branchCoverage  missedLines  missedBranches  totalLines  totalBranches
+packageName	lineCoverage	branchCoverage	missedLines	missedBranches	totalLines	totalBranches
+de.burger.forensics.domain	86.20%	84.10%	0	1	40	20
+de.burger.forensics.adapters	91.40%	n/a	2	0	25	0
+```
 
-If a failing example is also useful for documentation purposes, add it in a
-separate clearly labeled block:
-# Example of a FAILING result — gate would fail with these values:
-de.burger.forensics.domain    72.50%    65.00%    11    7    40    20
+Example of a failing result. The gate would fail with values like these:
 
-Do not mix passing and failing examples without clear labels.
+```text
+Package coverage report
+Line threshold: 80.00%
+Branch threshold: 80.00%
+packageName	lineCoverage	branchCoverage	missedLines	missedBranches	totalLines	totalBranches
+de.burger.forensics.domain	72.50%	65.00%	11	7	40	20
+```
 
-### 3. Add a failure policy section
+## Plugin Validation
 
-Add a new section titled "Failure Policy" containing:
-- The quality gate fails if any of the required tasks fails.
+When Gradle plugin metadata, task inputs, task outputs, or plugin declarations change, also run:
+
+```bash
+./gradlew validatePlugins --no-daemon --console=plain --stacktrace
+```
+
+## Optional SonarCloud Check
+
+If `SONAR_TOKEN` or `sonar.token` is available, contributors may also run:
+
+```bash
+./gradlew sonar --console=plain --stacktrace
+```
+
+If the token is not configured locally, skip this step and report that SonarCloud was not executed.
+
+## Failure Policy
+
+- The quality gate fails if any required task fails.
 - A failing quality gate blocks commits and pushes.
 - Coverage thresholds must not be lowered to make the gate pass.
-- If a failure cannot be fixed within the current task scope, the blocker
-  must be documented explicitly — do not commit anyway.
-- Agents must STOP and report when the gate fails. Do not proceed silently.
+- If a failure cannot be fixed within the current task scope, the blocker must be documented explicitly.
+- Agents must stop and report when the gate fails. Do not proceed silently.
 
-## Constraints
+## Notes
 
-- Keep all command examples copy-paste ready with no line breaks inside commands.
-- Do not document commands that are weaker than the complete gate without
-  explicitly labeling them as partial or diagnostic.
-- Keep the existing Notes section at the bottom of the file unchanged unless
-  it directly contradicts the corrected quality gate documentation.
-- Do not rewrite the SOLID section — only the quality gate documentation changes.
-
-## Validation
-
-After editing QUALITY.md, verify internal consistency:
-- Every command shown is syntactically correct.
-- The complete gate command includes `test`, `jacocoTestReport`,
-  `jacocoTestCoverageVerification`, and `checkPackageCoverage`
-  in the correct order.
-- The example output reflects passing values (>= 80%) unless explicitly labeled as failing.
-- The failure policy section is present and unambiguous.
-
-Do NOT run any Gradle commands as part of this task.
-Do NOT commit or push as part of this task.
-This task is documentation-only.
+- The tests rely on lightweight reflection-based heuristics because no additional dependencies were introduced.
+- No dependency versions have been changed.
+- Gradle plugin modules avoid bundling an SLF4J provider to prevent multiple bindings.
+- To tighten the rules, adjust the assertions in the SOLID test suite or extend the support utilities.

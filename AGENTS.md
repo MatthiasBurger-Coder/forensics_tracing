@@ -12,7 +12,7 @@ Agents must follow this document before modifying code, tests, build logic, exam
 
 The project baseline is:
 
-- Java 21
+- Java 17
 - Gradle 9.1
 - JUnit 5
 - ArchUnit
@@ -24,6 +24,8 @@ The project baseline is:
 - Regression-first workflow
 
 All source code, comments, JavaDoc, test names, and repository documentation must be written in English.
+
+Use `.\gradlew.bat` on Windows PowerShell and `./gradlew` on Unix-like shells.
 
 ## Core Principle
 
@@ -193,17 +195,25 @@ The default quality command is:
 ./gradlew test
 ```
 
+The authoritative full local quality gate is:
+
+```bash
+./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage --console=plain --stacktrace
+```
+
 When plugin metadata, Gradle task inputs, task outputs, or plugin implementation classes are changed, also run:
 
 ```bash
 ./gradlew validatePlugins
 ```
 
-When general build health is relevant, run:
+When general build health is relevant, the following command is useful as a partial diagnostic run:
 
 ```bash
-./gradlew check
+./gradlew clean check --console=plain --stacktrace
 ```
+
+`checkPackageCoverage` is not part of the default Gradle `check` lifecycle in this repository, so `./gradlew clean check` is not the complete local gate on its own.
 
 Agents must not claim that a command passed unless it was actually executed.
 
