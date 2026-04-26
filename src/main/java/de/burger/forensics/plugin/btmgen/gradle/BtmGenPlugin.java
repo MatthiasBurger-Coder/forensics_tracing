@@ -66,12 +66,23 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
 
     private void configureSubprojectRuntimeHelpers(Project project, BtmGenExtension ext) {
         project.getSubprojects().forEach(subproject ->
-            subproject.getPlugins().withType(JavaPlugin.class, ignored -> {
-                if (ext.getScanSubprojects().getOrElse(false)) {
+                subproject.getPlugins().withType(JavaPlugin.class, ignored -> {
+                    if (ext.getScanSubprojects().getOrElse(false)) {
+                        attachRuntimeHelper(subproject);
+                    }
+                })
+        );
+
+        project.getGradle().projectsEvaluated(ignored -> {
+            if (!ext.getScanSubprojects().getOrElse(false)) {
+                return;
+            }
+            project.getSubprojects().forEach(subproject -> {
+                if (subproject.getPlugins().hasPlugin("java") || subproject.getPlugins().hasPlugin("java-library")) {
                     attachRuntimeHelper(subproject);
                 }
-            })
-        );
+            });
+        });
     }
 
     private void attachRuntimeHelper(Project project) {

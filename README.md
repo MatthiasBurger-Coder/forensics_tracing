@@ -25,7 +25,7 @@ The verified execution flow is:
 4. `GenerateRulesUseCase` filters scan events by language and optional package prefixes, groups them by method, optionally adds synthetic `METHOD_ENTER` / `METHOD_EXIT` rules, and applies the `minBranchesPerMethod` filter.
 5. The application layer turns scan events into domain `Rule` objects typed by `RuleTemplate`.
 6. `BytemanRuleRenderAdapter` converts each domain rule into `RuleParams`, and `BytemanRuleRenderer` dispatches to the matching render strategy.
-7. `BtmFileWriter` writes one `.btm` file containing a generated header plus all rendered rule blocks.
+7. `BtmFileWriter` writes one `.btm` file containing a deterministic generated header plus all rendered rule blocks.
 8. That `.btm` file is not active by itself. You must load it into a JVM with Byteman tooling.
 9. At runtime, generated rules call helper methods on the configured helper class. The default helper is `RtTraceHelper`, which delegates to `RtTrace`.
 10. `RtTrace` emits structured runtime events and manages correlation IDs and span state.
@@ -142,6 +142,7 @@ The verified configuration split is:
   - `sourceRoot`
   - `sourceRoots`
   - `scanSubprojects`
+  - `includeTimestampHeader` (default `false`; keeps output reproducible for build cache)
   - `outputFile`
   - `helperFqn`
   - `includes`

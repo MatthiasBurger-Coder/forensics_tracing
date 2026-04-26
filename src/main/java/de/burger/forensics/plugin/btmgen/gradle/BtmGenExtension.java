@@ -23,6 +23,7 @@ public class BtmGenExtension {
     private final Property<@NotNull String> helperFqn;
     private final Property<@NotNull Integer> minBranchesPerMethod;
     private final Property<@NotNull Boolean> scanSubprojects;
+    private final Property<@NotNull Boolean> includeTimestampHeader;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
@@ -33,11 +34,13 @@ public class BtmGenExtension {
         this.helperFqn = objects.property(String.class);
         this.minBranchesPerMethod = objects.property(Integer.class);
         this.scanSubprojects = objects.property(Boolean.class);
+        this.includeTimestampHeader = objects.property(Boolean.class);
         this.sourceRoot.convention(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
         this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
         this.minBranchesPerMethod.convention(2);
         this.scanSubprojects.convention(false);
+        this.includeTimestampHeader.convention(false);
     }
 
     public StrategyRegistry getRegistry() {
@@ -74,5 +77,9 @@ public class BtmGenExtension {
 
     public Property<@NotNull Boolean> getScanSubprojects() {
         return scanSubprojects;
+    }
+
+    public Property<@NotNull Boolean> getIncludeTimestampHeader() {
+        return includeTimestampHeader;
     }
 }

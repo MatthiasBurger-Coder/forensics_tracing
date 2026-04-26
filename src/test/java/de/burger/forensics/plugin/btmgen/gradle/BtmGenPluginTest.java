@@ -103,6 +103,21 @@ class BtmGenPluginTest {
     }
 
     @Test
+    void doesNotAttachRuntimeHelperDependencyTwice() {
+        Project project = ProjectBuilder.builder().build();
+        project.getPlugins().apply("java");
+        project.getPlugins().apply("de.burger.forensics.btmgen");
+
+        long runtimeFileDependencies = project.getConfigurations().getByName("runtimeOnly")
+                .getDependencies()
+                .stream()
+                .filter(dependency -> dependency.getGroup() == null)
+                .count();
+
+        assertEquals(1L, runtimeFileDependencies);
+    }
+
+    @Test
     void addDependencyIfPresentSkipsMissingConfigurations() throws Exception {
         Project project = ProjectBuilder.builder().build();
         BtmGenPlugin plugin = new BtmGenPlugin();
