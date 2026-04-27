@@ -14,6 +14,23 @@ The authoritative quality guidance is documented in `QUALITY.md`.
 
 Use `QUALITY.md`, `build.gradle.kts`, `settings.gradle.kts`, Gradle tasks, and existing tests to determine the correct quality gate.
 
+## Document Precedence and CI Alignment
+
+When `AGENTS.md`, `QUALITY.md`, or other project-level instruction files are present in the repository root:
+
+1. **`AGENTS.md` takes precedence** over any instructions inferred from code, build scripts, or general heuristics.
+2. **`QUALITY.md` is the binding quality contract** — do not override, weaken, or deviate from it based on assumptions.
+3. If there is a conflict between the instructions in this prompt and the instructions in `AGENTS.md` or `QUALITY.md`, the **repository-level document wins**.
+4. Before executing any phase, inspect both `AGENTS.md` and `QUALITY.md` if they exist and record any deviations or additional rules they define.
+5. **Align the commit and push with the CI pipeline** defined in `.github/workflows`:
+   - Identify the CI trigger conditions (e.g. push to `main`, pull request).
+   - Identify which Gradle tasks the CI pipeline runs.
+   - Do not commit or push changes that would predictably break the CI pipeline based on your local quality gate results.
+   - If a local quality check fails that is also part of the CI pipeline, treat it as a blocking issue.
+   - If a CI step uses a Sonar token or external service that is unavailable locally, report the skip explicitly — do not treat it as a failure.
+6. **Do not guess CI behavior** — read the actual workflow YAML files in `.github/workflows` before making any claim about what CI does or does not verify.
+7. If `AGENTS.md` defines commit message conventions, branch naming rules, or push restrictions, apply them exactly.
+
 ## Project Context
 
 This repository is the **Forensics Tracing Gradle plugin** project.
@@ -154,14 +171,15 @@ Your task is to produce a commit that clearly documents:
 3. Inspect `settings.gradle`, `settings.gradle.kts`, `build.gradle`, and `build.gradle.kts`.
 4. Inspect `gradle/libs.versions.toml`.
 5. Inspect `QUALITY.md`.
-6. Inspect `.github/workflows`.
-7. Inspect available Gradle tasks.
-8. Inspect `git status`.
-9. Inspect staged and unstaged changes separately.
-10. Inspect `git diff`.
-11. Inspect `git diff --cached`.
-12. Inspect changed Java, Gradle, test, documentation, CI, and configuration files.
-13. Identify whether changes affect:
+6. Inspect `AGENTS.md` if present — record all rules and conventions it defines.
+7. Inspect `.github/workflows` — read every workflow YAML and identify which Gradle tasks CI runs.
+8. Inspect available Gradle tasks.
+9. Inspect `git status`.
+10. Inspect staged and unstaged changes separately.
+11. Inspect `git diff`.
+12. Inspect `git diff --cached`.
+13. Inspect changed Java, Gradle, test, documentation, CI, and configuration files.
+14. Identify whether changes affect:
     - Gradle plugin wiring
     - Source scanning
     - Rule generation
@@ -408,6 +426,7 @@ Choose the most accurate type based on the actual change set.
 - If quality gate related fixes were made, mention that explicitly in the commit body.
 - If the quality gate required no fixes, say so truthfully in the final execution summary, not necessarily in the commit body.
 - If `QUALITY.md` itself was added, fixed, integrated, or changed, mention that explicitly if visible in the diff.
+- If `AGENTS.md` itself was added, fixed, or changed, mention that explicitly if visible in the diff.
 
 ## Phase 5 — Stage, Commit, and Push
 
@@ -442,21 +461,23 @@ Only after the final diff has been reviewed:
 
 Print:
 
-1. Whether `QUALITY.md` was found
-2. The quality command documented in `QUALITY.md`
-3. The exact local quality gate command used
-4. Whether Java 17 was used
-5. Whether Gradle 9.1 / the project wrapper was used
-6. Whether the documented `QUALITY.md` command passed
-7. Whether the full local Gradle quality gate passed
-8. Whether SonarCloud was executed or skipped
-9. If a quality command failed, the exact reason
-10. Which fixes were applied because of the quality checks
-11. Whether any failures were pre-existing, environment-related, or external-service-related
-12. The final commit message
-13. The branch name
-14. The new commit hash
-15. Whether the push succeeded
+1. Whether `AGENTS.md` was found and which rules it defines
+2. Whether `QUALITY.md` was found
+3. The quality command documented in `QUALITY.md`
+4. The CI pipeline tasks identified from `.github/workflows`
+5. The exact local quality gate command used
+6. Whether Java 17 was used
+7. Whether Gradle 9.1 / the project wrapper was used
+8. Whether the documented `QUALITY.md` command passed
+9. Whether the full local Gradle quality gate passed
+10. Whether SonarCloud was executed or skipped
+11. If a quality command failed, the exact reason
+12. Which fixes were applied because of the quality checks
+13. Whether any failures were pre-existing, environment-related, or external-service-related
+14. The final commit message
+15. The branch name
+16. The new commit hash
+17. Whether the push succeeded
 
 If push fails, report the exact reason and do not pretend success.
 
@@ -471,8 +492,10 @@ If remaining blockers exist, state them explicitly.
 For this project, the expected logic is:
 
 ```text
-QUALITY.md = Qualitätsvertrag / verbindliche Vorgabe
-./gradlew test = dokumentierter Mindestlauf
-./gradlew clean check jacocoTestReport = vollständiger lokaler Commit-Gate
-./gradlew sonar = optionales externes Gate, nur mit Token
+AGENTS.md    = Agentenregeln / haben Vorrang bei Konflikten
+QUALITY.md   = Qualitätsvertrag / verbindliche Vorgabe
+./gradlew test                             = dokumentierter Mindestlauf
+./gradlew clean check jacocoTestReport     = vollständiger lokaler Commit-Gate
+./gradlew sonar                            = optionales externes Gate, nur mit Token
+.github/workflows                          = CI-Referenz für Alignment-Check
 ```
