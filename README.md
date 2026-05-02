@@ -220,6 +220,12 @@ btmGen {
 
 > Warning: `scanSubprojects=true` scans Gradle subprojects of the current build only. It does not auto-scan included builds or composite builds.
 
+## Scanning WildFly or Maven-based repositories
+
+Use the example under [`examples/wildfly-forensics-gradle-config`](examples/wildfly-forensics-gradle-config/README.md) when the target project is Maven-based and does not have Gradle subprojects.
+
+`scanSubprojects=true` only applies to Gradle subprojects. For Maven repositories such as WildFly, collect Maven `src/main/java` directories explicitly and pass them via `sourceRoots`.
+
 ## Minimal verification checklist
 
 Linux, macOS, or Git Bash:
