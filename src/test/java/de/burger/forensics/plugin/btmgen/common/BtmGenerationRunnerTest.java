@@ -88,8 +88,9 @@ class BtmGenerationRunnerTest {
                 .cacheBackend("sqlite")
                 .build();
 
-        BtmGenerationException exception = assertThrows(BtmGenerationException.class,
-                () -> new BtmGenerationRunner().generate(request));
+        BtmGenerationRunner runner = new BtmGenerationRunner();
+
+        BtmGenerationException exception = assertThrows(BtmGenerationException.class, () -> runner.generate(request));
 
         assertEquals("Unsupported parser scan cache backend: sqlite", exception.getMessage());
     }
@@ -103,8 +104,9 @@ class BtmGenerationRunnerTest {
                 .dependencyAwareInvalidation(true)
                 .build();
 
-        BtmGenerationException exception = assertThrows(BtmGenerationException.class,
-                () -> new BtmGenerationRunner().generate(request));
+        BtmGenerationRunner runner = new BtmGenerationRunner();
+
+        BtmGenerationException exception = assertThrows(BtmGenerationException.class, () -> runner.generate(request));
 
         assertEquals("Dependency-aware cache invalidation is not implemented yet.", exception.getMessage());
     }

@@ -3,6 +3,7 @@ package de.burger.forensics.plugin.btmgen.common;
 /**
  * Logger implementation for callers that do not need generation logs.
  */
+@SuppressWarnings("java:S6548") // Stateless null-object logger is intentionally shared.
 public final class NoOpPluginLogPort implements PluginLogPort {
 
     public static final NoOpPluginLogPort INSTANCE = new NoOpPluginLogPort();

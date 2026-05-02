@@ -42,9 +42,9 @@ class BtmGenerationRequestTest {
         assertEquals(List.of(Path.of("src/main/java")), request.sourceRoots());
         assertEquals(List.of("de.burger"), request.includePackages());
         assertEquals(List.of("de.burger.internal"), request.excludePackages());
-        assertThrows(UnsupportedOperationException.class, () -> request.sourceRoots().add(Path.of("new")));
-        assertThrows(UnsupportedOperationException.class, () -> request.includePackages().add("new"));
-        assertThrows(UnsupportedOperationException.class, () -> request.excludePackages().add("new"));
+        assertThrows(UnsupportedOperationException.class, () -> addSourceRoot(request));
+        assertThrows(UnsupportedOperationException.class, () -> addIncludePackage(request));
+        assertThrows(UnsupportedOperationException.class, () -> addExcludePackage(request));
         assertTrue(request.cacheEnabled());
         assertEquals("h2", request.cacheBackend());
         assertTrue(request.profilingEnabled());
@@ -83,9 +83,22 @@ class BtmGenerationRequestTest {
 
     @Test
     void builderRejectsNegativeBranchThreshold() {
-        assertThrows(IllegalArgumentException.class, () -> BtmGenerationRequest.builder()
+        BtmGenerationRequest.Builder builder = BtmGenerationRequest.builder()
                 .sourceRoot(Path.of("src/main/java"))
-                .minBranchesPerMethod(-1)
-                .build());
+                .minBranchesPerMethod(-1);
+
+        assertThrows(IllegalArgumentException.class, builder::build);
+    }
+
+    private static void addSourceRoot(BtmGenerationRequest request) {
+        request.sourceRoots().add(Path.of("new"));
+    }
+
+    private static void addIncludePackage(BtmGenerationRequest request) {
+        request.includePackages().add("new");
+    }
+
+    private static void addExcludePackage(BtmGenerationRequest request) {
+        request.excludePackages().add("new");
     }
 }

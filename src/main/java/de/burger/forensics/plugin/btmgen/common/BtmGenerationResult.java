@@ -18,8 +18,8 @@ public record BtmGenerationResult(
 ) {
 
     public BtmGenerationResult {
-        outputFile = Objects.requireNonNull(outputFile, "outputFile");
-        profileReportFile = Objects.requireNonNull(profileReportFile, "profileReportFile");
+        Objects.requireNonNull(outputFile, "outputFile");
+        Objects.requireNonNull(profileReportFile, "profileReportFile");
         requireNonNegative(generatedRuleCount, "generatedRuleCount");
         requireNonNegative(scannedFileCount, "scannedFileCount");
         requireNonNegative(parsedFileCount, "parsedFileCount");

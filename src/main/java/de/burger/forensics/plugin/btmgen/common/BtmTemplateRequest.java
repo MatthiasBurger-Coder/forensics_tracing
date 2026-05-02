@@ -15,9 +15,9 @@ public record BtmTemplateRequest(
 
     public BtmTemplateRequest {
         templateId = defaultTemplateId(templateId);
-        className = Objects.requireNonNull(className, "className");
-        methodName = Objects.requireNonNull(methodName, "methodName");
-        methodDesc = Objects.requireNonNull(methodDesc, "methodDesc");
+        Objects.requireNonNull(className, "className");
+        Objects.requireNonNull(methodName, "methodName");
+        Objects.requireNonNull(methodDesc, "methodDesc");
     }
 
     public BtmTemplateRequest(String templateId, String className, String methodName, String methodDesc) {

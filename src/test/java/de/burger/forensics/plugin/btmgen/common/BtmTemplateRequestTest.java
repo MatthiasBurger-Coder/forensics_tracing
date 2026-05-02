@@ -37,13 +37,25 @@ class BtmTemplateRequestTest {
 
     @Test
     void rejectsMissingRequiredValues() {
-        assertThrows(NullPointerException.class, () ->
-                new BtmTemplateRequest(null, "com.example.Foo", "bar", Optional.empty()));
-        assertThrows(NullPointerException.class, () ->
-                new BtmTemplateRequest("CUSTOM", null, "bar", Optional.empty()));
-        assertThrows(NullPointerException.class, () ->
-                new BtmTemplateRequest("CUSTOM", "com.example.Foo", null, Optional.empty()));
-        assertThrows(NullPointerException.class, () ->
-                new BtmTemplateRequest("CUSTOM", "com.example.Foo", "bar", (Optional<String>) null));
+        assertThrows(NullPointerException.class, BtmTemplateRequestTest::templateRequestWithoutTemplateId);
+        assertThrows(NullPointerException.class, BtmTemplateRequestTest::templateRequestWithoutClassName);
+        assertThrows(NullPointerException.class, BtmTemplateRequestTest::templateRequestWithoutMethodName);
+        assertThrows(NullPointerException.class, BtmTemplateRequestTest::templateRequestWithoutMethodDescription);
+    }
+
+    private static void templateRequestWithoutTemplateId() {
+        new BtmTemplateRequest(null, "com.example.Foo", "bar", Optional.empty());
+    }
+
+    private static void templateRequestWithoutClassName() {
+        new BtmTemplateRequest("CUSTOM", null, "bar", Optional.empty());
+    }
+
+    private static void templateRequestWithoutMethodName() {
+        new BtmTemplateRequest("CUSTOM", "com.example.Foo", null, Optional.empty());
+    }
+
+    private static void templateRequestWithoutMethodDescription() {
+        new BtmTemplateRequest("CUSTOM", "com.example.Foo", "bar", (Optional<String>) null);
     }
 }

@@ -131,16 +131,7 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
                 throw new IllegalStateException("Failed to create H2 scan cache directory " + parent + ".", e);
             }
         }
-        loadH2Driver();
         return DriverManager.getConnection(jdbcUrl);
-    }
-
-    private static void loadH2Driver() throws SQLException {
-        try {
-            Class.forName("org.h2.Driver");
-        } catch (ClassNotFoundException e) {
-            throw new SQLException("H2 JDBC driver is not available on the scan cache classpath.", e);
-        }
     }
 
     private void executeInTransaction(String operation, SqlWork work) {

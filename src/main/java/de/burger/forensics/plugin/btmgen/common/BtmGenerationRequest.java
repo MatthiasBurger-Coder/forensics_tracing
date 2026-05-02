@@ -29,17 +29,17 @@ public record BtmGenerationRequest(
 
     public BtmGenerationRequest {
         sourceRoots = List.copyOf(Objects.requireNonNull(sourceRoots, "sourceRoots"));
-        outputFile = Objects.requireNonNull(outputFile, "outputFile");
-        cacheDatabaseFile = Objects.requireNonNull(cacheDatabaseFile, "cacheDatabaseFile");
-        profileReportFile = Objects.requireNonNull(profileReportFile, "profileReportFile");
-        cacheBackend = Objects.requireNonNull(cacheBackend, "cacheBackend");
+        Objects.requireNonNull(outputFile, "outputFile");
+        Objects.requireNonNull(cacheDatabaseFile, "cacheDatabaseFile");
+        Objects.requireNonNull(profileReportFile, "profileReportFile");
+        Objects.requireNonNull(cacheBackend, "cacheBackend");
         includePackages = List.copyOf(Objects.requireNonNull(includePackages, "includePackages"));
         excludePackages = List.copyOf(Objects.requireNonNull(excludePackages, "excludePackages"));
-        helperFqn = Objects.requireNonNull(helperFqn, "helperFqn");
+        Objects.requireNonNull(helperFqn, "helperFqn");
         if (minBranchesPerMethod < 0) {
             throw new IllegalArgumentException("minBranchesPerMethod must not be negative");
         }
-        templateRequest = Objects.requireNonNull(templateRequest, "templateRequest");
+        Objects.requireNonNull(templateRequest, "templateRequest");
     }
 
     public static Builder builder() {
