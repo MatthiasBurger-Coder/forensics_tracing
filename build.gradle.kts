@@ -235,7 +235,7 @@ tasks.withType<Test>().configureEach {
     jvmArgs("-Xshare:off")
     finalizedBy(tasks.jacocoTestReport)
 
-    // Keep the report directory lazy for Gradle 9.1 configuration avoidance.
+    // Keep the report directory lazy for Gradle configuration avoidance.
     val reportsDir = layout.buildDirectory.dir("reports/spock")
 
     // Pass the resolved report directory lazily to the test JVM.

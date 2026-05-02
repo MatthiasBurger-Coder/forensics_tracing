@@ -38,7 +38,7 @@ This repository is the **Forensics Tracing Gradle plugin** project.
 ## Technology Constraints
 
 - Use Java 17 only.
-- Use Gradle 9.1 only.
+- Use Gradle 9.4.0 only.
 - Use the project Gradle wrapper if available.
 - Do not upgrade Gradle, Java, plugins, or dependencies unless the current task explicitly requires it.
 - Source code and source code comments must be written in English.
@@ -224,7 +224,7 @@ Before running the quality gate:
 1. Verify the Java version.
 2. Verify that Java 17 is used.
 3. Verify the Gradle wrapper version if possible.
-4. Use Gradle 9.1 only.
+4. Use Gradle 9.4.0 only.
 5. Do not switch to another Java version.
 6. Do not use Maven.
 7. Do not use Python as the quality gate.
@@ -467,7 +467,7 @@ Print:
 4. The CI pipeline tasks identified from `.github/workflows`
 5. The exact local quality gate command used
 6. Whether Java 17 was used
-7. Whether Gradle 9.1 / the project wrapper was used
+7. Whether Gradle 9.4.0 / the project wrapper was used
 8. Whether the documented `QUALITY.md` command passed
 9. Whether the full local Gradle quality gate passed
 10. Whether SonarCloud was executed or skipped

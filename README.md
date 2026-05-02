@@ -21,7 +21,7 @@ Internally the repository is split into pragmatic hexagonal layers (`domain`, `a
 Prerequisites:
 
 - Java 17
-- Gradle 9.1
+- Gradle 9.4.0
 - a consumer Java project
 - Byteman agent/tooling if you want the generated rules to run inside a JVM
 
@@ -149,7 +149,7 @@ dependencyResolutionManagement {
 rootProject.name = "consumer-project"
 ```
 
-Run the consumer build on Java 17 and Gradle 9.1. The repository intentionally does not target Java 21.
+Run the consumer build on Java 17 and Gradle 9.4.0. The repository intentionally does not target Java 21.
 
 ### Step 2: Apply the plugin
 
@@ -300,7 +300,7 @@ Select-String -Path .\build\forensics\forensics.btm -Pattern "RULE"
 
 Release-relevant behavior for this repository:
 
-- Gradle 9.1 is the baseline.
+- Gradle 9.4.0 is the baseline.
 - Java 17 is the baseline.
 - Default generated `.btm` output is deterministic.
 - `includeTimestampHeader=true` disables Gradle task output caching intentionally.
@@ -688,7 +688,7 @@ Verified repository commands:
 Notes:
 
 - Java 17 is intentional for this repository.
-- Gradle 9.1 is the repository baseline.
+- Gradle 9.4.0 is the repository baseline.
 - Source code, source comments, test names, and repository documentation are maintained in English.
 - the stricter local quality gate from `QUALITY.md` is `./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage`
 - the repository does not assume or require a Java 21 migration

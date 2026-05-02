@@ -8,7 +8,10 @@ import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputFile;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -20,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
+@DisableCachingByDefault(because = "Activity diagrams are generated reports and are cheap to recreate.")
 public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
     private static final int MAX_DETAILED_SWIMLANE_CLASSES = 64;
     private static final int MAX_DETAILED_METHOD_BLOCKS = 400;
@@ -27,6 +31,7 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
     private static final String SUMMARY_LANE = "ActivitySummary";
 
     @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getInputBtm();
 
     @OutputFile

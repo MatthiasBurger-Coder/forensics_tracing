@@ -13,7 +13,7 @@ Agents must follow this document before modifying code, tests, build logic, exam
 The project baseline is:
 
 - Java 17
-- Gradle 9.1
+- Gradle 9.4.0
 - JUnit 5
 - ArchUnit
 - JaCoCo
@@ -425,7 +425,7 @@ Do not migrate existing packages to this target structure unless the task explic
 
 ## Gradle Plugin Rules
 
-The Gradle plugin must behave like a clean Gradle 9.1 plugin.
+The Gradle plugin must behave like a clean Gradle 9.4.0 plugin.
 
 ### Task Design
 

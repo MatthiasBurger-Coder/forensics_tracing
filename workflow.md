@@ -73,7 +73,7 @@ BtmGenMojo    ─── eigene Scanner-Orchestrierung
 ## Globale Constraints
 
 * Java 17 only.
-* Gradle 9.1 only.
+* Gradle 9.4.0 only.
 * Source-Code-Kommentare ausschließlich in Englisch.
 * Antworten, Dokumentation und Commit-Erklärungen dürfen Deutsch sein.
 * Kein Spring Boot.
@@ -125,7 +125,7 @@ Vor dem Umbau muss klar sein, dass das Repository sauber ist und welche Tests/Qu
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -248,7 +248,7 @@ Log
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -423,7 +423,7 @@ src/main/java/de/burger/forensics/plugin/btmgen/common/BtmGenerationRunner.java
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -544,7 +544,7 @@ Den bestehenden Gradle-Adapter sauber als Adapter kennzeichnen und stabilisieren
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -648,7 +648,7 @@ Mit Gradle kann dafür das Plugin `org.gradlex.maven-plugin-development` verwend
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -708,7 +708,7 @@ Use compile-only/provided-like configuration where appropriate so the plugin doe
 3. Do not add the full Mojo implementation yet unless needed for descriptor validation.
 4. If a minimal placeholder Mojo is required for descriptor generation, create it with no scanner logic.
 5. Ensure Java 17 configuration remains correct.
-6. Ensure Gradle 9.1 compatibility.
+6. Ensure Gradle 9.4.0 compatibility.
 
 ## Restrictions
 
@@ -779,7 +779,7 @@ forensics:btmgen
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -959,7 +959,7 @@ domain/application dürfen nicht auf gradle/maven zugreifen
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -1058,7 +1058,7 @@ Nachweisen, dass beide Adapter denselben Core verwenden und vergleichbare Ausgab
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -1175,7 +1175,7 @@ README/QUALITY/AGENTS so aktualisieren, dass neue Adapterstruktur verständlich 
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -1291,7 +1291,7 @@ Nach der Umsetzung sauber prüfen und committen.
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.
@@ -1454,7 +1454,7 @@ Falls du Codex einen Gesamtauftrag geben willst, aber trotzdem Slice-förmig arb
 
 Repository: forensics_tracing
 Runtime: Java 17 only
-Build system: Gradle 9.1 only
+Build system: Gradle 9.4.0 only
 Architecture: Hexagonal architecture
 Testing: JUnit 5 and ArchUnit
 Source-code comments: English only.

@@ -8,7 +8,10 @@ import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputFile;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -24,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+@DisableCachingByDefault(because = "Activity diagrams are generated reports and are cheap to recreate.")
 public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
     private static final String CLASS_KEY = "class";
     private static final String METHOD_KEY = "method";
@@ -32,6 +36,7 @@ public abstract class GenerateActivityPumlFromTraceTask extends DefaultTask {
     private static final String LABEL_KEY = "label";
 
     @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
     public abstract RegularFileProperty getInputTrace();
 
     @OutputFile
