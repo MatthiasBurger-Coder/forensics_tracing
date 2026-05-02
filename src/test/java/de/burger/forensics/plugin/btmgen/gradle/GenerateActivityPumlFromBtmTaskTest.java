@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -146,6 +147,73 @@ class GenerateActivityPumlFromBtmTaskTest {
         assertThatThrownBy(task::generate)
             .isInstanceOf(GradleException.class)
             .hasMessageContaining("No parsable rules found");
+    }
+
+    @Test
+    void generateWritesCompactSummaryWhenRuleSetWouldCreateOversizedDiagram(@TempDir Path tempDir) throws IOException {
+        Path input = tempDir.resolve("large-rules.btm");
+        String content = IntStream.range(0, 80)
+            .mapToObj(index -> """
+                RULE enter%s
+                CLASS com.example.Service%s
+                METHOD handle%s
+                IF true
+                DO onEnter(com.example.Service%s.class, "handle%s")
+                ENDRULE
+
+                RULE ifTrue%s
+                CLASS com.example.Service%s
+                METHOD handle%s
+                IF eval("rule-%s", "flag%s", $1)
+                DO onBranch(com.example.Service%s.class, "handle%s", "IF_TRUE")
+                ENDRULE
+
+                RULE ifFalse%s
+                CLASS com.example.Service%s
+                METHOD handle%s
+                IF eval("rule-%s", "flag%s", $1)
+                DO onBranch(com.example.Service%s.class, "handle%s", "IF_FALSE")
+                ENDRULE
+
+                RULE exit%s
+                CLASS com.example.Service%s
+                METHOD handle%s
+                IF true
+                DO onExit(com.example.Service%s.class, "handle%s", "ok")
+                ENDRULE
+                """.formatted(
+                index, index, index, index, index,
+                index, index, index, index, index, index, index,
+                index, index, index, index, index, index, index,
+                index, index, index, index, index
+            ))
+            .reduce("", String::concat);
+        Files.writeString(input, content);
+        Path output = tempDir.resolve("build/forensics/compact-activity.puml");
+        GenerateActivityPumlFromBtmTask task = ProjectBuilder.builder()
+            .withProjectDir(tempDir.toFile())
+            .build()
+            .getTasks()
+            .register("largeActivityFromBtm", GenerateActivityPumlFromBtmTask.class)
+            .get();
+        task.getInputBtm().set(input.toFile());
+        task.getOutputPuml().set(output.toFile());
+
+        task.generate();
+
+        String rendered = Files.readString(output);
+        assertThat(rendered)
+            .contains("title Forensics Activity Diagram (page 1/2)")
+            .contains("title Forensics Activity Diagram (page 2/2)")
+            .contains("|ActivitySummary|")
+            .contains(":Service0 [methods=1, enter=1, exit=1, branches=2];")
+            .contains("- compact summary mode enabled for 80 classes / 80 methods")
+            .contains("- page 1/2 shows classes 1-75")
+            .contains("- page 2/2 shows classes 76-80")
+            .doesNotContain("|Service0|")
+            .doesNotContain(":METHOD_ENTER x1;");
+        assertThat(rendered.split("@startuml", -1)).hasSize(3);
+        assertThat(rendered.lines().count()).isLessThan(120L);
     }
 
     @Test

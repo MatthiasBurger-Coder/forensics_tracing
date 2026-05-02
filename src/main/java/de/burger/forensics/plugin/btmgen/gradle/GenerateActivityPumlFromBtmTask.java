@@ -21,6 +21,11 @@ import java.util.List;
 import java.util.Map;
 
 public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
+    private static final int MAX_DETAILED_SWIMLANE_CLASSES = 64;
+    private static final int MAX_DETAILED_METHOD_BLOCKS = 400;
+    private static final int MAX_COMPACT_SUMMARY_CLASSES_PER_PAGE = 75;
+    private static final String SUMMARY_LANE = "ActivitySummary";
+
     @InputFile
     public abstract RegularFileProperty getInputBtm();
 
@@ -72,15 +77,54 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
             }
         });
 
-        StringBuilder sb = new StringBuilder();
         List<Map.Entry<String, Map<String, MethodSummary>>> sortedClasses = classToMethods.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
                 .toList();
-        String firstLane = simpleName(sortedClasses.get(0).getKey());
+        int totalMethodBlocks = sortedClasses.stream()
+                .map(Map.Entry::getValue)
+                .mapToInt(Map::size)
+                .sum();
+        boolean useCompactSummary = requiresCompactSummary(sortedClasses.size(), totalMethodBlocks);
 
+        String title = sanitize(getDiagramTitle().getOrElse("Forensics Activity Diagram"));
+        StringBuilder sb = new StringBuilder();
+        if (useCompactSummary) {
+            writeCompactSummaryDiagrams(sb, title, sortedClasses, totalMethodBlocks);
+        } else {
+            writeDetailedDiagram(sb, title, sortedClasses);
+        }
+
+        Path outputPath = getOutputPuml().get().getAsFile().toPath();
+        try {
+            Path parent = outputPath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(outputPath, sb.toString());
+        } catch (IOException e) {
+            throw new GradleException("Failed to write PUML output: " + outputPath.toAbsolutePath(), e);
+        }
+
+        getLogger().lifecycle(
+                "Generated activity PUML ({}) -> {}",
+                useCompactSummary ? "compact summary" : "detailed swimlanes",
+                outputPath.toAbsolutePath()
+        );
+    }
+
+    private static boolean requiresCompactSummary(int classCount, int totalMethodBlocks) {
+        return classCount > MAX_DETAILED_SWIMLANE_CLASSES || totalMethodBlocks > MAX_DETAILED_METHOD_BLOCKS;
+    }
+
+    private static void writeDetailedDiagram(
+            StringBuilder sb,
+            String title,
+            List<Map.Entry<String, Map<String, MethodSummary>>> sortedClasses
+    ) {
         sb.append("@startuml\n");
-        sb.append("title ").append(sanitize(getDiagramTitle().getOrElse("Forensics Activity Diagram"))).append("\n");
+        sb.append("title ").append(title).append("\n");
         sb.append("skinparam shadowing false\n");
+        String firstLane = simpleName(sortedClasses.get(0).getKey());
         sb.append("|").append(firstLane).append("|\n");
         sb.append("start\n\n");
 
@@ -98,19 +142,108 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
         sb.append("end note\n");
         sb.append("stop\n");
         sb.append("@enduml\n");
+    }
 
-        Path outputPath = getOutputPuml().get().getAsFile().toPath();
-        try {
-            Path parent = outputPath.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
+    private static void writeCompactSummaryDiagrams(
+            StringBuilder sb,
+            String title,
+            List<Map.Entry<String, Map<String, MethodSummary>>> sortedClasses,
+            int totalMethodBlocks
+    ) {
+        int totalPages = Math.max(1, (int) Math.ceil((double) sortedClasses.size() / MAX_COMPACT_SUMMARY_CLASSES_PER_PAGE));
+        for (int pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+            if (pageIndex > 0) {
+                sb.append("\n");
             }
-            Files.writeString(outputPath, sb.toString());
-        } catch (IOException e) {
-            throw new GradleException("Failed to write PUML output: " + outputPath.toAbsolutePath(), e);
-        }
+            int startIndex = pageIndex * MAX_COMPACT_SUMMARY_CLASSES_PER_PAGE;
+            int endIndex = Math.min(sortedClasses.size(), startIndex + MAX_COMPACT_SUMMARY_CLASSES_PER_PAGE);
+            List<Map.Entry<String, Map<String, MethodSummary>>> page = sortedClasses.subList(startIndex, endIndex);
 
-        getLogger().lifecycle("Generated activity PUML with swimlanes -> {}", outputPath.toAbsolutePath());
+            sb.append("@startuml\n");
+            sb.append("title ").append(titleForPage(title, pageIndex + 1, totalPages)).append("\n");
+            sb.append("skinparam shadowing false\n");
+            sb.append("|").append(SUMMARY_LANE).append("|\n");
+            sb.append("start\n\n");
+
+            page.forEach(classEntry -> sb.append(":")
+                    .append(sanitize(formatCompactSummary(simpleName(classEntry.getKey()), classEntry.getValue())))
+                    .append(";\n"));
+
+            sb.append("|").append(SUMMARY_LANE).append("|\n");
+            sb.append("note right\n");
+            sb.append("BTM limits:\\n");
+            sb.append("- this view comes from static Byteman rules, not runtime events\\n");
+            sb.append("- exact executed branch and timings are not available\\n");
+            sb.append("- compact summary mode enabled for ")
+                    .append(sortedClasses.size())
+                    .append(" classes / ")
+                    .append(totalMethodBlocks)
+                    .append(" methods\\n");
+            sb.append("- page ")
+                    .append(pageIndex + 1)
+                    .append("/")
+                    .append(totalPages)
+                    .append(" shows classes ")
+                    .append(startIndex + 1)
+                    .append("-")
+                    .append(endIndex)
+                    .append("\\n");
+            sb.append("- detailed per-method swimlanes are skipped to keep the diagram readable\n");
+            sb.append("end note\n");
+            sb.append("stop\n");
+            sb.append("@enduml\n");
+        }
+    }
+
+    private static String titleForPage(String title, int pageNumber, int totalPages) {
+        if (totalPages <= 1) {
+            return title;
+        }
+        return title + " (page " + pageNumber + "/" + totalPages + ")";
+    }
+
+    private static String formatCompactSummary(String className, Map<String, MethodSummary> methods) {
+        ClassTotals totals = methods.values().stream()
+                .reduce(
+                        new ClassTotals(methods.size(), 0, 0, 0, 0, 0, 0, 0),
+                        (current, method) -> new ClassTotals(
+                                current.methodCount(),
+                                current.enterCount() + method.enterCount,
+                                current.exitCount() + method.exitCount,
+                                current.returnCount() + method.returnCount,
+                                current.throwCount() + method.throwCount,
+                                current.switchCount() + method.switchCount,
+                                current.switchCaseCount() + method.switchCaseCount,
+                                current.branchCount() + method.ifTrueCount + method.ifFalseCount
+                        ),
+                        (left, right) -> new ClassTotals(
+                                left.methodCount() + right.methodCount(),
+                                left.enterCount() + right.enterCount(),
+                                left.exitCount() + right.exitCount(),
+                                left.returnCount() + right.returnCount(),
+                                left.throwCount() + right.throwCount(),
+                                left.switchCount() + right.switchCount(),
+                                left.switchCaseCount() + right.switchCaseCount(),
+                                left.branchCount() + right.branchCount()
+                        )
+                );
+
+        StringBuilder summary = new StringBuilder(className)
+                .append(" [methods=").append(totals.methodCount())
+                .append(", enter=").append(totals.enterCount())
+                .append(", exit=").append(totals.exitCount());
+        appendNonZeroSummary(summary, "branches", totals.branchCount());
+        appendNonZeroSummary(summary, "return", totals.returnCount());
+        appendNonZeroSummary(summary, "throw", totals.throwCount());
+        appendNonZeroSummary(summary, "switch", totals.switchCount());
+        appendNonZeroSummary(summary, "cases", totals.switchCaseCount());
+        return summary.append("]").toString();
+    }
+
+    private static void appendNonZeroSummary(StringBuilder summary, String label, int value) {
+        if (value > 0) {
+            summary.append(", ").append(label).append("=").append(value);
+        }
     }
 
     private static void writeMethodBlock(StringBuilder sb, String lane, MethodSummary method) {
@@ -334,4 +467,15 @@ public abstract class GenerateActivityPumlFromBtmTask extends DefaultTask {
             this.methodName = methodName;
         }
     }
+
+    private record ClassTotals(
+            int methodCount,
+            int enterCount,
+            int exitCount,
+            int returnCount,
+            int throwCount,
+            int switchCount,
+            int switchCaseCount,
+            int branchCount
+    ) { }
 }

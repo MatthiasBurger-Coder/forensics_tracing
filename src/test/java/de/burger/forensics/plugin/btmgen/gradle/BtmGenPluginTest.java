@@ -23,6 +23,7 @@ class BtmGenPluginTest {
         var task = project.getTasks().findByName("generateActivityPumlFromBtm");
         assertNotNull(task, "generateActivityPumlFromBtm task should be registered");
         assertEquals("forensics", task.getGroup());
+        assertEquals("Converts a Byteman (.btm) file into renderable PlantUML activity diagrams.", task.getDescription());
     }
 
     @Test
