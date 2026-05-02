@@ -46,14 +46,14 @@ class H2ScanCacheAdapterTest {
         assertThat(tableNames(databasePath))
                 .contains("schema_version", "scan_run", "source_file", "type_declaration",
                         "method_declaration", "scan_event", "code_dependency", "scan_metric");
-        assertThat(schemaVersion(databasePath)).isEqualTo(1);
+        assertThat(schemaVersion(databasePath)).isEqualTo(2);
         assertThat(adapter.find(result.source())).contains(result);
 
         overwriteSchemaVersion(databasePath, 99);
 
         adapter.initialize();
 
-        assertThat(schemaVersion(databasePath)).isEqualTo(1);
+        assertThat(schemaVersion(databasePath)).isEqualTo(2);
         assertThat(adapter.find(result.source())).isEmpty();
         assertThat(tableNames(databasePath))
                 .contains("schema_version", "scan_run", "source_file", "type_declaration",
@@ -169,7 +169,7 @@ class H2ScanCacheAdapterTest {
         H2ScanCacheAdapter emptyVersionAdapter = new H2ScanCacheAdapter(emptyVersionDatabase);
         emptyVersionAdapter.initialize();
 
-        assertThat(schemaVersion(emptyVersionDatabase)).isEqualTo(1);
+        assertThat(schemaVersion(emptyVersionDatabase)).isEqualTo(2);
         assertThat(tableNames(emptyVersionDatabase)).contains("source_file", "scan_event", "code_dependency");
 
         Path duplicateVersionDatabase = tempDir.resolve("duplicate-version-cache");
@@ -183,7 +183,7 @@ class H2ScanCacheAdapterTest {
 
         duplicateVersionAdapter.initialize();
 
-        assertThat(schemaVersion(duplicateVersionDatabase)).isEqualTo(1);
+        assertThat(schemaVersion(duplicateVersionDatabase)).isEqualTo(2);
         assertThat(duplicateVersionAdapter.find(result.source())).isEmpty();
     }
 
@@ -212,6 +212,39 @@ class H2ScanCacheAdapterTest {
         assertThat(loaded.events()).containsExactly(new ScanEvent(null, null, null, null, null, null));
         assertThat(loaded.dependencies()).isEmpty();
         assertThat(loaded.profile()).isEqualTo(ScanProfile.empty());
+    }
+
+    @Test
+    void storeAndLoadSupportsDependencyTargetsLongerThanLegacyVarcharLimit() {
+        Path rootPath = tempDir.resolve("root");
+        SourceFileSnapshot source = new SourceFileSnapshot(
+                rootPath,
+                "sample/LargeTarget.java",
+                rootPath.resolve("sample/LargeTarget.java"),
+                new SourceFileFingerprint("SHA-256", "hash-large-target"),
+                512L,
+                Instant.parse("2026-05-02T10:15:30Z"),
+                true,
+                Optional.empty());
+        String longTarget = "factory.create(" + "argument,".repeat(260) + "result)";
+        CachedScanResult result = new CachedScanResult(
+                source,
+                List.of(),
+                List.of(new ScanDependency(
+                        DependencyKind.METHOD_CALL,
+                        "sample/LargeTarget.java",
+                        "sample.LargeTarget",
+                        "run",
+                        longTarget,
+                        23,
+                        17)),
+                ScanProfile.empty());
+        H2ScanCacheAdapter adapter = initializedAdapter(tempDir.resolve("large-target-cache"));
+
+        adapter.store(result);
+
+        assertThat(longTarget).hasSizeGreaterThan(2048);
+        assertThat(adapter.find(source)).contains(result);
     }
 
     @Test

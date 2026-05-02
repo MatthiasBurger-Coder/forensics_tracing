@@ -40,7 +40,7 @@ import java.util.function.ToIntFunction;
  */
 public final class H2ScanCacheAdapter implements ScanCachePort {
 
-    private static final int CURRENT_SCHEMA_VERSION = 1;
+    private static final int CURRENT_SCHEMA_VERSION = 2;
     private static final String PHASE_METRIC_PREFIX = "phase:";
 
     private final Path databasePath;
@@ -131,7 +131,16 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
                 throw new IllegalStateException("Failed to create H2 scan cache directory " + parent + ".", e);
             }
         }
+        loadH2Driver();
         return DriverManager.getConnection(jdbcUrl);
+    }
+
+    private static void loadH2Driver() throws SQLException {
+        try {
+            Class.forName("org.h2.Driver");
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("H2 JDBC driver is not available on the scan cache classpath.", e);
+        }
     }
 
     private void executeInTransaction(String operation, SqlWork work) {
@@ -279,7 +288,7 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
                     source_relative_path VARCHAR(8192) NOT NULL,
                     owner_type VARCHAR(1024) NOT NULL,
                     owner_member VARCHAR(1024) NOT NULL,
-                    target VARCHAR(2048) NOT NULL,
+                    target CLOB NOT NULL,
                     source_line INTEGER NOT NULL,
                     source_column INTEGER NOT NULL,
                     CONSTRAINT fk_dependency_source
