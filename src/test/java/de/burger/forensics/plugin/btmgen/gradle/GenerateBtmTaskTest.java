@@ -545,6 +545,116 @@ class GenerateBtmTaskTest {
     }
 
     @Test
+    void generateCreatesLocalH2CacheDatabaseWhenEnabled(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Files.writeString(srcDir.resolve("Sample.java"), """
+                package com.example;
+                public class Sample {
+                  public void run(int value) {
+                    if (value > 0) { }
+                  }
+                }
+                """);
+
+        var task = project.getTasks().register("generateBtmCached", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        Path cacheBase = tempDir.resolve("build/forensics/cache/scan-cache");
+        Path outputFile = tempDir.resolve("build/forensics/cached.btm");
+        extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        extension.getOutputFile().set(outputFile.toFile());
+        extension.getCacheEnabled().set(true);
+        extension.getCacheDatabaseFile().set(cacheBase.toFile());
+        task.setExtension(extension);
+
+        task.generate();
+
+        assertTrue(Files.exists(outputFile));
+        assertTrue(Files.exists(cacheBase.resolveSibling(cacheBase.getFileName() + ".mv.db")));
+    }
+
+    @Test
+    void generateWritesProfileReportWhenEnabled(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Files.writeString(srcDir.resolve("Sample.java"), """
+                package com.example;
+                public class Sample {
+                  public int run(int value) {
+                    if (value > 0) { }
+                    return value;
+                  }
+                }
+                """);
+
+        var task = project.getTasks().register("generateBtmProfiled", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        Path profileReport = tempDir.resolve("build/forensics/scan-profile.json");
+        extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        extension.getOutputFile().set(tempDir.resolve("build/forensics/profiled.btm").toFile());
+        extension.getCacheEnabled().set(true);
+        extension.getCacheDatabaseFile().set(tempDir.resolve("build/forensics/cache/profiled-cache").toFile());
+        extension.getProfilingEnabled().set(true);
+        extension.getProfileReportFile().set(profileReport.toFile());
+        task.setExtension(extension);
+
+        task.generate();
+
+        String profile = Files.readString(profileReport);
+        assertTrue(profile.contains("\"totalFiles\": 1"));
+        assertTrue(profile.contains("\"parsedFiles\": 1"));
+        assertTrue(profile.contains("\"JAVA_PARSER_PARSE\""));
+        assertTrue(profile.contains("\"RULE_RENDERING\""));
+        assertTrue(profile.contains("\"BTM_FILE_WRITING\""));
+    }
+
+    @Test
+    void generateDoesNotCreateCacheDatabaseWhenCacheIsDisabled(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Files.writeString(srcDir.resolve("Sample.java"), """
+                package com.example;
+                public class Sample {
+                  public void run(int value) {
+                    if (value > 0) { }
+                  }
+                }
+                """);
+
+        var task = project.getTasks().register("generateBtmWithoutCache", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        Path cacheBase = tempDir.resolve("build/forensics/cache/disabled-cache");
+        extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        extension.getOutputFile().set(tempDir.resolve("build/forensics/no-cache.btm").toFile());
+        extension.getCacheEnabled().set(false);
+        extension.getCacheDatabaseFile().set(cacheBase.toFile());
+        task.setExtension(extension);
+
+        task.generate();
+
+        assertFalse(Files.exists(cacheBase.resolveSibling(cacheBase.getFileName() + ".mv.db")));
+    }
+
+    @Test
+    void generateRejectsUnsupportedCacheBackend(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Files.createDirectories(tempDir.resolve("src/main/java"));
+        var task = project.getTasks().register("generateBtmUnsupportedCache", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        extension.getCacheEnabled().set(true);
+        extension.getCacheBackend().set("sqlite");
+        task.setExtension(extension);
+
+        GradleException thrown = assertThrows(GradleException.class, task::generate);
+
+        assertTrue(thrown.getMessage().contains("Unsupported parser scan cache backend: sqlite"));
+    }
+
+    @Test
     void activeRegistryFallsBackToBuiltInStrategiesWhenOnlyTheDefaultFingerprintRemains() throws Exception {
         var project = ProjectBuilder.builder().build();
         var task = project.getTasks().register("generateBtmRegistryFallback", GenerateBtmTask.class).get();

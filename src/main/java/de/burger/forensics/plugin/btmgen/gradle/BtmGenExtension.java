@@ -28,6 +28,13 @@ public class BtmGenExtension {
     private final Property<@NotNull Integer> minBranchesPerMethod;
     private final Property<@NotNull Boolean> scanSubprojects;
     private final Property<@NotNull Boolean> includeTimestampHeader;
+    private final Property<@NotNull Boolean> cacheEnabled;
+    private final Property<@NotNull File> cacheDatabaseFile;
+    private final Property<@NotNull String> cacheBackend;
+    private final Property<@NotNull Boolean> profilingEnabled;
+    private final Property<@NotNull File> profileReportFile;
+    private final Property<@NotNull Boolean> strictParsing;
+    private final Property<@NotNull Boolean> dependencyAwareInvalidation;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
@@ -39,12 +46,26 @@ public class BtmGenExtension {
         this.minBranchesPerMethod = objects.property(Integer.class);
         this.scanSubprojects = objects.property(Boolean.class);
         this.includeTimestampHeader = objects.property(Boolean.class);
+        this.cacheEnabled = objects.property(Boolean.class);
+        this.cacheDatabaseFile = objects.property(File.class);
+        this.cacheBackend = objects.property(String.class);
+        this.profilingEnabled = objects.property(Boolean.class);
+        this.profileReportFile = objects.property(File.class);
+        this.strictParsing = objects.property(Boolean.class);
+        this.dependencyAwareInvalidation = objects.property(Boolean.class);
         this.sourceRoot.convention(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
         this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
         this.minBranchesPerMethod.convention(2);
         this.scanSubprojects.convention(false);
         this.includeTimestampHeader.convention(false);
+        this.cacheEnabled.convention(false);
+        this.cacheDatabaseFile.convention(new File("build/forensics/cache/scan-cache"));
+        this.cacheBackend.convention("h2");
+        this.profilingEnabled.convention(false);
+        this.profileReportFile.convention(new File("build/forensics/scan-profile.json"));
+        this.strictParsing.convention(false);
+        this.dependencyAwareInvalidation.convention(false);
     }
 
     public StrategyRegistry getRegistry() {
@@ -91,5 +112,33 @@ public class BtmGenExtension {
 
     public Property<@NotNull Boolean> getIncludeTimestampHeader() {
         return includeTimestampHeader;
+    }
+
+    public Property<@NotNull Boolean> getCacheEnabled() {
+        return cacheEnabled;
+    }
+
+    public Property<@NotNull File> getCacheDatabaseFile() {
+        return cacheDatabaseFile;
+    }
+
+    public Property<@NotNull String> getCacheBackend() {
+        return cacheBackend;
+    }
+
+    public Property<@NotNull Boolean> getProfilingEnabled() {
+        return profilingEnabled;
+    }
+
+    public Property<@NotNull File> getProfileReportFile() {
+        return profileReportFile;
+    }
+
+    public Property<@NotNull Boolean> getStrictParsing() {
+        return strictParsing;
+    }
+
+    public Property<@NotNull Boolean> getDependencyAwareInvalidation() {
+        return dependencyAwareInvalidation;
     }
 }

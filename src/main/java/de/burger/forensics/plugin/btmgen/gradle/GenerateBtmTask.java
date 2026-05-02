@@ -1,11 +1,21 @@
 package de.burger.forensics.plugin.btmgen.gradle;
 
+import de.burger.forensics.adapters.javaparser.CachedJavaParserScanner;
 import de.burger.forensics.adapters.javaparser.JavaParserScanner;
+import de.burger.forensics.adapters.persistence.h2.H2ScanCacheAdapter;
+import de.burger.forensics.adaptersupport.javaparser.DefaultSourceFingerprintPort;
 import de.burger.forensics.application.service.GenerateRulesUseCase;
 import de.burger.forensics.application.service.GenerationRequest;
 import de.burger.forensics.application.service.RuleGenerationResult;
+import de.burger.forensics.domain.model.Rule;
+import de.burger.forensics.domain.model.cache.ScanPhase;
+import de.burger.forensics.domain.model.cache.ScanProfile;
+import de.burger.forensics.domain.port.out.CodeScanPort;
+import de.burger.forensics.domain.port.out.RuleRenderPort;
+import de.burger.forensics.domain.port.out.ScanProfileSinkPort;
 import de.burger.forensics.domain.strategy.DefaultStrategyFactory;
 import de.burger.forensics.plugin.adapters.GradleLogAdapter;
+import de.burger.forensics.plugin.adapters.JsonScanProfileSinkAdapter;
 import de.burger.forensics.plugin.adapters.SystemClockAdapter;
 import de.burger.forensics.plugin.btmgen.internal.BytemanRuleRenderAdapter;
 import de.burger.forensics.plugin.btmgen.render.BytemanRuleRenderer;
@@ -36,15 +46,18 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Scans Java sources and renders Byteman rules using {@link GenerateRulesUseCase}.
@@ -60,6 +73,10 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getOutputs().doNotCacheIf(
                 "Timestamp header is enabled and makes generated .btm output non-deterministic.",
                 task -> getIncludeTimestampHeader().getOrElse(false)
+        );
+        getOutputs().doNotCacheIf(
+                "Profiling writes local diagnostic state that should be refreshed on execution.",
+                task -> getProfilingEnabled().getOrElse(false)
         );
     }
 
@@ -105,6 +122,14 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Input @Optional public abstract Property<@NotNull Boolean> getScanSubprojects();
     @Input @Optional public abstract Property<@NotNull Boolean> getIncludeTimestampHeader();
     @Input @Optional public abstract Property<@NotNull String> getRegistryFingerprint();
+    @Input @Optional public abstract Property<@NotNull Boolean> getCacheEnabled();
+    @Input @Optional public abstract Property<@NotNull String> getCacheBackend();
+    @Internal public abstract RegularFileProperty getCacheDatabaseFile();
+    @LocalState @Optional public abstract DirectoryProperty getCacheDatabaseDirectory();
+    @Input @Optional public abstract Property<@NotNull Boolean> getProfilingEnabled();
+    @LocalState @Optional public abstract RegularFileProperty getProfileReportFile();
+    @Input @Optional public abstract Property<@NotNull Boolean> getStrictParsing();
+    @Input @Optional public abstract Property<@NotNull Boolean> getDependencyAwareInvalidation();
 
     /** Injected via plugin apply() */
     public void setExtension(BtmGenExtension ext) {
@@ -122,6 +147,14 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getMinBranchesPerMethod().convention(ext.getMinBranchesPerMethod());
         getScanSubprojects().convention(ext.getScanSubprojects());
         getIncludeTimestampHeader().convention(ext.getIncludeTimestampHeader());
+        getCacheEnabled().convention(ext.getCacheEnabled());
+        getCacheBackend().convention(ext.getCacheBackend());
+        getCacheDatabaseFile().set(getProjectLayout().file(ext.getCacheDatabaseFile()));
+        getCacheDatabaseDirectory().convention(getProjectLayout().dir(ext.getCacheDatabaseFile().map(GenerateBtmTask::parentDirectory)));
+        getProfilingEnabled().convention(ext.getProfilingEnabled());
+        getProfileReportFile().set(getProjectLayout().file(ext.getProfileReportFile()));
+        getStrictParsing().convention(ext.getStrictParsing());
+        getDependencyAwareInvalidation().convention(ext.getDependencyAwareInvalidation());
         registry = ext.getRegistry() == null ? StrategyRegistries.defaultRegistry() : ext.getRegistry();
         getRegistryFingerprint().set(registryFingerprint(registry));
         configureSourceSetRoots();
@@ -132,6 +165,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         applyDefaultConventions();
         final Path outFile = getOutputFile().get().getAsFile().toPath();
         BytemanRuleRenderer renderer = BytemanRuleRenderer.of(activeRegistry());
+        TaskScanProfileCollector profileCollector = new TaskScanProfileCollector(getProfilingEnabled().getOrElse(false));
 
         createOutputDirectory(outFile);
 
@@ -148,11 +182,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
                     null,
                     resolveHelperFqn()
             );
-            allRules.add(renderer.render(templateIdOrDefault(), params));
+            allRules.add(profileCollector.measure(ScanPhase.RULE_RENDERING,
+                    () -> renderer.render(templateIdOrDefault(), params)));
         } else {
+            RuleRenderPort ruleRenderer = profileCollector.wrap(new BytemanRuleRenderAdapter(renderer));
             GenerateRulesUseCase useCase = new GenerateRulesUseCase(
-                new JavaParserScanner(),
-                new BytemanRuleRenderAdapter(renderer),
+                createScanner(profileCollector),
+                ruleRenderer,
                 new SystemClockAdapter(),
                 new GradleLogAdapter(getLogger()),
                 new DefaultStrategyFactory()
@@ -175,7 +211,11 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
         List<String> uniqueRules = new ArrayList<>(new LinkedHashSet<>(allRules));
         List<String> dedupedRuleNames = dedupeRuleHeaders(uniqueRules);
-        writeRules(outFile, dedupedRuleNames);
+        profileCollector.measure(ScanPhase.BTM_FILE_WRITING, () -> {
+            writeRules(outFile, dedupedRuleNames);
+            return null;
+        });
+        publishProfile(profileCollector);
 
         getLogger().lifecycle("Generated {} rules -> {}", dedupedRuleNames.size(), outFile.toAbsolutePath());
     }
@@ -218,6 +258,30 @@ public abstract class GenerateBtmTask extends DefaultTask {
         if (!getRegistryFingerprint().isPresent()) {
             getRegistryFingerprint().convention(registryFingerprint(registry));
         }
+        if (!getCacheEnabled().isPresent()) {
+            getCacheEnabled().convention(false);
+        }
+        if (!getCacheBackend().isPresent()) {
+            getCacheBackend().convention("h2");
+        }
+        if (!getCacheDatabaseFile().isPresent()) {
+            getCacheDatabaseFile().convention(layout.getBuildDirectory().file("forensics/cache/scan-cache"));
+        }
+        if (!getCacheDatabaseDirectory().isPresent()) {
+            getCacheDatabaseDirectory().convention(layout.getBuildDirectory().dir("forensics/cache"));
+        }
+        if (!getProfilingEnabled().isPresent()) {
+            getProfilingEnabled().convention(false);
+        }
+        if (!getProfileReportFile().isPresent()) {
+            getProfileReportFile().convention(layout.getBuildDirectory().file("forensics/scan-profile.json"));
+        }
+        if (!getStrictParsing().isPresent()) {
+            getStrictParsing().convention(false);
+        }
+        if (!getDependencyAwareInvalidation().isPresent()) {
+            getDependencyAwareInvalidation().convention(false);
+        }
     }
 
     private void configureSourceSetRoots() {
@@ -227,6 +291,33 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .flatMap(subproject -> mainSourceSetRoots(subproject).stream())
                 .toList();
         getSubprojectSourceSetRoots().setFrom(subprojectRoots);
+    }
+
+    private CodeScanPort createScanner(TaskScanProfileCollector profileCollector) {
+        if (!getCacheEnabled().getOrElse(false)) {
+            return new JavaParserScanner();
+        }
+        String backend = getCacheBackend().getOrElse("h2");
+        if (!"h2".equalsIgnoreCase(backend)) {
+            throw new GradleException("Unsupported parser scan cache backend: " + backend);
+        }
+        if (getDependencyAwareInvalidation().getOrElse(false)) {
+            throw new GradleException("Dependency-aware cache invalidation is not implemented yet.");
+        }
+        return new CachedJavaParserScanner(
+                new H2ScanCacheAdapter(getCacheDatabaseFile().get().getAsFile().toPath()),
+                new DefaultSourceFingerprintPort(),
+                getProfilingEnabled().getOrElse(false) ? profileCollector : null,
+                getStrictParsing().getOrElse(false)
+        );
+    }
+
+    private void publishProfile(TaskScanProfileCollector profileCollector) {
+        if (!getProfilingEnabled().getOrElse(false)) {
+            return;
+        }
+        Path reportFile = getProfileReportFile().get().getAsFile().toPath();
+        new JsonScanProfileSinkAdapter(reportFile).publish(profileCollector.profile());
     }
 
     private boolean hasMinimalInputs() {
@@ -428,6 +519,11 @@ public abstract class GenerateBtmTask extends DefaultTask {
         roots.add(root.toPath().toAbsolutePath().normalize());
     }
 
+    private static File parentDirectory(File file) {
+        File parent = file.getParentFile();
+        return parent == null ? new File(".") : parent;
+    }
+
     private static boolean isExistingSourceLocation(Path path) {
         return Files.exists(path) && (Files.isDirectory(path) || Files.isRegularFile(path));
     }
@@ -458,6 +554,65 @@ public abstract class GenerateBtmTask extends DefaultTask {
         }
         registry = defaultRegistry;
         return registry;
+    }
+
+    private static final class TaskScanProfileCollector implements ScanProfileSinkPort {
+
+        private final boolean enabled;
+        private final EnumMap<ScanPhase, Duration> durations = new EnumMap<>(ScanPhase.class);
+        private ScanProfile scannerProfile = ScanProfile.empty();
+
+        private TaskScanProfileCollector(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        @Override
+        public void publish(ScanProfile profile) {
+            if (!enabled) {
+                return;
+            }
+            scannerProfile = scannerProfile.plus(profile);
+        }
+
+        private RuleRenderPort wrap(RuleRenderPort delegate) {
+            if (!enabled) {
+                return delegate;
+            }
+            return new ProfilingRuleRenderPort(delegate, this);
+        }
+
+        private <T> T measure(ScanPhase phase, Supplier<T> supplier) {
+            if (!enabled) {
+                return supplier.get();
+            }
+            long startedAt = System.nanoTime();
+            try {
+                return supplier.get();
+            } finally {
+                durations.merge(phase, Duration.ofNanos(System.nanoTime() - startedAt), Duration::plus);
+            }
+        }
+
+        private ScanProfile profile() {
+            return scannerProfile.plus(new ScanProfile(
+                    durations,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0));
+        }
+    }
+
+    private record ProfilingRuleRenderPort(RuleRenderPort delegate,
+                                           TaskScanProfileCollector profileCollector) implements RuleRenderPort {
+        @Override
+        public String render(Rule rule) {
+            return profileCollector.measure(ScanPhase.RULE_RENDERING, () -> delegate.render(rule));
+        }
     }
 
     private record RuleHeader(int startIndex, int endIndex, String prefix, String name) { }

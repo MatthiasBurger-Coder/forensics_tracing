@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.slf4j.api)
     implementation(libs.aspectj.rt)
     implementation(libs.javaparser.symbol.solver.core)
+    implementation(libs.h2)
 
     compileOnly(libs.byteman)
     compileOnly(libs.jakarta.annotation.api)
