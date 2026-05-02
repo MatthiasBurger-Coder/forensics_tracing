@@ -37,6 +37,12 @@ jobs:
       - name: Build & Test
         run: ./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage
 
+      - name: Upload problems report
+        uses: actions/upload-artifact@v4
+        with:
+          name: problems-report
+          path: build/reports/problems/problems-report.html
+
       - name: SonarCloud Scan
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN || secrets.SONAR_CLOUD_TOKEN }}

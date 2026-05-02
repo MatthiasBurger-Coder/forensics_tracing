@@ -111,14 +111,17 @@ class BtmGenMojoTest {
 
         @Override
         public void debug(CharSequence content) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
         public void debug(CharSequence content, Throwable error) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
         public void debug(Throwable error) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
@@ -128,14 +131,17 @@ class BtmGenMojoTest {
 
         @Override
         public void info(CharSequence content) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
         public void info(CharSequence content, Throwable error) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
         public void info(Throwable error) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
@@ -145,14 +151,17 @@ class BtmGenMojoTest {
 
         @Override
         public void warn(CharSequence content) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
         public void warn(CharSequence content, Throwable error) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
         public void warn(Throwable error) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
@@ -162,14 +171,17 @@ class BtmGenMojoTest {
 
         @Override
         public void error(CharSequence content) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
         public void error(CharSequence content, Throwable error) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
 
         @Override
         public void error(Throwable error) {
+            // Intentionally silent; the test only needs a Maven Log implementation.
         }
     }
 }

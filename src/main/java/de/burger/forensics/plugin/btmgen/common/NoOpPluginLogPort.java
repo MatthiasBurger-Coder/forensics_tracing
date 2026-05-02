@@ -12,17 +12,21 @@ public final class NoOpPluginLogPort implements PluginLogPort {
 
     @Override
     public void info(String message) {
+        // Intentionally ignores messages when no build-tool logger is available.
     }
 
     @Override
     public void warn(String message) {
+        // Intentionally ignores messages when no build-tool logger is available.
     }
 
     @Override
     public void error(String message) {
+        // Intentionally ignores messages when no build-tool logger is available.
     }
 
     @Override
     public void debug(String message) {
+        // Intentionally ignores messages when no build-tool logger is available.
     }
 }

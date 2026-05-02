@@ -104,24 +104,33 @@ tasks.withType<Javadoc>().configureEach {
 
 val testLogFile = layout.buildDirectory.file("test-logs/forensics-btmgen.log")
 
-fun javaAgentArg(file: File): String {
-    val p = file.absolutePath
-    // Quote the full javaagent path when it contains whitespace.
-    val quoted = if (p.any { it.isWhitespace() }) "\"$p\"" else p
-    return "-javaagent:$quoted"
-}
-tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
-    javaLauncher.set(java17)
-    jvmArgumentProviders += CommandLineArgumentProvider {
-        val weaverJar = aspectjAgent.resolve().firstOrNull { it.name.startsWith("aspectjweaver") }
+abstract class AspectJWeaverAgentArgumentProvider : CommandLineArgumentProvider {
+
+    @get:Classpath
+    abstract val agentClasspath: ConfigurableFileCollection
+
+    override fun asArguments(): Iterable<String> {
+        val weaverJar = agentClasspath.files.firstOrNull { it.name.startsWith("aspectjweaver") }
             ?: throw GradleException("aspectjweaver*.jar not found. Add 'aspectjAgent(libs.aspectj.weaver)'.")
-        val arg = javaAgentArg(weaverJar)
-        listOf(
-            arg,
+
+        return listOf(
+            "-javaagent:${quoteIfNeeded(weaverJar.absolutePath)}",
             "-XX:+PrintCommandLineFlags"
         )
     }
+
+    private fun quoteIfNeeded(path: String): String =
+        if (path.any { it.isWhitespace() }) "\"$path\"" else path
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+    javaLauncher.set(java17)
+    jvmArgumentProviders.add(
+        objects.newInstance<AspectJWeaverAgentArgumentProvider>().apply {
+            agentClasspath.from(aspectjAgent)
+        }
+    )
 
     maxParallelForks = 1
     testLogging {
@@ -134,28 +143,19 @@ tasks.withType<Test>().configureEach {
 tasks.test {
     useJUnitPlatform()
 
-    doFirst {
-        // Ensure the test log directory exists.
-        testLogFile.get().asFile.parentFile.mkdirs()
+    // Mirror AspectJ output into a dedicated test log file.
+    systemProperty("forensics.btmgen.logToFile", "true")
+    systemProperty("forensics.btmgen.logFile", testLogFile.get().asFile.absolutePath)
 
-        // Mirror AspectJ output into a dedicated test log file.
-        systemProperty("forensics.btmgen.logToFile", "true")
-        systemProperty("forensics.btmgen.logFile", testLogFile.get().asFile.absolutePath)
+    // Reduce AspectJ weaver noise during tests.
+    systemProperty("org.aspectj.weaver.showWeaveInfo", "false")
+    systemProperty("aj.weaving.verbose", "false")
 
-        jvmArgs(
-            "-Xshare:off" // Optional, but keeps test JVM output predictable.
-        )
+    // Load the main aop.xml explicitly to keep weaving configuration deterministic.
+    systemProperty("org.aspectj.weaver.loadtime.configuration", "classpath:META-INF/aop.xml")
 
-        // Reduce AspectJ weaver noise during tests.
-        systemProperty("org.aspectj.weaver.showWeaveInfo", "false")
-        systemProperty("aj.weaving.verbose", "false")
-
-        // Load the main aop.xml explicitly to keep weaving configuration deterministic.
-        systemProperty("org.aspectj.weaver.loadtime.configuration", "classpath:META-INF/aop.xml")
-
-        // Keep the repository-specific feature toggle enabled in tests.
-        systemProperty("forensics.aspect.enabled", "true")
-    }
+    // Keep the repository-specific feature toggle enabled in tests.
+    systemProperty("forensics.aspect.enabled", "true")
 
     // Keep test logging verbose enough for agent and weaving failures.
     testLogging {
