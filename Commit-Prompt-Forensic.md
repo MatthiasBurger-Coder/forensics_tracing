@@ -492,10 +492,10 @@ If remaining blockers exist, state them explicitly.
 For this project, the expected logic is:
 
 ```text
-AGENTS.md    = Agentenregeln / haben Vorrang bei Konflikten
-QUALITY.md   = Qualitätsvertrag / verbindliche Vorgabe
-./gradlew test                             = dokumentierter Mindestlauf
-./gradlew clean check jacocoTestReport     = vollständiger lokaler Commit-Gate
-./gradlew sonar                            = optionales externes Gate, nur mit Token
-.github/workflows                          = CI-Referenz für Alignment-Check
+AGENTS.md    = agent rules / take precedence in conflicts
+QUALITY.md   = quality contract / binding requirement
+./gradlew test                             = documented minimum run
+./gradlew clean check jacocoTestReport     = full local commit gate
+./gradlew sonar                            = optional external gate, only with token
+.github/workflows                          = CI reference for alignment check
 ```
