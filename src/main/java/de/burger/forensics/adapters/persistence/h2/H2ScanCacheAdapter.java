@@ -756,14 +756,46 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
             return;
         }
 
-        String placeholders = String.join(", ", currentRelativePaths.stream().map(path -> "?").toList());
-        String sql = "DELETE FROM source_file WHERE root_path = ? AND relative_path NOT IN (" + placeholders + ")";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        List<Long> staleSourceFileIds = readStaleSourceFileIds(
+                connection,
+                rootPath,
+                Set.copyOf(currentRelativePaths));
+        deleteSourceFilesById(connection, staleSourceFileIds);
+    }
+
+    private static List<Long> readStaleSourceFileIds(
+            Connection connection,
+            String rootPath,
+            Set<String> retainedRelativePaths
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT id, relative_path
+                FROM source_file
+                WHERE root_path = ?
+                """)) {
             statement.setString(1, rootPath);
-            for (int index = 0; index < currentRelativePaths.size(); index++) {
-                statement.setString(index + 2, currentRelativePaths.get(index));
+            try (ResultSet resultSet = statement.executeQuery()) {
+                List<Long> staleSourceFileIds = new ArrayList<>();
+                while (resultSet.next()) {
+                    if (!retainedRelativePaths.contains(resultSet.getString("relative_path"))) {
+                        staleSourceFileIds.add(resultSet.getLong("id"));
+                    }
+                }
+                return staleSourceFileIds;
             }
-            statement.executeUpdate();
+        }
+    }
+
+    private static void deleteSourceFilesById(Connection connection, List<Long> sourceFileIds) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                DELETE FROM source_file
+                WHERE id = ?
+                """)) {
+            for (Long sourceFileId : sourceFileIds) {
+                statement.setLong(1, sourceFileId);
+                statement.addBatch();
+            }
+            statement.executeBatch();
         }
     }
 
