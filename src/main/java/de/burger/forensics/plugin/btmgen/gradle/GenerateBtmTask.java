@@ -1,28 +1,12 @@
 package de.burger.forensics.plugin.btmgen.gradle;
 
-import de.burger.forensics.adapters.javaparser.CachedJavaParserScanner;
-import de.burger.forensics.adapters.javaparser.JavaParserScanner;
-import de.burger.forensics.adapters.persistence.h2.H2ScanCacheAdapter;
-import de.burger.forensics.adaptersupport.javaparser.DefaultSourceFingerprintPort;
-import de.burger.forensics.application.service.GenerateRulesUseCase;
-import de.burger.forensics.application.service.GenerationRequest;
-import de.burger.forensics.application.service.RuleGenerationResult;
-import de.burger.forensics.domain.model.Rule;
-import de.burger.forensics.domain.model.cache.ScanPhase;
-import de.burger.forensics.domain.model.cache.ScanProfile;
-import de.burger.forensics.domain.port.out.CodeScanPort;
-import de.burger.forensics.domain.port.out.RuleRenderPort;
-import de.burger.forensics.domain.port.out.ScanProfileSinkPort;
-import de.burger.forensics.domain.strategy.DefaultStrategyFactory;
-import de.burger.forensics.plugin.adapters.GradleLogAdapter;
-import de.burger.forensics.plugin.adapters.JsonScanProfileSinkAdapter;
-import de.burger.forensics.plugin.adapters.SystemClockAdapter;
-import de.burger.forensics.plugin.btmgen.internal.BytemanRuleRenderAdapter;
-import de.burger.forensics.plugin.btmgen.render.BytemanRuleRenderer;
+import de.burger.forensics.plugin.btmgen.common.BtmGenerationException;
+import de.burger.forensics.plugin.btmgen.common.BtmGenerationRequest;
+import de.burger.forensics.plugin.btmgen.common.BtmGenerationRunner;
+import de.burger.forensics.plugin.btmgen.common.BtmTemplateRequest;
 import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
-import de.burger.forensics.plugin.btmgen.writer.BtmFileWriter;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.Project;
@@ -44,23 +28,14 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Clock;
-import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.function.Supplier;
 
 /**
  * Scans Java sources and renders Byteman rules using {@link GenerateRulesUseCase}.
@@ -166,61 +141,40 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @TaskAction
     public void generate() {
         applyDefaultConventions();
-        final Path outFile = getOutputFile().get().getAsFile().toPath();
-        BytemanRuleRenderer renderer = BytemanRuleRenderer.of(activeRegistry());
-        TaskScanProfileCollector profileCollector = new TaskScanProfileCollector(getProfilingEnabled().getOrElse(false));
+        try {
+            new BtmGenerationRunner(activeRegistry(), new GradlePluginLogAdapter(getLogger()))
+                    .generate(toGenerationRequest());
+        } catch (BtmGenerationException exception) {
+            throw new GradleException(exception.getMessage(), exception);
+        }
+    }
 
-        createOutputDirectory(outFile);
-
-        List<String> allRules = new ArrayList<>();
+    private BtmGenerationRequest toGenerationRequest() {
+        BtmGenerationRequest.Builder builder = BtmGenerationRequest.builder()
+                .sourceRoots(resolveSourceRoots())
+                .outputFile(getOutputFile().get().getAsFile().toPath())
+                .cacheDatabaseFile(getCacheDatabaseFile().get().getAsFile().toPath())
+                .profileReportFile(getProfileReportFile().get().getAsFile().toPath())
+                .cacheEnabled(getCacheEnabled().getOrElse(false))
+                .cacheBackend(getCacheBackend().getOrElse("h2"))
+                .profilingEnabled(getProfilingEnabled().getOrElse(false))
+                .strictParsing(getStrictParsing().getOrElse(false))
+                .dependencyAwareInvalidation(getDependencyAwareInvalidation().getOrElse(false))
+                .includePackages(packagePrefixes())
+                .helperFqn(resolveHelperFqn())
+                .includeEntryExit(includeEntryExit())
+                .minBranchesPerMethod(minBranches())
+                .includeTimestampHeader(getIncludeTimestampHeader().getOrElse(false));
 
         if (hasMinimalInputs()) {
-            RuleParams params = new RuleParams(
+            builder.templateRequest(new BtmTemplateRequest(
                     templateIdOrDefault(),
                     getClassName().get(),
                     getMethodName().get(),
-                    getMethodDesc().getOrNull(),
-                    getClassName().get() + "#" + getMethodName().get(),
-                    null,
-                    null,
-                    resolveHelperFqn()
-            );
-            allRules.add(profileCollector.measure(ScanPhase.RULE_RENDERING,
-                    () -> renderer.render(templateIdOrDefault(), params)));
-        } else {
-            RuleRenderPort ruleRenderer = profileCollector.wrap(new BytemanRuleRenderAdapter(renderer));
-            GenerateRulesUseCase useCase = new GenerateRulesUseCase(
-                createScanner(profileCollector),
-                ruleRenderer,
-                new SystemClockAdapter(),
-                new GradleLogAdapter(getLogger()),
-                new DefaultStrategyFactory()
-            );
-            for (Path srcRoot : resolveSourceRoots()) {
-                getLogger().lifecycle("Scanning sources in {}", srcRoot.toAbsolutePath());
-                GenerationRequest request = new GenerationRequest(
-                    srcRoot,
-                    resolveHelperFqn(),
-                    false,
-                    includeEntryExit(),
-                    packagePrefixes(),
-                    minBranches(),
-                    Collections.emptyList()
-                );
-                RuleGenerationResult result = useCase.generate(request);
-                allRules.addAll(result.renderedRules());
-            }
+                    getMethodDesc().getOrNull()
+            ));
         }
-
-        List<String> uniqueRules = new ArrayList<>(new LinkedHashSet<>(allRules));
-        List<String> dedupedRuleNames = dedupeRuleHeaders(uniqueRules);
-        profileCollector.measure(ScanPhase.BTM_FILE_WRITING, () -> {
-            writeRules(outFile, dedupedRuleNames);
-            return null;
-        });
-        publishProfile(profileCollector);
-
-        getLogger().lifecycle("Generated {} rules -> {}", dedupedRuleNames.size(), outFile.toAbsolutePath());
+        return builder.build();
     }
 
     @Inject
@@ -284,33 +238,6 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getSubprojectSourceSetRoots().setFrom(subprojectRoots);
     }
 
-    private CodeScanPort createScanner(TaskScanProfileCollector profileCollector) {
-        if (!getCacheEnabled().getOrElse(false)) {
-            return new JavaParserScanner();
-        }
-        String backend = getCacheBackend().getOrElse("h2");
-        if (!"h2".equalsIgnoreCase(backend)) {
-            throw new GradleException("Unsupported parser scan cache backend: " + backend);
-        }
-        if (getDependencyAwareInvalidation().getOrElse(false)) {
-            throw new GradleException("Dependency-aware cache invalidation is not implemented yet.");
-        }
-        return new CachedJavaParserScanner(
-                new H2ScanCacheAdapter(getCacheDatabaseFile().get().getAsFile().toPath()),
-                new DefaultSourceFingerprintPort(),
-                getProfilingEnabled().getOrElse(false) ? profileCollector : null,
-                getStrictParsing().getOrElse(false)
-        );
-    }
-
-    private void publishProfile(TaskScanProfileCollector profileCollector) {
-        if (!getProfilingEnabled().getOrElse(false)) {
-            return;
-        }
-        Path reportFile = getProfileReportFile().get().getAsFile().toPath();
-        new JsonScanProfileSinkAdapter(reportFile).publish(profileCollector.profile());
-    }
-
     private boolean hasMinimalInputs() {
         return getTemplateId().isPresent() && getClassName().isPresent() && getMethodName().isPresent();
     }
@@ -356,131 +283,6 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
-    }
-
-    private List<String> dedupeRuleHeaders(List<String> rules) {
-        Map<String, Integer> seen = new HashMap<>();
-        List<String> out = new ArrayList<>(rules.size());
-        for (String rule : rules) {
-            RuleHeader header = findRuleHeader(rule);
-            String rewrittenRule = rule;
-            if (header != null) {
-                String originalName = header.name();
-                int index = seen.merge(originalName, 1, Integer::sum);
-                if (index > 1) {
-                    String replacement = header.prefix() + originalName + "_" + index;
-                    rewrittenRule = rule.substring(0, header.startIndex()) + replacement + rule.substring(header.endIndex());
-                }
-            }
-            out.add(rewrittenRule);
-        }
-        return out;
-    }
-
-    private static RuleHeader findRuleHeader(String rule) {
-        int lineStart = 0;
-        while (lineStart < rule.length()) {
-            int lineEnd = findLineEnd(rule, lineStart);
-            RuleHeader header = parseRuleHeader(rule, lineStart, lineEnd);
-            if (header != null) {
-                return header;
-            }
-            lineStart = skipLineBreak(rule, lineEnd);
-        }
-        return null;
-    }
-
-    private static RuleHeader parseRuleHeader(String rule, int lineStart, int lineEnd) {
-        int contentStart = skipInlineWhitespace(rule, lineStart, lineEnd);
-        if (!matchesKeyword(rule, contentStart, lineEnd)) {
-            return null;
-        }
-
-        int afterKeyword = contentStart + "RULE".length();
-        if (afterKeyword >= lineEnd || !Character.isWhitespace(rule.charAt(afterKeyword))) {
-            return null;
-        }
-
-        int nameStart = skipInlineWhitespace(rule, afterKeyword, lineEnd);
-        if (nameStart >= lineEnd) {
-            return null;
-        }
-
-        int nameEnd = trimInlineWhitespace(rule, nameStart, lineEnd);
-        String prefix = rule.substring(lineStart, nameStart);
-        String name = rule.substring(nameStart, nameEnd);
-        return new RuleHeader(lineStart, lineEnd, prefix, name);
-    }
-
-    private static boolean matchesKeyword(String rule, int start, int lineEnd) {
-        int keywordEnd = start + "RULE".length();
-        return keywordEnd <= lineEnd && rule.regionMatches(start, "RULE", 0, "RULE".length());
-    }
-
-    private static int skipInlineWhitespace(String rule, int start, int end) {
-        int cursor = start;
-        while (cursor < end && Character.isWhitespace(rule.charAt(cursor))) {
-            cursor++;
-        }
-        return cursor;
-    }
-
-    private static int trimInlineWhitespace(String rule, int start, int end) {
-        int cursor = end;
-        while (cursor > start && Character.isWhitespace(rule.charAt(cursor - 1))) {
-            cursor--;
-        }
-        return cursor;
-    }
-
-    private static int findLineEnd(String rule, int lineStart) {
-        int cursor = lineStart;
-        while (cursor < rule.length()) {
-            char current = rule.charAt(cursor);
-            if (current == '\n' || current == '\r') {
-                return cursor;
-            }
-            cursor++;
-        }
-        return rule.length();
-    }
-
-    private static int skipLineBreak(String rule, int lineEnd) {
-        if (lineEnd >= rule.length()) {
-            return rule.length();
-        }
-        if (rule.charAt(lineEnd) == '\r' && lineEnd + 1 < rule.length() && rule.charAt(lineEnd + 1) == '\n') {
-            return lineEnd + 2;
-        }
-        return lineEnd + 1;
-    }
-
-    private void writeRules(Path outFile, List<String> rules) {
-        try {
-            createWriter(outFile, getIncludeTimestampHeader().getOrElse(false)).write(rules);
-        } catch (UncheckedIOException e) {
-            throw new GradleException("Failed writing BTM file " + outFile, e);
-        }
-    }
-
-    private void createOutputDirectory(Path outFile) {
-        Path parent = outFile.getParent();
-        if (parent == null) {
-            return;
-        }
-        try {
-            Files.createDirectories(parent);
-        } catch (IOException e) {
-            throw new GradleException("Failed to create output directory for " + outFile, e);
-        }
-    }
-
-    private static BtmFileWriter createWriter(Path outFile, boolean includeTimestampHeader) {
-        try {
-            return new BtmFileWriter(Clock.systemDefaultZone(), outFile, includeTimestampHeader);
-        } catch (NoSuchMethodError | NoClassDefFoundError e) {
-            return new BtmFileWriter(outFile);
-        }
     }
 
     private static Set<File> mainSourceSetRoots(Project candidate) {
@@ -546,65 +348,4 @@ public abstract class GenerateBtmTask extends DefaultTask {
         registry = defaultRegistry;
         return registry;
     }
-
-    private static final class TaskScanProfileCollector implements ScanProfileSinkPort {
-
-        private final boolean enabled;
-        private final EnumMap<ScanPhase, Duration> durations = new EnumMap<>(ScanPhase.class);
-        private ScanProfile scannerProfile = ScanProfile.empty();
-
-        private TaskScanProfileCollector(boolean enabled) {
-            this.enabled = enabled;
-        }
-
-        @Override
-        public void publish(ScanProfile profile) {
-            if (!enabled) {
-                return;
-            }
-            scannerProfile = scannerProfile.plus(profile);
-        }
-
-        private RuleRenderPort wrap(RuleRenderPort delegate) {
-            if (!enabled) {
-                return delegate;
-            }
-            return new ProfilingRuleRenderPort(delegate, this);
-        }
-
-        private <T> T measure(ScanPhase phase, Supplier<T> supplier) {
-            if (!enabled) {
-                return supplier.get();
-            }
-            long startedAt = System.nanoTime();
-            try {
-                return supplier.get();
-            } finally {
-                durations.merge(phase, Duration.ofNanos(System.nanoTime() - startedAt), Duration::plus);
-            }
-        }
-
-        private ScanProfile profile() {
-            return scannerProfile.plus(new ScanProfile(
-                    durations,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0));
-        }
-    }
-
-    private record ProfilingRuleRenderPort(RuleRenderPort delegate,
-                                           TaskScanProfileCollector profileCollector) implements RuleRenderPort {
-        @Override
-        public String render(Rule rule) {
-            return profileCollector.measure(ScanPhase.RULE_RENDERING, () -> delegate.render(rule));
-        }
-    }
-
-    private record RuleHeader(int startIndex, int endIndex, String prefix, String name) { }
 }

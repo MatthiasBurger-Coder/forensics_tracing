@@ -718,8 +718,6 @@ class GenerateBtmTaskTest {
         resolveSourceRoots.setAccessible(true);
         Method packagePrefixes = GenerateBtmTask.class.getDeclaredMethod("packagePrefixes");
         packagePrefixes.setAccessible(true);
-        Method dedupeRuleHeaders = GenerateBtmTask.class.getDeclaredMethod("dedupeRuleHeaders", List.class);
-        dedupeRuleHeaders.setAccessible(true);
 
         assertEquals("METHOD_ENTER", templateIdOrDefault.invoke(task));
         task.getTemplateId().set(" ");
@@ -741,21 +739,6 @@ class GenerateBtmTaskTest {
         assertEquals(2, roots.size());
         assertTrue(roots.stream().allMatch(path -> path.endsWith("src\\main\\java") || path.endsWith("src/main/java")));
         assertEquals(List.of("com.example", "org.example"), packagePrefixes.invoke(task));
-
-        @SuppressWarnings("unchecked")
-        List<String> deduped = (List<String>) dedupeRuleHeaders.invoke(task, List.of(
-            "plain text",
-            "RULE duplicate\nCLASS A\nENDRULE",
-            "RULE duplicate\nCLASS A\nENDRULE",
-            "\n  RULE duplicate  \nCLASS A\nENDRULE",
-            "RULE    \nCLASS A\nENDRULE",
-            "RULER duplicate\nCLASS A\nENDRULE"
-        ));
-        assertEquals("plain text", deduped.get(0));
-        assertTrue(deduped.get(2).contains("RULE duplicate_2"));
-        assertTrue(deduped.get(3).contains("RULE duplicate_3"));
-        assertEquals("RULE    \nCLASS A\nENDRULE", deduped.get(4));
-        assertEquals("RULER duplicate\nCLASS A\nENDRULE", deduped.get(5));
 
         task.getIncludes().set("");
         assertEquals(List.of(), packagePrefixes.invoke(task));

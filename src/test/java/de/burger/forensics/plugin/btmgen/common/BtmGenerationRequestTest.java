@@ -22,10 +22,17 @@ class BtmGenerationRequestTest {
                 .cacheDatabaseFile(Path.of("cache/scan-cache"))
                 .profileReportFile(Path.of("profile/report.json"))
                 .cacheEnabled(true)
+                .cacheBackend("h2")
                 .profilingEnabled(true)
                 .strictParsing(true)
+                .dependencyAwareInvalidation(false)
                 .includePackages(includePackages)
                 .excludePackages(excludePackages)
+                .helperFqn("com.example.Helper")
+                .includeEntryExit(false)
+                .minBranchesPerMethod(3)
+                .includeTimestampHeader(true)
+                .templateRequest(new BtmTemplateRequest("CUSTOM", "com.example.Foo", "bar", "(I)V"))
                 .build();
 
         sourceRoots.add(Path.of("other"));
@@ -39,8 +46,15 @@ class BtmGenerationRequestTest {
         assertThrows(UnsupportedOperationException.class, () -> request.includePackages().add("new"));
         assertThrows(UnsupportedOperationException.class, () -> request.excludePackages().add("new"));
         assertTrue(request.cacheEnabled());
+        assertEquals("h2", request.cacheBackend());
         assertTrue(request.profilingEnabled());
         assertTrue(request.strictParsing());
+        assertFalse(request.dependencyAwareInvalidation());
+        assertEquals("com.example.Helper", request.helperFqn());
+        assertFalse(request.includeEntryExit());
+        assertEquals(3, request.minBranchesPerMethod());
+        assertTrue(request.includeTimestampHeader());
+        assertTrue(request.templateRequest().isPresent());
     }
 
     @Test
@@ -54,9 +68,24 @@ class BtmGenerationRequestTest {
         assertEquals(BtmGenerationDefaults.defaultCacheDatabaseFile(), request.cacheDatabaseFile());
         assertEquals(BtmGenerationDefaults.defaultProfileReportFile(), request.profileReportFile());
         assertFalse(request.cacheEnabled());
+        assertEquals(BtmGenerationDefaults.DEFAULT_CACHE_BACKEND, request.cacheBackend());
         assertFalse(request.profilingEnabled());
         assertFalse(request.strictParsing());
+        assertFalse(request.dependencyAwareInvalidation());
         assertEquals(List.of(), request.includePackages());
         assertEquals(List.of(), request.excludePackages());
+        assertEquals(BtmGenerationDefaults.DEFAULT_HELPER_FQN, request.helperFqn());
+        assertTrue(request.includeEntryExit());
+        assertEquals(BtmGenerationDefaults.DEFAULT_MIN_BRANCHES_PER_METHOD, request.minBranchesPerMethod());
+        assertFalse(request.includeTimestampHeader());
+        assertTrue(request.templateRequest().isEmpty());
+    }
+
+    @Test
+    void builderRejectsNegativeBranchThreshold() {
+        assertThrows(IllegalArgumentException.class, () -> BtmGenerationRequest.builder()
+                .sourceRoot(Path.of("src/main/java"))
+                .minBranchesPerMethod(-1)
+                .build());
     }
 }

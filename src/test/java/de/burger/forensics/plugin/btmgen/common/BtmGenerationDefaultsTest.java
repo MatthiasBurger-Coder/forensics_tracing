@@ -20,5 +20,12 @@ class BtmGenerationDefaultsTest {
         assertFalse(BtmGenerationDefaults.DEFAULT_CACHE_ENABLED);
         assertFalse(BtmGenerationDefaults.DEFAULT_PROFILING_ENABLED);
         assertFalse(BtmGenerationDefaults.DEFAULT_STRICT_PARSING);
+        assertFalse(BtmGenerationDefaults.DEFAULT_DEPENDENCY_AWARE_INVALIDATION);
+        assertFalse(BtmGenerationDefaults.DEFAULT_INCLUDE_TIMESTAMP_HEADER);
+        assertTrue(BtmGenerationDefaults.DEFAULT_INCLUDE_ENTRY_EXIT);
+        assertEquals("h2", BtmGenerationDefaults.DEFAULT_CACHE_BACKEND);
+        assertEquals("METHOD_ENTER", BtmGenerationDefaults.DEFAULT_TEMPLATE_ID);
+        assertEquals("de.burger.forensics.infrastructure.rt.RtTraceHelper", BtmGenerationDefaults.DEFAULT_HELPER_FQN);
+        assertEquals(2, BtmGenerationDefaults.DEFAULT_MIN_BRANCHES_PER_METHOD);
     }
 }
