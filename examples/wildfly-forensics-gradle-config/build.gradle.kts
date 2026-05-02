@@ -36,22 +36,22 @@ val wildFlySourceRoots = discoverMavenStyleSourceRoots(
     includeTestSources = includeTestSources
 )
 
-val btmOutputFile = layout.projectDirectory.file(".forensics/build/btm/wildfly-main.btm").asFile
-val profileReportFile = layout.projectDirectory.file(".forensics/build/reports/wildfly-scan-profile.json").asFile
-val cacheDatabaseFile = layout.projectDirectory.file(".forensics/cache/wildfly-scan-cache").asFile
+val configuredBtmOutputFile = layout.projectDirectory.file(".forensics/build/btm/wildfly-main.btm").asFile
+val configuredProfileReportFile = layout.projectDirectory.file(".forensics/build/reports/wildfly-scan-profile.json").asFile
+val configuredCacheDatabaseFile = layout.projectDirectory.file(".forensics/cache/wildfly-scan-cache").asFile
 
 btmGen {
     scanSubprojects.set(false)
     sourceRoot.set(layout.projectDirectory.dir(".forensics/sidecar-source-root").asFile)
     sourceRoots.from(wildFlySourceRoots)
-    outputFile.set(btmOutputFile)
+    outputFile.set(configuredBtmOutputFile)
     includes.set(packageIncludes)
     minBranchesPerMethod.set(minBranches)
     cacheEnabled.set(true)
     cacheBackend.set("h2")
-    cacheDatabaseFile.set(cacheDatabaseFile)
+    cacheDatabaseFile.set(configuredCacheDatabaseFile)
     profilingEnabled.set(true)
-    profileReportFile.set(profileReportFile)
+    profileReportFile.set(configuredProfileReportFile)
     strictParsing.set(false)
     dependencyAwareInvalidation.set(false)
 }
@@ -72,9 +72,9 @@ tasks.register("printWildFlyForensicsSourceRoots") {
         }
         println("Testsuite included: $includeTestsuite")
         println("Test sources included: $includeTestSources")
-        println("Configured BTM output file: ${btmOutputFile.absolutePath}")
-        println("Configured profiling report file: ${profileReportFile.absolutePath}")
-        println("Configured cache location: ${cacheDatabaseFile.absolutePath}")
+        println("Configured BTM output file: ${configuredBtmOutputFile.absolutePath}")
+        println("Configured profiling report file: ${configuredProfileReportFile.absolutePath}")
+        println("Configured cache location: ${configuredCacheDatabaseFile.absolutePath}")
     }
 }
 
