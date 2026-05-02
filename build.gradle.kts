@@ -11,9 +11,15 @@ plugins {
     id("jacoco")
     alias(libs.plugins.sonar.qube.gradle.plugin)
     alias(libs.plugins.freefair.lombok.plugin)
+    alias(libs.plugins.maven.plugin.development)
 }
 
 val aspectjAgent by configurations.creating
+val mavenPluginDescriptorDependencies by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    description = "Runtime dependencies written to the generated Maven plugin descriptor."
+}
 
 dependencies {
     aspectjAgent(libs.aspectj.weaver)
@@ -23,9 +29,17 @@ dependencies {
     implementation(libs.javaparser.symbol.solver.core)
     implementation(libs.h2)
 
+    mavenPluginDescriptorDependencies(libs.slf4j.api)
+    mavenPluginDescriptorDependencies(libs.aspectj.rt)
+    mavenPluginDescriptorDependencies(libs.javaparser.symbol.solver.core)
+    mavenPluginDescriptorDependencies(libs.h2)
+    mavenPluginDescriptorDependencies(libs.aspectj.weaver)
+
     compileOnly(libs.byteman)
     compileOnly(libs.jakarta.annotation.api)
     compileOnly(libs.lombok)
+    compileOnly(libs.maven.plugin.api)
+    compileOnly(libs.maven.plugin.annotations)
 
     runtimeOnly(libs.aspectj.weaver)
 
@@ -50,6 +64,10 @@ dependencies {
 
     testCompileOnly(libs.lombok)
     testAnnotationProcessor(libs.lombok)
+}
+
+mavenPlugin {
+    dependencies.set(mavenPluginDescriptorDependencies)
 }
 
 configurations.all {
