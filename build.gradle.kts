@@ -40,6 +40,7 @@ dependencies {
     compileOnly(libs.lombok)
     compileOnly(libs.maven.plugin.api)
     compileOnly(libs.maven.plugin.annotations)
+    compileOnly(libs.maven.core)
 
     runtimeOnly(libs.aspectj.weaver)
 
@@ -57,6 +58,9 @@ dependencies {
     testImplementation(libs.mockito.junit.jupiter)
     testImplementation(libs.archunit.junit)
     testImplementation(libs.byte.buddy.agent)
+    testImplementation(libs.maven.plugin.api)
+    testImplementation(libs.maven.plugin.annotations)
+    testImplementation(libs.maven.core)
     testImplementation(gradleTestKit())
 
     testRuntimeOnly(libs.aspectj.weaver)
@@ -67,6 +71,7 @@ dependencies {
 }
 
 mavenPlugin {
+    goalPrefix.set("forensics")
     dependencies.set(mavenPluginDescriptorDependencies)
 }
 

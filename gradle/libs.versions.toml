@@ -70,6 +70,7 @@ jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api",
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
 maven-plugin-api = { module = "org.apache.maven:maven-plugin-api", version.ref = "maven" }
 maven-plugin-annotations = { module = "org.apache.maven.plugin-tools:maven-plugin-annotations", version.ref = "maven-plugin-tools" }
+maven-core = { module = "org.apache.maven:maven-core", version.ref = "maven" }
 
 # Boilerplade Code
 lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
