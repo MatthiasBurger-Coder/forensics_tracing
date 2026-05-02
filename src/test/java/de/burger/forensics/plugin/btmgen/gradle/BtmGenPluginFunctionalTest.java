@@ -359,43 +359,43 @@ class BtmGenPluginFunctionalTest {
 
     @Test
     void shouldScanExternalMavenStyleSourceRoots(@TempDir Path tempDir) throws IOException {
-        Path fakeWildFlyRoot = writeFakeWildFlyLayout(tempDir.resolve("fake-wildfly"));
-        Path sidecarProject = tempDir.resolve("wildfly-sidecar");
+        Path fakeMavenRoot = writeFakeMavenStyleLayout(tempDir.resolve("fake-maven-project"));
+        Path sidecarProject = tempDir.resolve("maven-sidecar");
         Files.createDirectories(sidecarProject);
         writeSimpleSettings(sidecarProject);
-        Files.writeString(sidecarProject.resolve("build.gradle.kts"), fakeWildFlySidecarBuildScript());
+        Files.writeString(sidecarProject.resolve("build.gradle.kts"), fakeMavenStyleSidecarBuildScript());
 
-        BuildResult result = runGradle(sidecarProject, ":generateBtmRules", "-PwildflyRoot=" + fakeWildFlyRoot);
+        BuildResult result = runGradle(sidecarProject, ":generateBtmRules", "-PmavenRoot=" + fakeMavenRoot);
 
         assertEquals(TaskOutcome.SUCCESS, taskOutcome(result, ":generateBtmRules"));
-        Path outputFile = sidecarProject.resolve("build/forensics/wildfly.btm");
+        Path outputFile = sidecarProject.resolve("build/forensics/maven-style.btm");
         assertTrue(Files.exists(outputFile), "Generated BTM file should exist");
         String output = Files.readString(outputFile);
-        assertTrue(output.contains("org.jboss.as.server.ServerService#run"));
-        assertTrue(output.contains("org.wildfly.extension.undertow.UndertowService#run"));
-        assertFalse(output.contains("org.wildfly.generated.ShouldBeExcluded#run"));
-        assertFalse(output.contains("org.wildfly.testsuite.ShouldBeExcludedByDefault#run"));
+        assertTrue(output.contains("com.example.server.ServerService#run"));
+        assertTrue(output.contains("com.example.web.WebService#run"));
+        assertFalse(output.contains("com.example.generated.ShouldBeExcluded#run"));
+        assertFalse(output.contains("com.example.testsuite.ShouldBeExcludedByDefault#run"));
     }
 
     @Test
     void shouldIncludeTestsuiteSourceRootsWhenRequested(@TempDir Path tempDir) throws IOException {
-        Path fakeWildFlyRoot = writeFakeWildFlyLayout(tempDir.resolve("fake-wildfly"));
-        Path sidecarProject = tempDir.resolve("wildfly-sidecar");
+        Path fakeMavenRoot = writeFakeMavenStyleLayout(tempDir.resolve("fake-maven-project"));
+        Path sidecarProject = tempDir.resolve("maven-sidecar");
         Files.createDirectories(sidecarProject);
         writeSimpleSettings(sidecarProject);
-        Files.writeString(sidecarProject.resolve("build.gradle.kts"), fakeWildFlySidecarBuildScript());
+        Files.writeString(sidecarProject.resolve("build.gradle.kts"), fakeMavenStyleSidecarBuildScript());
 
         BuildResult result = runGradle(
             sidecarProject,
             ":generateBtmRules",
-            "-PwildflyRoot=" + fakeWildFlyRoot,
-            "-Pforensics.wildfly.includeTestsuite=true"
+            "-PmavenRoot=" + fakeMavenRoot,
+            "-Pforensics.maven.includeTestsuite=true"
         );
 
         assertEquals(TaskOutcome.SUCCESS, taskOutcome(result, ":generateBtmRules"));
-        String output = Files.readString(sidecarProject.resolve("build/forensics/wildfly.btm"));
-        assertTrue(output.contains("org.wildfly.testsuite.ShouldBeExcludedByDefault#run"));
-        assertFalse(output.contains("org.wildfly.generated.ShouldBeExcluded#run"));
+        String output = Files.readString(sidecarProject.resolve("build/forensics/maven-style.btm"));
+        assertTrue(output.contains("com.example.testsuite.ShouldBeExcludedByDefault#run"));
+        assertFalse(output.contains("com.example.generated.ShouldBeExcluded#run"));
     }
 
     private static Path writeJavaSource(Path sourceRoot, String packageName, String className, String methodName) throws IOException {
@@ -415,38 +415,38 @@ class BtmGenPluginFunctionalTest {
         return javaFile;
     }
 
-    private static Path writeFakeWildFlyLayout(Path fakeWildFlyRoot) throws IOException {
-        Files.createDirectories(fakeWildFlyRoot);
-        Files.writeString(fakeWildFlyRoot.resolve("pom.xml"), "<project></project>");
-        Files.writeString(fakeWildFlyRoot.resolve("mvnw"), "#!/bin/sh");
+    private static Path writeFakeMavenStyleLayout(Path fakeMavenRoot) throws IOException {
+        Files.createDirectories(fakeMavenRoot);
+        Files.writeString(fakeMavenRoot.resolve("pom.xml"), "<project></project>");
+        Files.writeString(fakeMavenRoot.resolve("mvnw"), "#!/bin/sh");
         writeJavaSource(
-            fakeWildFlyRoot.resolve("server/src/main/java"),
-            "org.jboss.as.server",
+            fakeMavenRoot.resolve("server/src/main/java"),
+            "com.example.server",
             "ServerService",
             "run"
         );
         writeJavaSource(
-            fakeWildFlyRoot.resolve("undertow/src/main/java"),
-            "org.wildfly.extension.undertow",
-            "UndertowService",
+            fakeMavenRoot.resolve("web/src/main/java"),
+            "com.example.web",
+            "WebService",
             "run"
         );
         writeJavaSource(
-            fakeWildFlyRoot.resolve("testsuite/integration/src/main/java"),
-            "org.wildfly.testsuite",
+            fakeMavenRoot.resolve("testsuite/integration/src/main/java"),
+            "com.example.testsuite",
             "ShouldBeExcludedByDefault",
             "run"
         );
         writeJavaSource(
-            fakeWildFlyRoot.resolve("target/generated/src/main/java"),
-            "org.wildfly.generated",
+            fakeMavenRoot.resolve("target/generated/src/main/java"),
+            "com.example.generated",
             "ShouldBeExcluded",
             "run"
         );
-        return fakeWildFlyRoot;
+        return fakeMavenRoot;
     }
 
-    private static String fakeWildFlySidecarBuildScript() {
+    private static String fakeMavenStyleSidecarBuildScript() {
         return """
                 import org.gradle.api.GradleException
                 import java.io.File
@@ -456,15 +456,15 @@ class BtmGenPluginFunctionalTest {
                 }
 
                 val excludedDirectoryNames = setOf(".git", ".gradle", ".idea", ".mvn", ".forensics", "target")
-                val includeTestsuite = providers.gradleProperty("forensics.wildfly.includeTestsuite")
+                val includeTestsuite = providers.gradleProperty("forensics.maven.includeTestsuite")
                     .map { it.toBoolean() }
                     .getOrElse(false)
-                val wildFlyRoot = providers.gradleProperty("wildflyRoot")
+                val mavenRoot = providers.gradleProperty("mavenRoot")
                     .map { file(it).canonicalFile }
                     .get()
 
-                if (!wildFlyRoot.isDirectory || !wildFlyRoot.resolve("pom.xml").isFile || !wildFlyRoot.resolve("mvnw").isFile) {
-                    throw GradleException("Selected directory '${wildFlyRoot.absolutePath}' is not a WildFly checkout or Maven-style WildFly root.")
+                if (!mavenRoot.isDirectory || !mavenRoot.resolve("pom.xml").isFile || !mavenRoot.resolve("mvnw").isFile) {
+                    throw GradleException("Selected directory '${mavenRoot.absolutePath}' is not a Maven-style project root.")
                 }
 
                 fun discoverMavenStyleSourceRoots(root: File): List<File> =
@@ -483,8 +483,8 @@ class BtmGenPluginFunctionalTest {
                 btmGen {
                     scanSubprojects.set(false)
                     sourceRoot.set(file("missing-sidecar-src"))
-                    sourceRoots.from(discoverMavenStyleSourceRoots(wildFlyRoot))
-                    outputFile.set(layout.buildDirectory.file("forensics/wildfly.btm").get().asFile)
+                    sourceRoots.from(discoverMavenStyleSourceRoots(mavenRoot))
+                    outputFile.set(layout.buildDirectory.file("forensics/maven-style.btm").get().asFile)
                     minBranchesPerMethod.set(0)
                 }
                 """;

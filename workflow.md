@@ -42,7 +42,7 @@ Langfristig kann daraus später ein Multi-Modul-Build entstehen:
 ```text
 forensics-core
 forensics-gradle-plugin
-forensics-maven-plugin
+forensics-tracing
 ```
 
 Dieser Workflow bleibt bewusst im bestehenden Projekt, damit der Umbau kontrolliert und reviewbar bleibt.
@@ -906,7 +906,7 @@ Run:
 If possible, validate a minimal Maven project manually with:
 
 ```bash
-mvn de.burger.forensics:forensics-maven-plugin:<version>:btmgen
+mvn de.burger.forensics:forensics-tracing:<version>:btmgen
 ````
 
 Adjust group/artifact/version to the actual project coordinates.
@@ -1116,7 +1116,7 @@ Example shape:
 ```bash
 ./gradlew publishToMavenLocal
 
-mvn de.burger.forensics:forensics-maven-plugin:<version>:btmgen \
+mvn de.burger.forensics:forensics-tracing:<version>:btmgen \
   -Dforensics.sourceRoot=/path/to/sample/src/main/java
 ````
 
@@ -1124,8 +1124,8 @@ Use actual coordinates from the project.
 
 ## Restrictions
 
-Do not modify WildFly in this slice.
-Do not introduce a full WildFly benchmark.
+Do not modify external benchmark repositories in this slice.
+Do not introduce a full external large-project benchmark.
 Do not weaken tests.
 Do not skip failing tests silently.
 
@@ -1226,7 +1226,7 @@ Example shape:
 ```xml
 <plugin>
     <groupId>de.burger.forensics</groupId>
-    <artifactId>forensics-maven-plugin</artifactId>
+    <artifactId>forensics-tracing</artifactId>
     <version>...</version>
     <configuration>
         <cacheEnabled>true</cacheEnabled>
@@ -1246,7 +1246,7 @@ Only document prefix usage if plugin prefix metadata actually supports it.
 
 ## Restrictions
 
-Do not claim WildFly full support unless validated.
+Do not claim full support for a specific external large project unless validated.
 Do not claim Maven Central availability unless implemented.
 Do not claim Maven reactor aggregation unless implemented.
 Do not change code in this documentation slice unless needed for broken docs tests.
@@ -1387,7 +1387,7 @@ Validation:
 
 Limitations:
 - Maven reactor aggregation is not implemented yet
-- WildFly full benchmark is not part of this commit
+- external large-project benchmark is not part of this commit
 ````
 
 Adjust the message to actual changes.
@@ -1397,7 +1397,7 @@ Adjust the message to actual changes.
 Do not stage unrelated files.
 Do not commit generated build outputs.
 Do not commit local cache DB files.
-Do not commit WildFly repository files.
+Do not commit external benchmark repository files.
 Do not suppress failing tests.
 Do not push unless asked.
 
@@ -1622,7 +1622,7 @@ Dieser Workflow baut die Adapterstruktur. Er löst noch nicht:
 
 - H2-/SQLite-Cache
 - Dependency-aware invalidation
-- WildFly-Full-Benchmark
+- external large-project benchmark
 - CLI-Unterstützung
 - Multi-Modul-Publishing
 - Maven-Central-Release

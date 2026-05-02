@@ -103,6 +103,7 @@ If the token is not configured locally, skip this step and report that SonarClou
 ## Notes
 
 - The tests rely on lightweight reflection-based heuristics because no additional dependencies were introduced.
-- No dependency versions have been changed.
+- Dependency verification metadata is committed in `gradle/verification-metadata.xml` and must be updated when build dependencies change.
 - Gradle plugin modules avoid bundling an SLF4J provider to prevent multiple bindings.
+- ArchUnit tests include build-tool adapter boundary checks for the shared BTM generation runner, Gradle adapter, and Maven adapter.
 - To tighten the rules, adjust the assertions in the SOLID test suite or extend the support utilities.

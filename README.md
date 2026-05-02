@@ -1,4 +1,4 @@
-# Forensics Tracing Gradle Plugin and Runtime Tracing Support
+# Forensics Tracing Build Plugins and Runtime Tracing Support
 
 ## Quality Gate Badge
 [![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=MatthiasBurger-Coder_forensics_tracing)](https://sonarcloud.io/summary/new_code?id=MatthiasBurger-Coder_forensics_tracing)
@@ -8,14 +8,15 @@
 This repository provides:
 
 - a Gradle plugin, `de.burger.forensics.btmgen`, that scans Java source code
+- a Maven plugin goal, `forensics:btmgen`, backed by the same generation core
 - generation of Byteman `.btm` rules
 - runtime tracing helpers centered around `de.burger.forensics.infrastructure.rt.RtTrace`
 - an application-facing tracing facade, `de.burger.forensics.application.tracing.Tracer`
 - optional AspectJ-based method logging via `de.burger.forensics.infrastructure.logging.MethodLoggingAspect`
 
-Internally the repository is split into pragmatic hexagonal layers (`domain`, `application`, `adapters`, `plugin`, `infrastructure`). The Gradle plugin sits in the plugin adapter layer and drives the application service that generates rules.
+Internally the repository is split into pragmatic hexagonal layers (`domain`, `application`, `adapters`, `plugin`, `infrastructure`). The Gradle task and Maven Mojo sit in build-tool adapter packages and both delegate to the shared `BtmGenerationRunner`.
 
-## Quickstart
+## Gradle quickstart
 
 Prerequisites:
 
@@ -78,6 +79,50 @@ Then:
 > Warning: `generateBtmRules` only generates a Byteman script. It does not instrument a JVM.
 >
 > Warning: Byteman loading and runtime tracing are separate steps.
+
+## Maven quickstart
+
+Prerequisites:
+
+- Java 17
+- Maven 3.9.x or a compatible Maven runtime
+- the plugin artifact installed or published to a Maven repository
+- Byteman agent/tooling if you want the generated rules to run inside a JVM
+
+The current project coordinates are:
+
+```text
+de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT
+```
+
+For local testing, publish the Gradle-built artifact to your local Maven repository first:
+
+```bash
+./gradlew publishToMavenLocal
+```
+
+Then invoke the Mojo with the full coordinate:
+
+```bash
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:btmgen
+```
+
+Minimal `pom.xml` configuration:
+
+```xml
+<plugin>
+    <groupId>de.burger.forensics</groupId>
+    <artifactId>forensics-tracing</artifactId>
+    <version>0.0.3-SNAPSHOT</version>
+    <configuration>
+        <cacheEnabled>false</cacheEnabled>
+        <strictParsing>false</strictParsing>
+        <outputFile>${project.build.directory}/forensics/generated.btm</outputFile>
+    </configuration>
+</plugin>
+```
+
+The short `mvn forensics:btmgen` form requires Maven plugin prefix resolution for the `de.burger.forensics` group. Use the full coordinate when that prefix metadata is not available in the configured repositories.
 
 ## Step-by-step usage
 
@@ -220,11 +265,17 @@ btmGen {
 
 > Warning: `scanSubprojects=true` scans Gradle subprojects of the current build only. It does not auto-scan included builds or composite builds.
 
-## Scanning WildFly or Maven-based repositories
+## Maven-based repositories
 
-Use the example under [`examples/wildfly-forensics-gradle-config`](examples/wildfly-forensics-gradle-config/README.md) when the target project is Maven-based and does not have Gradle subprojects.
+Prefer the Maven Mojo for Maven projects:
 
-`scanSubprojects=true` only applies to Gradle subprojects. For Maven repositories such as WildFly, collect Maven `src/main/java` directories explicitly and pass them via `sourceRoots`.
+```bash
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:btmgen
+```
+
+The first Maven version runs for the current Maven project/module and uses that module's compile source roots. Reactor aggregation is not implemented yet.
+
+For Gradle sidecar builds that scan an external Maven-style source tree, keep `scanSubprojects=false` and pass discovered `src/main/java` directories explicitly through `btmGen.sourceRoots`. `scanSubprojects=true` only applies to Gradle subprojects in the current build.
 
 ## Minimal verification checklist
 
@@ -297,6 +348,44 @@ tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateBtmTask>("generateB
     minBranchesPerMethod.set(2)
 }
 ```
+
+### Maven goal parameters
+
+The Maven goal is:
+
+```text
+forensics:btmgen
+```
+
+Supported Maven parameters use the `forensics.*` user-property prefix:
+
+- `sourceRoot`
+- `outputFile`
+- `cacheEnabled`
+- `cacheBackend`
+- `cacheDatabaseFile`
+- `profilingEnabled`
+- `profileReportFile`
+- `strictParsing`
+- `dependencyAwareInvalidation`
+- `includePackages`
+- `excludePackages`
+- `includeTests`
+- `helperFqn`
+- `includeEntryExit`
+- `minBranchesPerMethod`
+- `includeTimestampHeader`
+
+The first Maven implementation is intentionally module-local:
+
+- it runs for the current Maven project/module
+- it uses Maven compile source roots by default
+- `includeTests=true` adds Maven test compile source roots
+- a configured `sourceRoot` overrides Maven project roots
+- Maven reactor aggregation is not implemented yet
+- the generated `.btm` file remains the only generated build artifact; scan cache files are local scanner state
+
+The Maven adapter must stay thin. It must not call `GenerateBtmTask` and must not duplicate JavaParser scanning or Byteman rendering logic.
 
 Property behavior:
 
@@ -450,10 +539,20 @@ Notes:
 
 ## Architecture and execution flow
 
-The verified execution flow is:
+The verified build-tool adapter split is:
 
-1. The Gradle task `generateBtmRules` (`GenerateBtmTask`) starts in scan mode by default.
-2. `GenerateBtmTask` resolves one or more Java source roots from its own task inputs and from the `btmGen` extension.
+```text
+GenerateBtmTask ─┐
+                 ├── BtmGenerationRunner ─── Scanner / UseCase / Renderer / Writer
+BtmGenMojo   ────┘
+```
+
+The shared runner owns scanner, rule-generation, rendering, profiling, cache selection, and file writing orchestration. Build-tool adapters only map Gradle or Maven parameters into `BtmGenerationRequest`, invoke the runner, and translate logging or exceptions.
+
+The verified scan execution flow is:
+
+1. The Gradle task `generateBtmRules` (`GenerateBtmTask`) or Maven goal `forensics:btmgen` starts in scan mode by default.
+2. The build-tool adapter resolves one or more Java source roots and creates a build-tool-neutral `BtmGenerationRequest`.
 3. `JavaParserScanner` scans those roots with JavaParser-based support classes and produces `ScanEvent` instances.
 4. `GenerateRulesUseCase` filters scan events by language and optional package prefixes, groups them by method, optionally adds synthetic `METHOD_ENTER` and `METHOD_EXIT` rules, and applies the `minBranchesPerMethod` filter.
 5. The application layer turns scan events into domain `Rule` objects typed by `RuleTemplate`.
@@ -464,6 +563,13 @@ The verified execution flow is:
 10. `RtTrace` emits structured runtime events and manages correlation IDs and span state.
 
 `GenerateBtmTask` also has a manual single-template mode. In that mode it skips source scanning entirely and renders one explicit template from task inputs.
+
+Architecture rules under `src/test/java/de/burger/forensics/quality` enforce that:
+
+- `plugin.btmgen.common` does not depend on Gradle or Maven APIs
+- `plugin.btmgen.gradle` does not depend on Maven APIs
+- `plugin.btmgen.maven` does not depend on Gradle APIs
+- `domain`, `application`, and JavaParser scanner packages do not depend on build-tool APIs
 
 ## Single-template mode
 
@@ -575,7 +681,7 @@ Verified repository commands:
 ```bash
 ./gradlew build
 ./gradlew test
-./gradlew clean test jacocoTestReport checkPackageCoverage
+./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage
 ./gradlew publishToMavenLocal
 ```
 
@@ -583,7 +689,8 @@ Notes:
 
 - Java 17 is intentional for this repository.
 - Gradle 9.1 is the repository baseline.
-- the stricter local quality gate from `QUALITY.md` is `./gradlew clean test jacocoTestReport checkPackageCoverage`
+- Source code, source comments, test names, and repository documentation are maintained in English.
+- the stricter local quality gate from `QUALITY.md` is `./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage`
 - the repository does not assume or require a Java 21 migration
 
 The test suite in `src/test/java` verifies the behavior described above. In particular:
@@ -611,6 +718,15 @@ The test suite in `src/test/java` verifies the behavior described above. In part
   - helper FQCN normalization
   - duplicate root deduplication and duplicate `RULE` header deduplication
   - `THREAD_LIFECYCLE` and `JDBC_EXECUTE` manual rendering paths
+
+- `BtmGenMojoTest`
+  - Maven parameter mapping into the shared runner
+  - explicit `sourceRoot` handling
+  - clear failure behavior for missing roots and unsupported cache backends
+
+- `BtmGenerationAdapterValidationTest`
+  - deterministic direct runner output
+  - byte-identical output from the direct runner, Gradle task, and Maven Mojo for the same fixture
 
 - `IfRuleStrategyTest`
   - `IF_TRUE` and `IF_FALSE` rendering at source lines

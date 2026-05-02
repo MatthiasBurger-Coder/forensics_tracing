@@ -4,7 +4,7 @@
 
 This document defines the mandatory engineering rules for automated agents working on this repository.
 
-The repository contains the Forensics Tracing Toolkit, a Gradle plugin and runtime support library for generating and consuming Byteman-based forensic tracing rules for Java applications.
+The repository contains the Forensics Tracing Toolkit, Gradle and Maven build-tool adapters, and runtime support library for generating and consuming Byteman-based forensic tracing rules for Java applications.
 
 Agents must follow this document before modifying code, tests, build logic, examples, or documentation.
 
@@ -361,7 +361,7 @@ Allowed dependencies:
 
 Infrastructure must not contain domain decisions.
 
-#### Gradle Plugin
+#### Build Tool Plugins
 
 ```text
 de.burger.forensics.plugin
@@ -372,7 +372,10 @@ Contains:
 - Gradle plugin entry points
 - Gradle tasks
 - Gradle extension objects
+- Maven Mojo entry points
+- Maven parameter mapping
 - Gradle log adapters
+- Maven log adapters
 - task wiring
 - plugin-specific rendering and file writing adapters
 
@@ -382,14 +385,23 @@ Allowed dependencies:
 - domain ports
 - infrastructure adapters where required
 - Gradle API
+- Maven plugin APIs inside Maven adapter packages only
 - Java standard library
 
 Forbidden behavior:
 
 - business logic hidden inside Gradle task classes
+- business logic hidden inside Maven Mojo classes
 - scanner rules hardcoded in task classes
 - rendering policies hardcoded in task classes when strategy classes exist
 - direct dependency from domain/application back to plugin code
+
+Build-tool adapter boundaries:
+
+- `de.burger.forensics.plugin.btmgen.common` must not depend on Gradle or Maven APIs.
+- `de.burger.forensics.plugin.btmgen.gradle` may depend on Gradle APIs and must not depend on Maven APIs.
+- `de.burger.forensics.plugin.btmgen.maven` may depend on Maven APIs and must not depend on Gradle APIs.
+- Maven Mojo classes must delegate to `BtmGenerationRunner`; they must not call Gradle task classes or duplicate scanner orchestration.
 
 ### Preferred Target Package Structure
 
