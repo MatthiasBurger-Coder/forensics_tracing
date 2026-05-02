@@ -13,7 +13,6 @@ import de.burger.forensics.domain.model.cache.ScanPhase;
 import de.burger.forensics.domain.model.cache.ScanProfile;
 import de.burger.forensics.domain.model.cache.SourceFileSnapshot;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -53,7 +52,7 @@ public final class JavaParserCachedScanResultCollector {
             List<ScanEvent> events = profile.measure(ScanPhase.EVENT_EXTRACTION,
                     () -> collectEvents(methods, packageName));
 
-            ScanProfile scanProfile = profile.build(1, 1, 0, 1, 0, methods.size(), events.size(), dependencies.size());
+            ScanProfile scanProfile = profile.successful(methods.size(), events.size(), dependencies.size());
             return new CachedScanResult(markParseSucceeded(source), events, dependencies, scanProfile);
         } catch (IOException | RuntimeException exception) {
             return parseFailure(source, strictParsing, profile, failureMessage(exception), exception);
@@ -89,7 +88,7 @@ public final class JavaParserCachedScanResultCollector {
             }
             throw new IllegalStateException("Failed to parse Java source " + source.sourcePath() + ": " + failureMessage, cause);
         }
-        ScanProfile scanProfile = profile.build(1, 0, 0, 1, 1, 0, 0, 0);
+        ScanProfile scanProfile = profile.failed();
         return new CachedScanResult(markParseFailed(source, failureMessage), List.of(), List.of(), scanProfile);
     }
 
@@ -141,24 +140,30 @@ public final class JavaParserCachedScanResultCollector {
             }
         }
 
-        private ScanProfile build(int totalFiles,
-                                  int parsedFiles,
-                                  int cacheHitFiles,
-                                  int cacheMissFiles,
-                                  int failedFiles,
-                                  int totalMethods,
-                                  int totalEvents,
-                                  int totalDependencies) {
+        private ScanProfile successful(int totalMethods, int totalEvents, int totalDependencies) {
             return new ScanProfile(
                     durations,
-                    totalFiles,
-                    parsedFiles,
-                    cacheHitFiles,
-                    cacheMissFiles,
-                    failedFiles,
+                    1,
+                    1,
+                    0,
+                    1,
+                    0,
                     totalMethods,
                     totalEvents,
                     totalDependencies);
+        }
+
+        private ScanProfile failed() {
+            return new ScanProfile(
+                    durations,
+                    1,
+                    0,
+                    0,
+                    1,
+                    1,
+                    0,
+                    0,
+                    0);
         }
     }
 

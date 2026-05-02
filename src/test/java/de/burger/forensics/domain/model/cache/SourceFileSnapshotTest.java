@@ -46,29 +46,42 @@ class SourceFileSnapshotTest {
 
     @Test
     void rejectsNegativeSize() {
+        Path rootPath = Path.of("/workspace/src/main/java");
+        String relativePath = "sample/Sample.java";
+        Path sourcePath = Path.of("/workspace/src/main/java/sample/Sample.java");
+        SourceFileFingerprint fingerprint = new SourceFileFingerprint("SHA-256", "abc");
+        Instant lastModifiedAt = Instant.parse("2026-05-02T10:15:30Z");
+        Optional<String> failureMessage = Optional.empty();
+
         assertThatThrownBy(() -> new SourceFileSnapshot(
-                Path.of("/workspace/src/main/java"),
-                "sample/Sample.java",
-                Path.of("/workspace/src/main/java/sample/Sample.java"),
-                new SourceFileFingerprint("SHA-256", "abc"),
+                rootPath,
+                relativePath,
+                sourcePath,
+                fingerprint,
                 -1L,
-                Instant.parse("2026-05-02T10:15:30Z"),
+                lastModifiedAt,
                 true,
-                Optional.empty()))
+                failureMessage))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rejectsBlankRelativePath() {
+        Path rootPath = Path.of("/workspace/src/main/java");
+        Path sourcePath = Path.of("/workspace/src/main/java/sample/Sample.java");
+        SourceFileFingerprint fingerprint = new SourceFileFingerprint("SHA-256", "abc");
+        Instant lastModifiedAt = Instant.parse("2026-05-02T10:15:30Z");
+        Optional<String> failureMessage = Optional.empty();
+
         assertThatThrownBy(() -> new SourceFileSnapshot(
-                Path.of("/workspace/src/main/java"),
+                rootPath,
                 " ",
-                Path.of("/workspace/src/main/java/sample/Sample.java"),
-                new SourceFileFingerprint("SHA-256", "abc"),
+                sourcePath,
+                fingerprint,
                 42L,
-                Instant.parse("2026-05-02T10:15:30Z"),
+                lastModifiedAt,
                 true,
-                Optional.empty()))
+                failureMessage))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

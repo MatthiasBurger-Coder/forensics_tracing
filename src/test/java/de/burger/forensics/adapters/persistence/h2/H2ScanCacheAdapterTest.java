@@ -272,11 +272,12 @@ class H2ScanCacheAdapterTest {
 
         Set<String> invalidPaths = new LinkedHashSet<>();
         invalidPaths.add(null);
-        assertThatThrownBy(() -> adapter.deleteMissing(rootPath.toString(), invalidPaths))
+        String rootPathValue = rootPath.toString();
+        assertThatThrownBy(() -> adapter.deleteMissing(rootPathValue, invalidPaths))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("must not contain null");
 
-        adapter.deleteMissing(rootPath.toString(), Set.of());
+        adapter.deleteMissing(rootPathValue, Set.of());
 
         assertThat(adapter.find(stale.source())).isEmpty();
         assertThat(adapter.find(otherRoot.source())).contains(otherRoot);

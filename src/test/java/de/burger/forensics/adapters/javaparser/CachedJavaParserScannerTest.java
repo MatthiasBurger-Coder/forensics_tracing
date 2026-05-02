@@ -170,7 +170,7 @@ class CachedJavaParserScannerTest {
                 true);
         Files.writeString(tempDir.resolve("Broken.java"), "class {");
 
-        assertThatThrownBy(() -> scanner.scan(tempDir).toList())
+        assertThatThrownBy(() -> scanAll(scanner, tempDir))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Failed to parse Java source");
     }
@@ -198,6 +198,10 @@ class CachedJavaParserScannerTest {
 
     private CachedJavaParserScanner scanner(ScanCachePort cache) {
         return new CachedJavaParserScanner(cache, new DefaultSourceFingerprintPort());
+    }
+
+    private static void scanAll(CachedJavaParserScanner scanner, Path sourceRoot) {
+        scanner.scan(sourceRoot).toList();
     }
 
     private static String sourceWithBranch(String className, String statement) {
@@ -235,6 +239,7 @@ class CachedJavaParserScannerTest {
 
         @Override
         public void initialize() {
+            // In-memory test cache has no initialization state.
         }
 
         @Override
@@ -296,6 +301,7 @@ class CachedJavaParserScannerTest {
 
         @Override
         public void initialize() {
+            // This test cache only returns a fixed stale entry.
         }
 
         @Override
@@ -310,10 +316,12 @@ class CachedJavaParserScannerTest {
 
         @Override
         public void deleteMissing(String rootPath, Set<String> currentRelativePaths) {
+            // Stale-entry tests do not exercise deletion behavior.
         }
 
         @Override
         public void rebuild() {
+            // Stale-entry tests do not exercise rebuild behavior.
         }
 
         private int storeCount() {

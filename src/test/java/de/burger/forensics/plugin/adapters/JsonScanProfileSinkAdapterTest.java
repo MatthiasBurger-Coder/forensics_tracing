@@ -23,8 +23,9 @@ class JsonScanProfileSinkAdapterTest {
         sink.publish(ScanProfile.empty());
 
         String json = Files.readString(report);
-        assertThat(json).contains("\"totalFiles\": 0");
-        assertThat(json).contains("\"phaseDurationsNanos\": {\n  }");
+        assertThat(json)
+                .contains("\"totalFiles\": 0")
+                .contains("\"phaseDurationsNanos\": {\n  }");
     }
 
     @Test
@@ -47,8 +48,9 @@ class JsonScanProfileSinkAdapterTest {
         sink.publish(profile);
 
         String json = Files.readString(report);
-        assertThat(json).contains("\"CACHE_READ\": 10");
-        assertThat(json).contains("\"RULE_RENDERING\": 20");
+        assertThat(json)
+                .contains("\"CACHE_READ\": 10")
+                .contains("\"RULE_RENDERING\": 20");
         assertThat(json.indexOf("\"CACHE_READ\"")).isLessThan(json.indexOf("\"RULE_RENDERING\""));
     }
 
@@ -56,8 +58,9 @@ class JsonScanProfileSinkAdapterTest {
     void wrapsIoFailures(@TempDir Path tempDir) throws Exception {
         Path directory = Files.createDirectory(tempDir.resolve("profile-as-directory.json"));
         JsonScanProfileSinkAdapter sink = new JsonScanProfileSinkAdapter(directory);
+        ScanProfile profile = ScanProfile.empty();
 
-        assertThatThrownBy(() -> sink.publish(ScanProfile.empty()))
+        assertThatThrownBy(() -> sink.publish(profile))
                 .isInstanceOf(UncheckedIOException.class)
                 .hasMessageContaining("Failed to write scan profile report");
     }

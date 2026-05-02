@@ -27,12 +27,15 @@ import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.file.Directory;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileTree;
+import org.gradle.api.file.RegularFile;
 import org.gradle.api.file.ProjectLayout;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.*;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.SourceSet;
@@ -228,59 +231,47 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
     private void applyDefaultConventions() {
         ProjectLayout layout = getProjectLayout();
-        if (!getSourceRoot().isPresent()) {
-            getSourceRoot().convention(layout.getProjectDirectory().dir("src/main/java"));
+        conventionIfMissing(getSourceRoot(), layout.getProjectDirectory().dir("src/main/java"));
+        conventionIfMissing(getOutputFile(), layout.getBuildDirectory().file("forensics/forensics.btm"));
+        conventionIfMissing(getOutputDir(), layout.getBuildDirectory().dir("forensics"));
+        conventionIfMissing(getIncludeEntryExit(), true);
+        conventionIfMissing(getMinBranchesPerMethod(), 2);
+        conventionIfMissing(getHelperFqn(), RuleParams.DEFAULT_HELPER_FQN);
+        conventionIfMissing(getIncludes(), "");
+        conventionIfMissing(getScanSubprojects(), false);
+        conventionIfMissing(getIncludeTimestampHeader(), false);
+        conventionIfMissing(getRegistryFingerprint(), registryFingerprint(registry));
+        conventionIfMissing(getCacheEnabled(), false);
+        conventionIfMissing(getCacheBackend(), "h2");
+        conventionIfMissing(getCacheDatabaseFile(), layout.getBuildDirectory().file("forensics/cache/scan-cache"));
+        conventionIfMissing(getCacheDatabaseDirectory(), layout.getBuildDirectory().dir("forensics/cache"));
+        conventionIfMissing(getProfilingEnabled(), false);
+        conventionIfMissing(getProfileReportFile(), layout.getBuildDirectory().file("forensics/scan-profile.json"));
+        conventionIfMissing(getStrictParsing(), false);
+        conventionIfMissing(getDependencyAwareInvalidation(), false);
+    }
+
+    private static <T> void conventionIfMissing(Property<T> property, T value) {
+        if (!property.isPresent()) {
+            property.convention(value);
         }
-        if (!getOutputFile().isPresent()) {
-            getOutputFile().convention(layout.getBuildDirectory().file("forensics/forensics.btm"));
+    }
+
+    private static void conventionIfMissing(DirectoryProperty property, Directory value) {
+        if (!property.isPresent()) {
+            property.convention(value);
         }
-        if (!getOutputDir().isPresent()) {
-            getOutputDir().convention(layout.getBuildDirectory().dir("forensics"));
+    }
+
+    private static void conventionIfMissing(DirectoryProperty property, Provider<Directory> value) {
+        if (!property.isPresent()) {
+            property.convention(value);
         }
-        if (!getIncludeEntryExit().isPresent()) {
-            getIncludeEntryExit().convention(true);
-        }
-        if (!getMinBranchesPerMethod().isPresent()) {
-            getMinBranchesPerMethod().convention(2);
-        }
-        if (!getHelperFqn().isPresent()) {
-            getHelperFqn().convention(RuleParams.DEFAULT_HELPER_FQN);
-        }
-        if (!getIncludes().isPresent()) {
-            getIncludes().convention("");
-        }
-        if (!getScanSubprojects().isPresent()) {
-            getScanSubprojects().convention(false);
-        }
-        if (!getIncludeTimestampHeader().isPresent()) {
-            getIncludeTimestampHeader().convention(false);
-        }
-        if (!getRegistryFingerprint().isPresent()) {
-            getRegistryFingerprint().convention(registryFingerprint(registry));
-        }
-        if (!getCacheEnabled().isPresent()) {
-            getCacheEnabled().convention(false);
-        }
-        if (!getCacheBackend().isPresent()) {
-            getCacheBackend().convention("h2");
-        }
-        if (!getCacheDatabaseFile().isPresent()) {
-            getCacheDatabaseFile().convention(layout.getBuildDirectory().file("forensics/cache/scan-cache"));
-        }
-        if (!getCacheDatabaseDirectory().isPresent()) {
-            getCacheDatabaseDirectory().convention(layout.getBuildDirectory().dir("forensics/cache"));
-        }
-        if (!getProfilingEnabled().isPresent()) {
-            getProfilingEnabled().convention(false);
-        }
-        if (!getProfileReportFile().isPresent()) {
-            getProfileReportFile().convention(layout.getBuildDirectory().file("forensics/scan-profile.json"));
-        }
-        if (!getStrictParsing().isPresent()) {
-            getStrictParsing().convention(false);
-        }
-        if (!getDependencyAwareInvalidation().isPresent()) {
-            getDependencyAwareInvalidation().convention(false);
+    }
+
+    private static void conventionIfMissing(RegularFileProperty property, Provider<RegularFile> value) {
+        if (!property.isPresent()) {
+            property.convention(value);
         }
     }
 

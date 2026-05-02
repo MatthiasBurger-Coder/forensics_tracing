@@ -137,15 +137,19 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
     private void executeInTransaction(String operation, SqlWork work) {
         try (Connection connection = openConnection()) {
             connection.setAutoCommit(false);
-            try {
-                work.execute(connection);
-                connection.commit();
-            } catch (SQLException | RuntimeException e) {
-                rollback(connection, e);
-                throw e;
-            }
+            executeAndCommit(connection, work);
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to " + operation + " H2 scan cache.", e);
+        }
+    }
+
+    private static void executeAndCommit(Connection connection, SqlWork work) throws SQLException {
+        try {
+            work.execute(connection);
+            connection.commit();
+        } catch (SQLException | RuntimeException e) {
+            rollback(connection, e);
+            throw e;
         }
     }
 
@@ -198,11 +202,7 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
                 "DROP TABLE IF EXISTS scan_run",
                 "DROP TABLE IF EXISTS source_file",
                 "DROP TABLE IF EXISTS schema_version");
-        try (Statement statement = connection.createStatement()) {
-            for (String sql : statements) {
-                statement.execute(sql);
-            }
-        }
+        executeBatch(connection, statements);
     }
 
     private static void createSchema(Connection connection) throws SQLException {
@@ -300,10 +300,20 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
                 """);
         try (Statement statement = connection.createStatement()) {
             for (String sql : statements) {
-                statement.execute(sql);
+                statement.addBatch(sql);
             }
+            statement.executeBatch();
             statement.executeUpdate("DELETE FROM schema_version");
             statement.executeUpdate("INSERT INTO schema_version (version) VALUES (" + CURRENT_SCHEMA_VERSION + ")");
+        }
+    }
+
+    private static void executeBatch(Connection connection, List<String> statements) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            for (String sql : statements) {
+                statement.addBatch(sql);
+            }
+            statement.executeBatch();
         }
     }
 
@@ -579,9 +589,9 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
+            statement.setLong(1, sourceFileId);
             for (int index = 0; index < dependencies.size(); index++) {
                 ScanDependency dependency = dependencies.get(index);
-                statement.setLong(1, sourceFileId);
                 statement.setInt(2, index);
                 statement.setString(3, dependency.kind().cacheToken());
                 statement.setString(4, dependency.sourceRelativePath());

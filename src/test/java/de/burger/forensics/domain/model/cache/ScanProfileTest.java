@@ -44,27 +44,31 @@ class ScanProfileTest {
 
     @Test
     void rejectsNegativeCounters() {
-        assertThatThrownBy(() -> new ScanProfile(Map.of(), -1, 0, 0, 0, 0, 0, 0, 0))
+        Map<ScanPhase, Duration> phaseDurations = Map.of();
+
+        assertThatThrownBy(() -> new ScanProfile(phaseDurations, -1, 0, 0, 0, 0, 0, 0, 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanProfile(Map.of(), 0, -1, 0, 0, 0, 0, 0, 0))
+        assertThatThrownBy(() -> new ScanProfile(phaseDurations, 0, -1, 0, 0, 0, 0, 0, 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanProfile(Map.of(), 0, 0, -1, 0, 0, 0, 0, 0))
+        assertThatThrownBy(() -> new ScanProfile(phaseDurations, 0, 0, -1, 0, 0, 0, 0, 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanProfile(Map.of(), 0, 0, 0, -1, 0, 0, 0, 0))
+        assertThatThrownBy(() -> new ScanProfile(phaseDurations, 0, 0, 0, -1, 0, 0, 0, 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanProfile(Map.of(), 0, 0, 0, 0, -1, 0, 0, 0))
+        assertThatThrownBy(() -> new ScanProfile(phaseDurations, 0, 0, 0, 0, -1, 0, 0, 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanProfile(Map.of(), 0, 0, 0, 0, 0, -1, 0, 0))
+        assertThatThrownBy(() -> new ScanProfile(phaseDurations, 0, 0, 0, 0, 0, -1, 0, 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanProfile(Map.of(), 0, 0, 0, 0, 0, 0, -1, 0))
+        assertThatThrownBy(() -> new ScanProfile(phaseDurations, 0, 0, 0, 0, 0, 0, -1, 0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ScanProfile(Map.of(), 0, 0, 0, 0, 0, 0, 0, -1))
+        assertThatThrownBy(() -> new ScanProfile(phaseDurations, 0, 0, 0, 0, 0, 0, 0, -1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void rejectsMissingProfileDuringAggregation() {
-        assertThatThrownBy(() -> ScanProfile.empty().plus(null))
+        ScanProfile profile = ScanProfile.empty();
+
+        assertThatThrownBy(() -> profile.plus(null))
                 .isInstanceOf(NullPointerException.class);
     }
 }
