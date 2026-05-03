@@ -90,6 +90,57 @@ class ConditionValidationReportTest {
         assertThat(ConditionValidationReport.empty().symbolGroups()).isEmpty();
     }
 
+    @Test
+    void keepsSameLocationAndExpressionWhenSourceContextDiffers() {
+        SourceLocation sharedLocation = new SourceLocation("org.example.Shared", "run", 12);
+        ConditionValidationIssue first = issue(
+                sharedLocation,
+                "SharedType.enabled()",
+                "SharedType",
+                new SourceContext(
+                        "org.example.first",
+                        "src/main/java/org/example/first/Shared.java",
+                        "org.example.first.Shared",
+                        "Shared",
+                        "run",
+                        "run()"));
+        ConditionValidationIssue second = issue(
+                sharedLocation,
+                "SharedType.enabled()",
+                "SharedType",
+                new SourceContext(
+                        "org.example.second",
+                        "src/main/java/org/example/second/Shared.java",
+                        "org.example.second.Shared",
+                        "Shared",
+                        "run",
+                        "run()"));
+
+        ConditionValidationReport report = new ConditionValidationReport(List.of(first, second));
+
+        assertThat(report.issues()).containsExactly(first, second);
+    }
+
+    @Test
+    void removesExactTechnicalDuplicates() {
+        ConditionValidationIssue first = issue(
+                "DuplicateType",
+                "org.example.duplicates",
+                "DuplicateProcessor",
+                "run",
+                21);
+        ConditionValidationIssue second = issue(
+                "DuplicateType",
+                "org.example.duplicates",
+                "DuplicateProcessor",
+                "run",
+                21);
+
+        ConditionValidationReport report = new ConditionValidationReport(List.of(first, second));
+
+        assertThat(report.issues()).containsExactly(first);
+    }
+
     private static ConditionValidationIssue issue(String symbol,
                                                   String packageName,
                                                   String className,
@@ -105,6 +156,20 @@ class ConditionValidationReportTest {
         return new ConditionValidationIssue(
                 new SourceLocation(packageName + "." + className, methodName, line),
                 symbol + ".value()",
+                symbol,
+                RuleTemplate.IF_TRUE,
+                ConditionResolutionStatus.UNRESOLVED,
+                "Test diagnostic.",
+                sourceContext);
+    }
+
+    private static ConditionValidationIssue issue(SourceLocation location,
+                                                  String expression,
+                                                  String symbol,
+                                                  SourceContext sourceContext) {
+        return new ConditionValidationIssue(
+                location,
+                expression,
                 symbol,
                 RuleTemplate.IF_TRUE,
                 ConditionResolutionStatus.UNRESOLVED,

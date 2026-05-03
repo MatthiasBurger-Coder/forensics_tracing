@@ -1,5 +1,7 @@
 package de.burger.forensics.domain.validation;
 
+import de.burger.forensics.domain.model.SourceContext;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -13,7 +15,7 @@ import java.util.Set;
 public record ConditionValidationReport(List<ConditionValidationIssue> issues) {
 
     public ConditionValidationReport {
-        LinkedHashMap<String, ConditionValidationIssue> unique = new LinkedHashMap<>();
+        LinkedHashMap<IssueKey, ConditionValidationIssue> unique = new LinkedHashMap<>();
         Objects.requireNonNull(issues, "issues").forEach(issue -> unique.putIfAbsent(issueKey(issue), issue));
         issues = List.copyOf(unique.values());
     }
@@ -59,14 +61,20 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues) {
 
     public ConditionValidationReport merge(ConditionValidationReport other) {
         Objects.requireNonNull(other, "other");
-        LinkedHashMap<String, ConditionValidationIssue> merged = new LinkedHashMap<>();
+        LinkedHashMap<IssueKey, ConditionValidationIssue> merged = new LinkedHashMap<>();
         issues.forEach(issue -> merged.put(issueKey(issue), issue));
         other.issues().forEach(issue -> merged.putIfAbsent(issueKey(issue), issue));
         return new ConditionValidationReport(new ArrayList<>(merged.values()));
     }
 
-    private static String issueKey(ConditionValidationIssue issue) {
-        return issue.location() + "|" + issue.expression() + "|" + issue.symbol();
+    private static IssueKey issueKey(ConditionValidationIssue issue) {
+        return new IssueKey(
+                stringValue(issue.location().fqcn()),
+                stringValue(issue.location().method()),
+                issue.location().line(),
+                issue.symbol(),
+                issue.expression(),
+                issue.sourceContext());
     }
 
     private static String packageName(ConditionValidationIssue issue) {
@@ -99,6 +107,21 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues) {
 
     private static String stringValue(String value) {
         return value == null ? "" : value;
+    }
+
+    private record IssueKey(String fqcn,
+                            String method,
+                            int line,
+                            String symbol,
+                            String expression,
+                            SourceContext sourceContext) {
+        private IssueKey {
+            Objects.requireNonNull(fqcn, "fqcn");
+            Objects.requireNonNull(method, "method");
+            Objects.requireNonNull(symbol, "symbol");
+            Objects.requireNonNull(expression, "expression");
+            Objects.requireNonNull(sourceContext, "sourceContext");
+        }
     }
 
     public record SymbolGroup(String symbol,
