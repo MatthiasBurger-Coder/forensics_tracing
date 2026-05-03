@@ -14,7 +14,7 @@ public final class ThrowRuleStrategy extends AbstractBytemanStrategy implements 
             METHOD %s
             HELPER %s
             AT THROW
-            %s
+            IF true
             DO
                 onException($^);
             ENDRULE
@@ -22,8 +22,7 @@ public final class ThrowRuleStrategy extends AbstractBytemanStrategy implements 
                 safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
-                p.helperFqn(),
-                ifClause(p.condition())
+                p.helperFqn()
         );
     }
 }
