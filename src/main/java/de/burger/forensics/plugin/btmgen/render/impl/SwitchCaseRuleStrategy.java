@@ -15,7 +15,7 @@ public final class SwitchCaseRuleStrategy extends AbstractBytemanStrategy implem
             CLASS %s
             METHOD %s
             HELPER %s
-            AT ENTRY
+            %s
             IF true
             DO
                 onCase(%s.class, "%s", "%s");
@@ -25,6 +25,7 @@ public final class SwitchCaseRuleStrategy extends AbstractBytemanStrategy implem
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 p.helperFqn(),
+                atLineOrEntry(p.sourceLine()),
                 p.className(), p.methodName(), label
         );
     }

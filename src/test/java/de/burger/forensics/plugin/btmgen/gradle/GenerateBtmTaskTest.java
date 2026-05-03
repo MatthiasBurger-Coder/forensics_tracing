@@ -364,7 +364,9 @@ class GenerateBtmTaskTest {
         assertFalse(scanContent.contains("helper()."));
         assertFalse(scanContent.contains("ENABLE_LOG"));
         assertTrue(scanContent.contains("AT LINE 4"));
+        assertTrue(scanContent.contains("AT LINE 5"));
         assertTrue(scanContent.contains("AT LINE 9"));
+        assertTrue(scanContent.contains("AT LINE 10"));
         assertTrue(scanContent.contains("onEnter("));
         assertTrue(scanContent.contains("onExit("));
         assertTrue(scanContent.contains("onBranch("));
@@ -812,7 +814,11 @@ class GenerateBtmTaskTest {
         assertEquals(List.of(4, 9),
                 strategies.get("IF_FALSE").calls.stream().map(RuleParams::sourceLine).toList());
         assertEquals(2, strategies.get("SWITCH").calls.size());
+        assertEquals(List.of(5, 10),
+                strategies.get("SWITCH").calls.stream().map(RuleParams::sourceLine).toList());
         assertEquals(2, strategies.get("SWITCH_CASE").calls.size());
+        assertEquals(List.of(5, 10),
+                strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::sourceLine).toList());
         assertEquals(List.of("1", "2"),
                 strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::displayName).toList());
 
