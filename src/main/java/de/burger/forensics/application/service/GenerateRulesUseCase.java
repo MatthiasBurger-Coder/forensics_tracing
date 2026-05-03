@@ -196,7 +196,14 @@ public final class GenerateRulesUseCase {
     private void addEventRules(List<ScanEvent> methodEvents,
                                GenerationRequest request,
                                List<Rule> rules) {
+        boolean returnRuleAdded = false;
         for (ScanEvent event : methodEvents) {
+            if (event.kind() == RuleTemplate.RETURN && returnRuleAdded) {
+                continue;
+            }
+            if (event.kind() == RuleTemplate.RETURN) {
+                returnRuleAdded = true;
+            }
             rules.addAll(mapEvent(event, request.helperFqcn(), request.safeMode()));
         }
     }

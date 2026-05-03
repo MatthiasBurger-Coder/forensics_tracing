@@ -93,6 +93,33 @@ class GenerateRulesUseCaseTest {
     }
 
     @Test
+    void methodWithMultipleReturnsShouldNotGenerateMultipleGenericExitReturnRules() {
+        List<ScanEvent> events = List.of(
+            event("com.example.Foo", "map", 10, "(int value)", RuleTemplate.RETURN, "zero", "java", "String"),
+            event("com.example.Foo", "map", 12, "(int value)", RuleTemplate.RETURN, "positive", "java", "String")
+        );
+
+        GenerationRequest request = new GenerationRequest(
+            Path.of("/tmp/project"),
+            GenerationRequest.DEFAULT_HELPER_FQCN,
+            false,
+            true,
+            List.of("com.example"),
+            0,
+            List.of()
+        );
+
+        RuleGenerationResult result = useCase(events).generate(request);
+
+        assertThat(result.renderedRules())
+            .filteredOn(rule -> rule.startsWith("RETURN|map|"))
+            .containsExactly("RETURN|map|zero");
+        assertThat(result.renderedRules())
+            .filteredOn(rule -> rule.startsWith("METHOD_EXIT|map|"))
+            .hasSize(1);
+    }
+
+    @Test
     void generateIgnoresManualOnlyTemplatesWhileKeepingSupportedEvents() {
         List<ScanEvent> events = List.of(
             event("com.example.Foo", "supported", 10, "(String name)", RuleTemplate.IF_TRUE, "x > 1", "java", "boolean"),
