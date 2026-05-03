@@ -1,7 +1,12 @@
 package de.burger.forensics.adaptersupport.javaparser.scanner;
 
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.stmt.ReturnStmt;
+import com.github.javaparser.ast.stmt.SwitchEntry;
+import de.burger.forensics.adaptersupport.javaparser.ConditionRenderingStrategy;
 import de.burger.forensics.adaptersupport.javaparser.DefaultConditionRenderingStrategy;
 import de.burger.forensics.adaptersupport.javaparser.InstanceFieldNormalizer;
+import de.burger.forensics.adaptersupport.javaparser.MethodScanContext;
 import de.burger.forensics.adaptersupport.javaparser.MethodEventExtractor;
 import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
@@ -54,5 +59,45 @@ class JavaParserScanEventCollectorTest {
         assertThat(JavaParserScanEventCollector.collectSafely(parserFactory.create(tempDir), broken, extractor)).isEmpty();
         assertThat(JavaParserScanEventCollector.collectSafely(null, broken, extractor)).isEmpty();
         assertThat(JavaParserScanEventCollector.collectSafely(parserFactory.create(tempDir), broken, null)).isEmpty();
+    }
+
+    @Test
+    void returnsEmptyWhenCollectionHitsStackOverflow(@TempDir Path tempDir) throws IOException {
+        Path source = tempDir.resolve("Recursive.java");
+        Files.writeString(source, """
+            package example;
+            class Recursive {
+                void run(int value) {
+                    if (value > 0) {
+                        System.out.println(value);
+                    }
+                }
+            }
+            """);
+        MethodEventExtractor throwingExtractor = new MethodEventExtractor(new StackOverflowRenderingStrategy());
+
+        assertThat(JavaParserScanEventCollector.collectSafely(
+            parserFactory.create(tempDir),
+            source,
+            throwingExtractor
+        )).isEmpty();
+    }
+
+    private static final class StackOverflowRenderingStrategy implements ConditionRenderingStrategy {
+
+        @Override
+        public String renderCondition(Expression condition, MethodScanContext context) {
+            throw new StackOverflowError("simulated JavaParser recursion");
+        }
+
+        @Override
+        public String renderReturn(ReturnStmt returnStmt, MethodScanContext context) {
+            throw new StackOverflowError("simulated JavaParser recursion");
+        }
+
+        @Override
+        public String renderSwitchLabel(SwitchEntry entry, MethodScanContext context) {
+            throw new StackOverflowError("simulated JavaParser recursion");
+        }
     }
 }

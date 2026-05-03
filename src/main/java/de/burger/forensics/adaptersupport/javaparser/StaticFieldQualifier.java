@@ -20,7 +20,7 @@ public final class StaticFieldQualifier {
     Set<Range> identifyStaticFieldRanges(Node scope, Set<String> localVariables) {
         Set<Range> ranges = new LinkedHashSet<>();
         scope.walk(NameExpr.class, name -> {
-            if (resolvesToStaticField(name) || isLikelyStaticField(name, name.getNameAsString(), localVariables)) {
+            if (isLikelyStaticField(name, name.getNameAsString(), localVariables) || resolvesToStaticField(name)) {
                 name.getRange().ifPresent(ranges::add);
             }
         });
@@ -37,14 +37,12 @@ public final class StaticFieldQualifier {
     }
 
     boolean resolvesToStaticField(NameExpr name) {
-        try {
+        return JavaParserResolutionGuard.resolve(() -> {
             var resolved = name.resolve();
             return resolved.isField()
                     && resolved.asField().isStatic()
                     && isDeclaredByCurrentType(name, resolved.asField().declaringType().getQualifiedName());
-        } catch (RuntimeException ignored) {
-            return false;
-        }
+        }).orElse(false);
     }
 
     boolean isLikelyStaticField(NameExpr name, String identifier, Set<String> localVariables) {
