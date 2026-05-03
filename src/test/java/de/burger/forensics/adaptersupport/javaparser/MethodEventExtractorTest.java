@@ -103,6 +103,23 @@ class MethodEventExtractorTest {
         assertThat(throwCondition).isEqualTo("$ex");
     }
 
+    @Test
+    void scannerShouldCaptureMethodSignatureFromAstParameters() {
+        MethodDeclaration declaration = parseMethod("""
+            class Sample {
+                ModelNode execute(ModelNode operation, ModelNode model) {
+                    return model;
+                }
+            }
+            """);
+
+        List<ScanEvent> events = extractor.collectMethodEvents(declaration, "example");
+
+        assertThat(events)
+                .extracting(ScanEvent::signature)
+                .containsOnly("execute(ModelNode, ModelNode)");
+    }
+
     private MethodDeclaration parseMethod(String source) {
         return StaticJavaParser.parse(source).findFirst(MethodDeclaration.class).orElseThrow();
     }

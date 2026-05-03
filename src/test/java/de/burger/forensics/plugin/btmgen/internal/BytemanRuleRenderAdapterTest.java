@@ -39,6 +39,120 @@ class BytemanRuleRenderAdapterTest {
     }
 
     @Test
+    void propagatesMethodSignatureToRuleParams() {
+        CapturingStrategy strategy = new CapturingStrategy("METHOD_ENTER");
+        BytemanRuleRenderAdapter adapter = new BytemanRuleRenderAdapter(rendererWith(strategy));
+        Rule rule = new Rule(
+                new RuleId("rule-signature"),
+                new SourceLocation("com.example.Foo", "work", 19),
+                "true",
+                true,
+                "com.example.Helper",
+                RuleTemplate.METHOD_ENTER,
+                "work(String, int)"
+        );
+
+        adapter.render(rule);
+
+        assertThat(strategy.lastParams.methodName()).isEqualTo("work");
+        assertThat(strategy.lastParams.methodDesc()).isEqualTo("(String, int)");
+    }
+
+    @Test
+    void leavesMethodDescriptionUnsetWhenRuleHasNoSignature() {
+        CapturingStrategy strategy = new CapturingStrategy("METHOD_ENTER");
+        BytemanRuleRenderAdapter adapter = new BytemanRuleRenderAdapter(rendererWith(strategy));
+        Rule rule = new Rule(
+                new RuleId("rule-no-signature"),
+                new SourceLocation("com.example.Foo", "work", 19),
+                "true",
+                true,
+                "com.example.Helper",
+                RuleTemplate.METHOD_ENTER
+        );
+
+        adapter.render(rule);
+
+        assertThat(strategy.lastParams.methodDesc()).isNull();
+    }
+
+    @Test
+    void leavesMethodDescriptionUnsetWhenRuleSignatureIsBlank() {
+        CapturingStrategy strategy = new CapturingStrategy("METHOD_ENTER");
+        BytemanRuleRenderAdapter adapter = new BytemanRuleRenderAdapter(rendererWith(strategy));
+        Rule rule = new Rule(
+                new RuleId("rule-blank-signature"),
+                new SourceLocation("com.example.Foo", "work", 19),
+                "true",
+                true,
+                "com.example.Helper",
+                RuleTemplate.METHOD_ENTER,
+                "   "
+        );
+
+        adapter.render(rule);
+
+        assertThat(strategy.lastParams.methodDesc()).isNull();
+    }
+
+    @Test
+    void acceptsMethodSignatureThatAlreadyContainsOnlyParameters() {
+        CapturingStrategy strategy = new CapturingStrategy("METHOD_ENTER");
+        BytemanRuleRenderAdapter adapter = new BytemanRuleRenderAdapter(rendererWith(strategy));
+        Rule rule = new Rule(
+                new RuleId("rule-parameter-signature"),
+                new SourceLocation("com.example.Foo", "work", 19),
+                "true",
+                true,
+                "com.example.Helper",
+                RuleTemplate.METHOD_ENTER,
+                "(String, int)"
+        );
+
+        adapter.render(rule);
+
+        assertThat(strategy.lastParams.methodDesc()).isEqualTo("(String, int)");
+    }
+
+    @Test
+    void usesParameterSuffixWhenSignatureMethodNameDiffers() {
+        CapturingStrategy strategy = new CapturingStrategy("METHOD_ENTER");
+        BytemanRuleRenderAdapter adapter = new BytemanRuleRenderAdapter(rendererWith(strategy));
+        Rule rule = new Rule(
+                new RuleId("rule-different-name"),
+                new SourceLocation("com.example.Foo", "work", 19),
+                "true",
+                true,
+                "com.example.Helper",
+                RuleTemplate.METHOD_ENTER,
+                "execute(String, int)"
+        );
+
+        adapter.render(rule);
+
+        assertThat(strategy.lastParams.methodDesc()).isEqualTo("(String, int)");
+    }
+
+    @Test
+    void ignoresInvalidMethodSignatureWithoutParameters() {
+        CapturingStrategy strategy = new CapturingStrategy("METHOD_ENTER");
+        BytemanRuleRenderAdapter adapter = new BytemanRuleRenderAdapter(rendererWith(strategy));
+        Rule rule = new Rule(
+                new RuleId("rule-invalid-signature"),
+                new SourceLocation("com.example.Foo", "work", 19),
+                "true",
+                true,
+                "com.example.Helper",
+                RuleTemplate.METHOD_ENTER,
+                "execute"
+        );
+
+        adapter.render(rule);
+
+        assertThat(strategy.lastParams.methodDesc()).isNull();
+    }
+
+    @Test
     void mapsSwitchCaseConditionToDisplayNameAndClearsCondition() {
         CapturingStrategy strategy = new CapturingStrategy("SWITCH_CASE");
         BytemanRuleRenderAdapter adapter = new BytemanRuleRenderAdapter(rendererWith(strategy));

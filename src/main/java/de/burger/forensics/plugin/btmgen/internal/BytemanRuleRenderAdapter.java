@@ -39,7 +39,7 @@ public final class BytemanRuleRenderAdapter implements RuleRenderPort {
                 Objects.requireNonNull(rule.id(), "rule.id").value(),
                 className,
                 methodName,
-                null,
+                methodDescriptor(rule.methodSignature(), methodName),
                 displayName,
                 condition,
                 null,
@@ -51,5 +51,26 @@ public final class BytemanRuleRenderAdapter implements RuleRenderPort {
 
     private static String defaultIfBlank(String value, String fallback) {
         return (value == null || value.isBlank()) ? fallback : value;
+    }
+
+    private static String methodDescriptor(String methodSignature, String methodName) {
+        if (methodSignature == null || methodSignature.isBlank()) {
+            return null;
+        }
+
+        String signature = methodSignature.trim();
+        if (signature.startsWith("(")) {
+            return signature;
+        }
+
+        String prefix = defaultIfBlank(methodName, "");
+        if (!prefix.isBlank() && signature.startsWith(prefix + "(")) {
+            return signature.substring(prefix.length());
+        }
+
+        int parameterStart = signature.indexOf('(');
+        return parameterStart >= 0 && signature.endsWith(")")
+                ? signature.substring(parameterStart)
+                : null;
     }
 }

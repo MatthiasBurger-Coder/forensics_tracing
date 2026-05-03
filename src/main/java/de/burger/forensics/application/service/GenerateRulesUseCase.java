@@ -178,8 +178,8 @@ public final class GenerateRulesUseCase {
                                        List<Rule> rules) {
         boolean hasEntry = methodEvents.stream().anyMatch(e -> e.kind() == RuleTemplate.METHOD_ENTER);
         if (!hasEntry) {
-            SourceLocation firstLoc = methodEvents.get(0).location();
-            rules.add(entryRule(firstLoc, request.helperFqcn()));
+            ScanEvent first = methodEvents.get(0);
+            rules.add(entryRule(first.location(), first.signature(), request.helperFqcn()));
         }
     }
 
@@ -188,8 +188,8 @@ public final class GenerateRulesUseCase {
                                       List<Rule> rules) {
         boolean hasExit = methodEvents.stream().anyMatch(e -> e.kind() == RuleTemplate.METHOD_EXIT);
         if (!hasExit) {
-            SourceLocation lastLoc = methodEvents.get(methodEvents.size() - 1).location();
-            rules.add(exitRule(lastLoc, request.helperFqcn()));
+            ScanEvent last = methodEvents.get(methodEvents.size() - 1);
+            rules.add(exitRule(last.location(), last.signature(), request.helperFqcn()));
         }
     }
 
@@ -270,17 +270,17 @@ public final class GenerateRulesUseCase {
             ? SafeMode.wrap(base, helperFqcn, ruleId)
             : base;
         String renderedCondition = effective.toBytemanIf();
-        return new Rule(ruleId, event.location(), renderedCondition, positive, helperFqcn, overrideType);
+        return new Rule(ruleId, event.location(), renderedCondition, positive, helperFqcn, overrideType, event.signature());
     }
 
-    private Rule entryRule(SourceLocation location, String helperFqcn) {
+    private Rule entryRule(SourceLocation location, String methodSignature, String helperFqcn) {
         RuleId ruleId = RuleIdFactory.from(location, RuleTemplate.METHOD_ENTER);
-        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_ENTER);
+        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_ENTER, methodSignature);
     }
 
-    private Rule exitRule(SourceLocation location, String helperFqcn) {
+    private Rule exitRule(SourceLocation location, String methodSignature, String helperFqcn) {
         RuleId ruleId = RuleIdFactory.from(location, RuleTemplate.METHOD_EXIT);
-        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_EXIT);
+        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_EXIT, methodSignature);
     }
 
     private boolean matchesPrefixes(SourceLocation location, List<String> prefixes) {

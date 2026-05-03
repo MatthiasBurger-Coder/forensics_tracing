@@ -8,5 +8,14 @@ public record Rule(RuleId id,
                    String condition,
                    boolean positive,
                    String helperFqn,
-                   RuleTemplate type) {
+                   RuleTemplate type,
+                   String methodSignature) {
+    public Rule(RuleId id,
+                SourceLocation location,
+                String condition,
+                boolean positive,
+                String helperFqn,
+                RuleTemplate type) {
+        this(id, location, condition, positive, helperFqn, type, null);
+    }
 }
