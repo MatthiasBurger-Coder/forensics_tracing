@@ -21,6 +21,10 @@ class AbstractBytemanStrategyTest {
     void fallbackHelpersHandleNullAndBlankInputs() {
         assertThat(probe.ifClauseValue(null)).isEqualTo("IF true");
         assertThat(probe.ifClauseValue("flag")).isEqualTo("IF flag");
+        assertThat(probe.atLineOrEntryValue(42)).isEqualTo("AT LINE 42");
+        assertThat(probe.atLineOrEntryValue(0)).isEqualTo("AT ENTRY");
+        assertThat(probe.atLineOrEntryValue(-1)).isEqualTo("AT ENTRY");
+        assertThat(probe.atExitValue()).isEqualTo("AT EXIT");
         assertThat(probe.orValue("label", "fallback")).isEqualTo("label");
         assertThat(probe.orValue("  ", "fallback")).isEqualTo("fallback");
         assertThat(probe.methodSigValue("work", null)).isEqualTo("work");
@@ -98,6 +102,14 @@ class AbstractBytemanStrategyTest {
 
         private String ifClauseValue(String condition) {
             return ifClause(condition);
+        }
+
+        private String atLineOrEntryValue(int line) {
+            return atLineOrEntry(line);
+        }
+
+        private String atExitValue() {
+            return atExit();
         }
 
         private String orValue(String fallback, String value) {

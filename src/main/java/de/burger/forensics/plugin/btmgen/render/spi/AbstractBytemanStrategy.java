@@ -15,6 +15,12 @@ public abstract class AbstractBytemanStrategy {
     protected static String ifClause(String cond) {
         return (cond != null && !cond.isBlank()) ? "IF " + cond : "IF true";
     }
+    protected static String atLineOrEntry(int line) {
+        return line > 0 ? "AT LINE " + line : "AT ENTRY";
+    }
+    protected static String atExit() {
+        return "AT EXIT";
+    }
     protected static String or(String fallback, String value) {
         return (fallback != null && !fallback.isBlank()) ? fallback : value;
     }
