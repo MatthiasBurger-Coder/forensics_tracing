@@ -95,6 +95,17 @@ public final class JsonScanProfileSinkAdapter implements ScanProfileSinkPort {
             json.append('\n');
             json.append("    ");
         }
+        json.append("],\n");
+        json.append("    \"groups\": [");
+        if (!validationReport.symbolGroups().isEmpty()) {
+            json.append('\n');
+            String[] groups = validationReport.symbolGroups().stream()
+                    .map(this::validationGroupJson)
+                    .toArray(String[]::new);
+            json.append(String.join(",\n", groups));
+            json.append('\n');
+            json.append("    ");
+        }
         json.append("]\n");
         json.append("  }\n");
     }
@@ -109,6 +120,107 @@ public final class JsonScanProfileSinkAdapter implements ScanProfileSinkPort {
                 + "\"template\":\"" + escape(template) + "\","
                 + "\"expressionPreview\":\"" + escape(issue.expressionPreview()) + "\""
                 + "}";
+    }
+
+    private String validationGroupJson(ConditionValidationReport.SymbolGroup group) {
+        StringBuilder json = new StringBuilder();
+        json.append("      {\n");
+        json.append("        \"symbol\":\"").append(escape(group.symbol())).append("\",\n");
+        json.append("        \"totalOccurrences\": ").append(group.occurrenceCount()).append(",\n");
+        json.append("        \"packageCount\": ").append(group.packageCount()).append(",\n");
+        json.append("        \"classCount\": ").append(group.classCount()).append(",\n");
+        json.append("        \"methodCount\": ").append(group.methodCount()).append(",\n");
+        json.append("        \"packages\": [");
+        if (!group.packages().isEmpty()) {
+            json.append('\n');
+            String[] packages = group.packages().stream()
+                    .map(this::packageGroupJson)
+                    .toArray(String[]::new);
+            json.append(String.join(",\n", packages));
+            json.append('\n');
+            json.append("        ");
+        }
+        json.append("]\n");
+        json.append("      }");
+        return json.toString();
+    }
+
+    private String packageGroupJson(ConditionValidationReport.PackageGroup group) {
+        StringBuilder json = new StringBuilder();
+        json.append("          {\n");
+        json.append("            \"packageName\":\"").append(escape(group.packageName())).append("\",\n");
+        json.append("            \"classes\": [");
+        if (!group.classes().isEmpty()) {
+            json.append('\n');
+            String[] classes = group.classes().stream()
+                    .map(this::classGroupJson)
+                    .toArray(String[]::new);
+            json.append(String.join(",\n", classes));
+            json.append('\n');
+            json.append("            ");
+        }
+        json.append("]\n");
+        json.append("          }");
+        return json.toString();
+    }
+
+    private String classGroupJson(ConditionValidationReport.ClassGroup group) {
+        StringBuilder json = new StringBuilder();
+        json.append("              {\n");
+        json.append("                \"className\":\"").append(escape(group.className())).append("\",\n");
+        json.append("                \"methods\": [");
+        if (!group.methods().isEmpty()) {
+            json.append('\n');
+            String[] methods = group.methods().stream()
+                    .map(this::methodGroupJson)
+                    .toArray(String[]::new);
+            json.append(String.join(",\n", methods));
+            json.append('\n');
+            json.append("                ");
+        }
+        json.append("]\n");
+        json.append("              }");
+        return json.toString();
+    }
+
+    private String methodGroupJson(ConditionValidationReport.MethodGroup group) {
+        StringBuilder json = new StringBuilder();
+        json.append("                  {\n");
+        json.append("                    \"methodName\":\"").append(escape(group.methodName())).append("\",\n");
+        json.append("                    \"totalOccurrences\": ").append(group.occurrenceCount()).append(",\n");
+        json.append("                    \"locations\": [");
+        if (!group.issues().isEmpty()) {
+            json.append('\n');
+            String[] locations = group.issues().stream()
+                    .map(this::validationLocationJson)
+                    .toArray(String[]::new);
+            json.append(String.join(",\n", locations));
+            json.append('\n');
+            json.append("                    ");
+        }
+        json.append("]\n");
+        json.append("                  }");
+        return json.toString();
+    }
+
+    private String validationLocationJson(ConditionValidationIssue issue) {
+        return "                      {"
+                + "\"className\":\"" + escape(locationClassName(issue)) + "\","
+                + "\"methodName\":\"" + escape(locationMethodName(issue)) + "\","
+                + "\"line\":" + issue.location().line() + ","
+                + "\"sourceFilePath\":\"" + escape(issue.sourceContext().sourceFilePath()) + "\","
+                + "\"expressionPreview\":\"" + escape(issue.expressionPreview()) + "\""
+                + "}";
+    }
+
+    private String locationClassName(ConditionValidationIssue issue) {
+        String sourceClassName = issue.sourceContext().fullyQualifiedClassName();
+        return sourceClassName.isBlank() ? issue.location().fqcn() : sourceClassName;
+    }
+
+    private String locationMethodName(ConditionValidationIssue issue) {
+        String sourceMethodName = issue.sourceContext().methodName();
+        return sourceMethodName.isBlank() ? issue.location().method() : sourceMethodName;
     }
 
     private String escape(String value) {

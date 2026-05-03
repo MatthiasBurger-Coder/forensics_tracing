@@ -3,16 +3,19 @@ package de.burger.forensics.plugin.adapters;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import de.burger.forensics.domain.model.ConditionResolutionStatus;
+import de.burger.forensics.domain.model.RuleTemplate;
+import de.burger.forensics.domain.model.SourceContext;
+import de.burger.forensics.domain.model.SourceLocation;
 import de.burger.forensics.domain.model.cache.ScanPhase;
 import de.burger.forensics.domain.model.cache.ScanProfile;
-import de.burger.forensics.domain.model.RuleTemplate;
-import de.burger.forensics.domain.model.SourceLocation;
 import de.burger.forensics.domain.validation.ConditionValidationIssue;
 import de.burger.forensics.domain.validation.ConditionValidationReport;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -62,7 +65,7 @@ class JsonScanProfileSinkAdapterTest {
     void writesConditionValidationIssues(@TempDir Path tempDir) throws Exception {
         Path report = tempDir.resolve("scan-profile.json");
         JsonScanProfileSinkAdapter sink = new JsonScanProfileSinkAdapter(report);
-        ConditionValidationReport validationReport = new ConditionValidationReport(java.util.List.of(
+        ConditionValidationReport validationReport = new ConditionValidationReport(List.of(
                 new ConditionValidationIssue(
                         new SourceLocation("com.example.Sample", "run", 42),
                         "DeploymentType.EAR != null",
@@ -86,10 +89,54 @@ class JsonScanProfileSinkAdapterTest {
     }
 
     @Test
+    void writesConditionValidationGroups(@TempDir Path tempDir) throws Exception {
+        Path report = tempDir.resolve("scan-profile.json");
+        JsonScanProfileSinkAdapter sink = new JsonScanProfileSinkAdapter(report);
+        SourceContext sourceContext = new SourceContext(
+                "com.example.deployment",
+                "src/main/java/com/example/deployment/DeploymentProcessor.java",
+                "com.example.deployment.DeploymentProcessor",
+                "DeploymentProcessor",
+                "deploy",
+                "deploy()");
+        ConditionValidationReport validationReport = new ConditionValidationReport(List.of(
+                new ConditionValidationIssue(
+                        new SourceLocation("com.example.deployment.DeploymentProcessor", "deploy", 42),
+                        "DeploymentType.EAR != null",
+                        "DeploymentType",
+                        RuleTemplate.IF_TRUE,
+                        ConditionResolutionStatus.UNRESOLVED,
+                        "Test diagnostic.",
+                        sourceContext),
+                new ConditionValidationIssue(
+                        new SourceLocation("com.example.deployment.DeploymentProcessor", "deploy", 43),
+                        "DeploymentType.WAR != null",
+                        "DeploymentType",
+                        RuleTemplate.IF_TRUE,
+                        ConditionResolutionStatus.UNRESOLVED,
+                        "Test diagnostic.",
+                        sourceContext)
+        ));
+
+        sink.publish(ScanProfile.empty(), validationReport);
+
+        String json = Files.readString(report);
+        assertThat(json)
+                .contains("\"groups\"")
+                .contains("\"symbol\":\"DeploymentType\"")
+                .contains("\"totalOccurrences\": 2")
+                .contains("\"packageName\":\"com.example.deployment\"")
+                .contains("\"className\":\"DeploymentProcessor\"")
+                .contains("\"methodName\":\"deploy\"")
+                .contains("\"locations\"")
+                .contains("\"sourceFilePath\":\"src/main/java/com/example/deployment/DeploymentProcessor.java\"");
+    }
+
+    @Test
     void writesLegacyValidationIssuesWithoutTemplate(@TempDir Path tempDir) throws Exception {
         Path report = tempDir.resolve("scan-profile.json");
         JsonScanProfileSinkAdapter sink = new JsonScanProfileSinkAdapter(report);
-        ConditionValidationReport validationReport = new ConditionValidationReport(java.util.List.of(
+        ConditionValidationReport validationReport = new ConditionValidationReport(List.of(
                 new ConditionValidationIssue(
                         new SourceLocation(null, null, 7),
                         "\"Quoted\"",
