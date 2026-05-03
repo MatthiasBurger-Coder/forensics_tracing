@@ -16,7 +16,7 @@ abstract class AbstractIfRuleStrategy extends AbstractBytemanStrategy implements
         String booleanExpr = booleanExpression(condition);
         String guardedExpr = guardedCondition(ruleId, booleanExpr, booleanExpr);
         return """
-            RULE %s : %s %s#%s
+            RULE %s : %s %s
             CLASS %s
             METHOD %s
             HELPER %s
@@ -26,7 +26,7 @@ abstract class AbstractIfRuleStrategy extends AbstractBytemanStrategy implements
                 onBranch(%s.class, "%s", "%s");
             ENDRULE
             """.formatted(
-                ruleId, branchLabel(), or(params.displayName(), params.className()), params.methodName(),
+                ruleId, branchLabel(), ruleTarget(params),
                 params.className(),
                 methodSig(params.methodName(), params.methodDesc()),
                 params.helperFqn(),

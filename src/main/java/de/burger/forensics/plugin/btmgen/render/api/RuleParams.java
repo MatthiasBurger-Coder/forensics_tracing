@@ -6,7 +6,7 @@ public record RuleParams(
         String className,    // target type (for METHOD_ENTER/RETURN/THROW)
         String methodName,   // target method name
         String methodDesc,   // optional descriptor/signature, may be null
-        String displayName,  // human label (optional)
+        String displayName,  // complete rule-title target label (optional)
         String condition,    // optional IF guard (Byteman expression)
         String sqlHint,      // optional SQL preview for JDBC template
         String helperFqn,    // helper implementation invoked from the rule

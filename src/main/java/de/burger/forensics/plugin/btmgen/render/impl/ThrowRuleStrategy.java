@@ -9,7 +9,7 @@ public final class ThrowRuleStrategy extends AbstractBytemanStrategy implements 
 
     @Override public String render(RuleParams p) {
         return """
-            RULE %s : throw %s#%s
+            RULE %s : throw %s
             CLASS %s
             METHOD %s
             HELPER %s
@@ -19,7 +19,7 @@ public final class ThrowRuleStrategy extends AbstractBytemanStrategy implements 
                 onException($^);
             ENDRULE
             """.formatted(
-                safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
+                safeId(p.id()), ruleTarget(p),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 p.helperFqn()

@@ -368,6 +368,10 @@ class GenerateBtmTaskTest {
         assertFalse(scanContent.contains("helper()."));
         assertFalse(scanContent.contains("ENABLE_LOG"));
         assertFalse(scanContent.contains("IF $!"));
+        assertFalse(scanContent.contains("#alpha#alpha"));
+        assertFalse(scanContent.contains("#beta#beta"));
+        assertFalse(scanContent.contains("#gamma#gamma"));
+        assertTrue(scanContent.contains("com.example.Sample#alpha"));
         assertTrue(scanContent.contains("AT LINE 4"));
         assertTrue(scanContent.contains("AT LINE 5"));
         assertTrue(scanContent.contains("AT LINE 9"));

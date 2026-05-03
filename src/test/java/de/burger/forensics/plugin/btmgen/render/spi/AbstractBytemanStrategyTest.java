@@ -27,6 +27,14 @@ class AbstractBytemanStrategyTest {
         assertThat(probe.atExitValue()).isEqualTo("AT EXIT");
         assertThat(probe.orValue("label", "fallback")).isEqualTo("label");
         assertThat(probe.orValue("  ", "fallback")).isEqualTo("fallback");
+        assertThat(probe.ruleTargetValue(params("com.example.Foo#work")))
+                .isEqualTo("com.example.Foo#work");
+        assertThat(probe.ruleTargetValue(params(" ")))
+                .isEqualTo("com.example.Foo#work");
+        assertThat(probe.ruleTargetValue(params(null, null, null)))
+                .isEqualTo("<unknown>#<method>");
+        assertThat(probe.ruleTargetValue(params(null, " ", " ")))
+                .isEqualTo("<unknown>#<method>");
         assertThat(probe.methodSigValue("work", null)).isEqualTo("work");
         assertThat(probe.methodSigValue("work", "(I)V")).isEqualTo("work(I)V");
     }
@@ -118,6 +126,10 @@ class AbstractBytemanStrategyTest {
             return or(fallback, value);
         }
 
+        private String ruleTargetValue(RuleParams params) {
+            return ruleTarget(params);
+        }
+
         private String escValue(String value) {
             return esc(value);
         }
@@ -145,5 +157,22 @@ class AbstractBytemanStrategyTest {
         private String guardedConditionValue(String ruleId, String expression, String evaluation) {
             return guardedCondition(ruleId, expression, evaluation);
         }
+    }
+
+    private static RuleParams params(String displayName) {
+        return params(displayName, "com.example.Foo", "work");
+    }
+
+    private static RuleParams params(String displayName, String className, String methodName) {
+        return new RuleParams(
+                "rule-target",
+                className,
+                methodName,
+                "()V",
+                displayName,
+                null,
+                null,
+                RuleParams.DEFAULT_HELPER_FQN
+        );
     }
 }

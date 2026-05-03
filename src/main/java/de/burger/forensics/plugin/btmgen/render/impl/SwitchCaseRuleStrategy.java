@@ -11,7 +11,7 @@ public final class SwitchCaseRuleStrategy extends AbstractBytemanStrategy implem
         // Use p.displayName() as the case label; otherwise provide dedicated metadata.
         String label = p.displayName() == null ? "<case>" : esc(p.displayName());
         return """
-            RULE %s : switch-case %s#%s
+            RULE %s : switch-case %s
             CLASS %s
             METHOD %s
             HELPER %s
@@ -21,7 +21,7 @@ public final class SwitchCaseRuleStrategy extends AbstractBytemanStrategy implem
                 onCase(%s.class, "%s", "%s");
             ENDRULE
             """.formatted(
-                safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
+                safeId(p.id()), ruleTarget(p),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 p.helperFqn(),

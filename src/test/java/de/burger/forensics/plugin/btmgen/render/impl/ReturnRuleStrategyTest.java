@@ -14,9 +14,11 @@ class ReturnRuleStrategyTest {
         String rule = new ReturnRuleStrategy().render(params);
 
         assertThat(rule)
+                .contains("RULE return-1 : return com.example.Foo#isEnabled")
                 .contains("AT EXIT")
                 .contains("IF true")
                 .contains("onExit(com.example.Foo.class, \"isEnabled\", $! );")
+                .doesNotContain("com.example.Foo#isEnabled#isEnabled")
                 .doesNotContain("IF $!");
     }
 

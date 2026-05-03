@@ -10,7 +10,7 @@ public final class SwitchRuleStrategy extends AbstractBytemanStrategy implements
     @Override public String render(RuleParams p) {
         String selector = selectorMetadata(p);
         return """
-            RULE %s : switch %s#%s
+            RULE %s : switch %s
             CLASS %s
             METHOD %s
             HELPER %s
@@ -20,7 +20,7 @@ public final class SwitchRuleStrategy extends AbstractBytemanStrategy implements
                 onSwitch(%s.class, "%s", %s );
             ENDRULE
             """.formatted(
-                safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
+                safeId(p.id()), ruleTarget(p),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 p.helperFqn(),

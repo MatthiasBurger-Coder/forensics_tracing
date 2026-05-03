@@ -49,6 +49,8 @@ class BytemanRuleRendererTest {
 
         assertThat(rendered)
                 .contains("RULE rule-1")
+                .contains("RULE rule-1 : enter com.example.Foo#work")
+                .doesNotContain("com.example.Foo#work#work")
                 .contains("CLASS com.example.Foo")
                 .contains("METHOD work()V")
                 .contains("AT ENTRY");
@@ -60,7 +62,7 @@ class BytemanRuleRendererTest {
                 "com.example.Foo",
                 "work",
                 "()V",
-                "Foo#work",
+                "com.example.Foo#work",
                 null,
                 null,
                 RuleParams.DEFAULT_HELPER_FQN

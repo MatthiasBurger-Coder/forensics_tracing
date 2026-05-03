@@ -9,7 +9,7 @@ public final class MethodExitRuleStrategy extends AbstractBytemanStrategy implem
     @Override public String id() { return "METHOD_EXIT"; }
     @Override public String render(RuleParams p) {
         return """
-            RULE %s : exit %s#%s
+            RULE %s : exit %s
             CLASS %s
             METHOD %s
             HELPER %s
@@ -19,7 +19,7 @@ public final class MethodExitRuleStrategy extends AbstractBytemanStrategy implem
                 onExit(%s.class, "%s", null);
             ENDRULE
             """.formatted(
-                safeId(p.id()), or(p.displayName(), p.className()), p.methodName(),
+                safeId(p.id()), ruleTarget(p),
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 p.helperFqn(),
