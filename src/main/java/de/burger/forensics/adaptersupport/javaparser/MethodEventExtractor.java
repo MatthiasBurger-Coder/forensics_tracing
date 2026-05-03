@@ -1,6 +1,7 @@
 package de.burger.forensics.adaptersupport.javaparser;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
@@ -115,10 +116,7 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
                 declaration,
                 parameterIndexes(declaration),
                 localVariableNames(declaration),
-                typeImports(declaration),
-                staticMemberImports(declaration),
-                wildcardTypeImports(declaration),
-                wildcardStaticImports(declaration),
+                importTable(declaration),
                 packageName,
                 sourceFilePath(declaration),
                 sourceTypeName,
@@ -127,50 +125,76 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
                 declaration.getSignature().asString());
     }
 
+    ImportTable importTable(MethodDeclaration declaration) {
+        return declaration.findCompilationUnit()
+                .map(compilationUnit -> new ImportTable(
+                        typeImports(compilationUnit),
+                        wildcardTypeImports(compilationUnit),
+                        staticMemberImports(compilationUnit),
+                        wildcardStaticImports(compilationUnit)))
+                .orElseGet(ImportTable::empty);
+    }
+
     Map<String, String> typeImports(MethodDeclaration declaration) {
         return declaration.findCompilationUnit()
-                .map(cu -> cu.getImports().stream()
-                        .filter(importDeclaration -> !importDeclaration.isStatic())
-                        .filter(importDeclaration -> !importDeclaration.isAsterisk())
-                        .collect(Collectors.toMap(
-                                importDeclaration -> importDeclaration.getName().getIdentifier(),
-                                ImportDeclaration::getNameAsString,
-                                (left, right) -> left,
-                                LinkedHashMap::new)))
+                .map(this::typeImports)
                 .orElseGet(LinkedHashMap::new);
     }
 
     Set<String> wildcardTypeImports(MethodDeclaration declaration) {
         return declaration.findCompilationUnit()
-                .map(cu -> cu.getImports().stream()
-                        .filter(importDeclaration -> !importDeclaration.isStatic())
-                        .filter(ImportDeclaration::isAsterisk)
-                        .map(ImportDeclaration::getNameAsString)
-                        .collect(Collectors.toCollection(LinkedHashSet::new)))
+                .map(this::wildcardTypeImports)
                 .orElseGet(LinkedHashSet::new);
     }
 
     Map<String, String> staticMemberImports(MethodDeclaration declaration) {
         return declaration.findCompilationUnit()
-                .map(cu -> cu.getImports().stream()
-                        .filter(ImportDeclaration::isStatic)
-                        .filter(importDeclaration -> !importDeclaration.isAsterisk())
-                        .collect(Collectors.toMap(
-                                importDeclaration -> importDeclaration.getName().getIdentifier(),
-                                ImportDeclaration::getNameAsString,
-                                (left, right) -> left,
-                                LinkedHashMap::new)))
+                .map(this::staticMemberImports)
                 .orElseGet(LinkedHashMap::new);
     }
 
     Set<String> wildcardStaticImports(MethodDeclaration declaration) {
         return declaration.findCompilationUnit()
-                .map(cu -> cu.getImports().stream()
-                        .filter(ImportDeclaration::isStatic)
-                        .filter(ImportDeclaration::isAsterisk)
-                        .map(ImportDeclaration::getNameAsString)
-                        .collect(Collectors.toCollection(LinkedHashSet::new)))
+                .map(this::wildcardStaticImports)
                 .orElseGet(LinkedHashSet::new);
+    }
+
+    private Map<String, String> typeImports(CompilationUnit compilationUnit) {
+        return compilationUnit.getImports().stream()
+                .filter(importDeclaration -> !importDeclaration.isStatic())
+                .filter(importDeclaration -> !importDeclaration.isAsterisk())
+                .collect(Collectors.toMap(
+                        importDeclaration -> importDeclaration.getName().getIdentifier(),
+                        ImportDeclaration::getNameAsString,
+                        (left, right) -> left,
+                        LinkedHashMap::new));
+    }
+
+    private Set<String> wildcardTypeImports(CompilationUnit compilationUnit) {
+        return compilationUnit.getImports().stream()
+                .filter(importDeclaration -> !importDeclaration.isStatic())
+                .filter(ImportDeclaration::isAsterisk)
+                .map(ImportDeclaration::getNameAsString)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private Map<String, String> staticMemberImports(CompilationUnit compilationUnit) {
+        return compilationUnit.getImports().stream()
+                .filter(ImportDeclaration::isStatic)
+                .filter(importDeclaration -> !importDeclaration.isAsterisk())
+                .collect(Collectors.toMap(
+                        importDeclaration -> importDeclaration.getName().getIdentifier(),
+                        ImportDeclaration::getNameAsString,
+                        (left, right) -> left,
+                        LinkedHashMap::new));
+    }
+
+    private Set<String> wildcardStaticImports(CompilationUnit compilationUnit) {
+        return compilationUnit.getImports().stream()
+                .filter(ImportDeclaration::isStatic)
+                .filter(ImportDeclaration::isAsterisk)
+                .map(ImportDeclaration::getNameAsString)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     Set<String> localVariableNames(MethodDeclaration declaration) {

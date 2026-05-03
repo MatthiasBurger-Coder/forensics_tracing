@@ -157,6 +157,32 @@ class MethodEventExtractorTest {
     }
 
     @Test
+    void methodContextSeparatesImportTableGroups(@TempDir Path root) throws IOException {
+        Path source = write(root, "sample/Sample.java", """
+            package sample;
+
+            import org.example.TypeName;
+            import org.example.*;
+            import static org.example.TypeName.MEMBER;
+            import static org.example.TypeName.*;
+
+            class Sample {
+                boolean check() {
+                    return MEMBER != null;
+                }
+            }
+            """);
+        MethodDeclaration declaration = parseMethod(root, source);
+
+        ImportTable importTable = extractor.methodContext(declaration).importTable();
+
+        assertThat(importTable.explicitTypeImports()).containsEntry("TypeName", "org.example.TypeName");
+        assertThat(importTable.wildcardTypeImports()).containsExactly("org.example");
+        assertThat(importTable.explicitStaticMemberImports()).containsEntry("MEMBER", "org.example.TypeName.MEMBER");
+        assertThat(importTable.wildcardStaticImports()).containsExactly("org.example.TypeName");
+    }
+
+    @Test
     void collectMethodEventsKeepsBtmNestedClassName(@TempDir Path root) throws IOException {
         Path source = write(root, "sample/Outer.java", """
             package sample;
