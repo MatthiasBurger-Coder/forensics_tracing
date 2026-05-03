@@ -1,8 +1,11 @@
 package de.burger.forensics.domain.validation;
 
 import de.burger.forensics.domain.model.RuleTemplate;
+import de.burger.forensics.domain.model.ConditionDiagnostic;
+import de.burger.forensics.domain.model.ConditionResolutionStatus;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.SourceLocation;
+import de.burger.forensics.domain.model.SourceContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -94,6 +97,43 @@ class UnresolvedTypeReferenceValidatorTest {
                 .endsWith("...");
         assertThat(issue.message()).doesNotContain("\n");
         assertThat(issue.template()).isEqualTo(RuleTemplate.IF_TRUE);
+    }
+
+    @Test
+    void usesStructuredDiagnosticsWhenScanEventProvidesThem() {
+        SourceLocation location = new SourceLocation("com.example.Sample", "run", 42);
+        SourceContext sourceContext = new SourceContext(
+                "com.example",
+                "src/main/java/com/example/Sample.java",
+                "com.example.Sample",
+                "Sample",
+                "run",
+                "run()");
+        ConditionDiagnostic diagnostic = new ConditionDiagnostic(
+                "DeploymentType",
+                "DeploymentType.EAR != null",
+                ConditionResolutionStatus.AMBIGUOUS,
+                "Multiple wildcard import candidates matched the symbol.",
+                location,
+                sourceContext);
+        ScanEvent event = new ScanEvent(
+                location,
+                "run()",
+                RuleTemplate.IF_TRUE,
+                "DeploymentType.EAR != null",
+                "java",
+                "boolean",
+                List.of(diagnostic));
+
+        ConditionValidationReport report = validator.validate(List.of(event));
+
+        assertThat(report.issues()).singleElement()
+                .satisfies(issue -> {
+                    assertThat(issue.symbol()).isEqualTo("DeploymentType");
+                    assertThat(issue.resolutionStatus()).isEqualTo(ConditionResolutionStatus.AMBIGUOUS);
+                    assertThat(issue.reason()).isEqualTo("Multiple wildcard import candidates matched the symbol.");
+                    assertThat(issue.sourceContext()).isEqualTo(sourceContext);
+                });
     }
 
     private static ScanEvent event(String condition) {

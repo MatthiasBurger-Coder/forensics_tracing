@@ -4,6 +4,7 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import de.burger.forensics.adaptersupport.javaparser.scanner.JavaParserFactory;
+import de.burger.forensics.domain.model.ConditionResolutionStatus;
 import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import org.junit.jupiter.api.BeforeEach;
@@ -205,6 +206,40 @@ class MethodEventExtractorTest {
         assertThat(events)
                 .extracting(event -> event.location().fqcn())
                 .containsOnly("sample.Outer$Inner");
+    }
+
+    @Test
+    void collectMethodEventsAttachesConditionDiagnosticsWithSourceContext(@TempDir Path root) throws IOException {
+        Path source = write(root, "sample/Sample.java", """
+            package sample;
+
+            class Sample {
+                boolean check() {
+                    if (UnknownType.enabled()) {
+                        return true;
+                    }
+                    return false;
+                }
+            }
+            """);
+        MethodDeclaration declaration = parseMethod(root, source);
+
+        ScanEvent event = extractor.collectMethodEvents(declaration, "sample").stream()
+                .filter(candidate -> candidate.kind() == RuleTemplate.IF_TRUE)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(event.conditionDiagnostics()).singleElement()
+                .satisfies(diagnostic -> {
+                    assertThat(diagnostic.symbol()).isEqualTo("UnknownType");
+                    assertThat(diagnostic.resolutionStatus()).isEqualTo(ConditionResolutionStatus.UNRESOLVED);
+                    assertThat(diagnostic.location()).isEqualTo(event.location());
+                    assertThat(diagnostic.sourceContext().packageName()).isEqualTo("sample");
+                    assertThat(diagnostic.sourceContext().sourceFilePath()).isEqualTo(source.toString());
+                    assertThat(diagnostic.sourceContext().fullyQualifiedClassName()).isEqualTo("sample.Sample");
+                    assertThat(diagnostic.sourceContext().methodName()).isEqualTo("check");
+                    assertThat(diagnostic.sourceContext().methodSignature()).isEqualTo("check()");
+                });
     }
 
     private MethodDeclaration parseMethod(String source) {

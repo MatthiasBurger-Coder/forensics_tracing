@@ -1,7 +1,9 @@
 package de.burger.forensics.domain.validation;
 
+import de.burger.forensics.domain.model.ConditionDiagnostic;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.RuleTemplate;
+import de.burger.forensics.domain.model.SourceLocation;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -57,6 +59,9 @@ public final class UnresolvedTypeReferenceValidator {
         if (!EXECUTABLE_CONDITION_TEMPLATES.contains(event.kind())) {
             return ConditionValidationReport.empty();
         }
+        if (!event.conditionDiagnostics().isEmpty()) {
+            return reportFromDiagnostics(event);
+        }
         String expression = event.conditionText();
         if (expression == null || expression.isBlank()) {
             return ConditionValidationReport.empty();
@@ -80,6 +85,25 @@ public final class UnresolvedTypeReferenceValidator {
             }
         }
         return new ConditionValidationReport(issues);
+    }
+
+    private static ConditionValidationReport reportFromDiagnostics(ScanEvent event) {
+        List<ConditionValidationIssue> issues = event.conditionDiagnostics().stream()
+                .map(diagnostic -> issueFromDiagnostic(event, diagnostic))
+                .toList();
+        return new ConditionValidationReport(issues);
+    }
+
+    private static ConditionValidationIssue issueFromDiagnostic(ScanEvent event, ConditionDiagnostic diagnostic) {
+        SourceLocation location = diagnostic.location() == null ? event.location() : diagnostic.location();
+        return new ConditionValidationIssue(
+                location,
+                diagnostic.expressionPreview(),
+                diagnostic.symbol(),
+                event.kind(),
+                diagnostic.resolutionStatus(),
+                diagnostic.reason(),
+                diagnostic.sourceContext());
     }
 
     private static boolean isSuspiciousSimpleTypeReference(String symbol, String expression, int start, int end) {

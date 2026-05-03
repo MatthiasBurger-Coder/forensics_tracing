@@ -15,6 +15,7 @@ import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.ThrowStmt;
+import de.burger.forensics.domain.model.ConditionDiagnostic;
 import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.SourceLocation;
@@ -31,7 +32,12 @@ import java.util.stream.Collectors;
 /**
  * Extracts {@link ScanEvent}s from JavaParser AST nodes.
  */
-public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy) {
+public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy,
+                                   ConditionDiagnosticFactory diagnosticFactory) {
+
+    public MethodEventExtractor(ConditionRenderingStrategy renderingStrategy) {
+        this(renderingStrategy, new ConditionDiagnosticFactory());
+    }
 
     public List<ScanEvent> collectMethodEvents(MethodDeclaration declaration, String pkg) {
         List<ScanEvent> events = new ArrayList<>();
@@ -53,8 +59,26 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
                 int line = condition.getBegin().map(p -> p.line).orElse(-1);
                 SourceLocation location = new SourceLocation(fqcn, methodName, line);
                 String renderedCondition = renderingStrategy.renderCondition(condition, context);
-                events.add(new ScanEvent(location, signature, RuleTemplate.IF_TRUE, renderedCondition, "java", returnType));
-                events.add(new ScanEvent(location, signature, RuleTemplate.IF_FALSE, renderedCondition, "java", returnType));
+                List<ConditionDiagnostic> diagnostics = diagnosticFactory.diagnostics(
+                        renderedCondition,
+                        location,
+                        context);
+                events.add(new ScanEvent(
+                        location,
+                        signature,
+                        RuleTemplate.IF_TRUE,
+                        renderedCondition,
+                        "java",
+                        returnType,
+                        diagnostics));
+                events.add(new ScanEvent(
+                        location,
+                        signature,
+                        RuleTemplate.IF_FALSE,
+                        renderedCondition,
+                        "java",
+                        returnType,
+                        diagnostics));
                 var elseStmt = current.getElseStmt().orElse(null);
                 if (elseStmt instanceof IfStmt next) {
                     current = next;
