@@ -80,7 +80,7 @@ public final class BtmGenerationRunner {
         });
 
         ScanProfile profile = profileCollector.profile();
-        publishProfile(request, profile);
+        publishProfile(request, profile, output.validationReport());
         log.info("Generated " + dedupedRuleNames.size() + " rules -> " + outputFile.toAbsolutePath());
 
         return new BtmGenerationResult(
@@ -188,11 +188,11 @@ public final class BtmGenerationRunner {
         );
     }
 
-    private void publishProfile(BtmGenerationRequest request, ScanProfile profile) {
+    private void publishProfile(BtmGenerationRequest request, ScanProfile profile, ConditionValidationReport validationReport) {
         if (!request.profilingEnabled()) {
             return;
         }
-        new JsonScanProfileSinkAdapter(request.profileReportFile()).publish(profile);
+        new JsonScanProfileSinkAdapter(request.profileReportFile()).publish(profile, validationReport);
     }
 
     private String helperFqn(BtmGenerationRequest request) {

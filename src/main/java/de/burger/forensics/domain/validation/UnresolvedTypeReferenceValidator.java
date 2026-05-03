@@ -1,8 +1,10 @@
 package de.burger.forensics.domain.validation;
 
 import de.burger.forensics.domain.model.ScanEvent;
+import de.burger.forensics.domain.model.RuleTemplate;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -11,6 +13,11 @@ import java.util.Set;
  * Flags source-level simple type references that Byteman may not resolve while loading rules.
  */
 public final class UnresolvedTypeReferenceValidator {
+
+    private static final Set<RuleTemplate> EXECUTABLE_CONDITION_TEMPLATES = EnumSet.of(
+            RuleTemplate.IF_TRUE,
+            RuleTemplate.IF_FALSE
+    );
 
     private static final Set<String> JAVA_LANG_TYPES = Set.of(
             "Boolean",
@@ -47,6 +54,9 @@ public final class UnresolvedTypeReferenceValidator {
 
     public ConditionValidationReport validate(ScanEvent event) {
         Objects.requireNonNull(event, "event");
+        if (!EXECUTABLE_CONDITION_TEMPLATES.contains(event.kind())) {
+            return ConditionValidationReport.empty();
+        }
         String expression = event.conditionText();
         if (expression == null || expression.isBlank()) {
             return ConditionValidationReport.empty();
@@ -66,7 +76,7 @@ public final class UnresolvedTypeReferenceValidator {
             }
             String symbol = sanitized.substring(start, cursor);
             if (isSuspiciousSimpleTypeReference(symbol, sanitized, start, cursor)) {
-                issues.add(new ConditionValidationIssue(event.location(), expression, symbol));
+                issues.add(new ConditionValidationIssue(event.location(), expression, symbol, event.kind()));
             }
         }
         return new ConditionValidationReport(issues);

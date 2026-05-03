@@ -159,7 +159,7 @@ class BytemanRuleRenderAdapterTest {
     }
 
     @Test
-    void mapsSwitchCaseConditionToDisplayNameAndClearsCondition() {
+    void mapsSwitchCaseConditionToEventLabelAndKeepsTargetDisplayName() {
         CapturingStrategy strategy = new CapturingStrategy("SWITCH_CASE");
         BytemanRuleRenderAdapter adapter = new BytemanRuleRenderAdapter(rendererWith(strategy));
         Rule rule = new Rule(
@@ -173,9 +173,31 @@ class BytemanRuleRenderAdapterTest {
 
         adapter.render(rule);
 
-        assertThat(strategy.lastParams.displayName()).isEqualTo("case 1");
+        assertThat(strategy.lastParams.displayName()).isEqualTo("com.example.Foo#work");
         assertThat(strategy.lastParams.condition()).isNull();
+        assertThat(strategy.lastParams.eventLabel()).isEqualTo("case 1");
         assertThat(strategy.lastParams.sourceLine()).isEqualTo(27);
+    }
+
+    @Test
+    void rendersSwitchCaseWithMethodTargetTitleAndCaseActionLabel() {
+        BytemanRuleRenderAdapter adapter = new BytemanRuleRenderAdapter(BytemanRuleRenderer.defaultRenderer());
+        Rule rule = new Rule(
+                new RuleId("case-render"),
+                new SourceLocation("com.example.Foo", "work", 27),
+                "case 1",
+                true,
+                RuleParams.DEFAULT_HELPER_FQN,
+                RuleTemplate.SWITCH_CASE
+        );
+
+        String rendered = adapter.render(rule);
+
+        assertThat(rendered)
+                .contains("RULE case-render : switch-case com.example.Foo#work")
+                .contains("AT LINE 27")
+                .contains("onCase(com.example.Foo.class, \"work\", \"case 1\");")
+                .doesNotContain("RULE case-render : switch-case case 1");
     }
 
     @Test
@@ -217,6 +239,7 @@ class BytemanRuleRenderAdapterTest {
         assertThat(strategy.lastParams.methodName()).isEqualTo("<method>");
         assertThat(strategy.lastParams.displayName()).isEqualTo("<unknown>#<method>");
         assertThat(strategy.lastParams.condition()).isEqualTo("   ");
+        assertThat(strategy.lastParams.eventLabel()).isNull();
     }
 
     private static BytemanRuleRenderer rendererWith(CapturingStrategy strategy) {

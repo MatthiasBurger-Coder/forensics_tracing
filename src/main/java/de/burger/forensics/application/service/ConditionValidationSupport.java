@@ -22,10 +22,11 @@ final class ConditionValidationSupport {
                                               List<ScanEvent> events) {
         ConditionValidationReport report = VALIDATOR.validate(events);
         report.issues().forEach(issue -> {
-            String message = issue.message();
-            context.addWarning(new WarningEntry(message, "condition-validation"));
-            log.warn(message);
+            context.addWarning(new WarningEntry(issue.message(), "condition-validation"));
         });
+        if (report.hasIssues()) {
+            log.warn(report.summaryMessage("scan profile report"));
+        }
         if (request.strictConditionValidation() && report.hasIssues()) {
             throw new ConditionValidationException(report);
         }

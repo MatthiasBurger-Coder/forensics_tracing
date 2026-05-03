@@ -18,7 +18,8 @@ class RuleParamsTest {
                 null,
                 "  ",
                 27,
-                "boolean"
+                "boolean",
+                "case 1"
         );
         RuleParams nullHelper = new RuleParams(
                 "rule-2",
@@ -36,9 +37,11 @@ class RuleParamsTest {
         assertThat(blankHelper.helperFqn()).isEqualTo(RuleParams.DEFAULT_HELPER_FQN);
         assertThat(blankHelper.sourceLine()).isEqualTo(27);
         assertThat(blankHelper.returnType()).isEqualTo("boolean");
+        assertThat(blankHelper.eventLabel()).isEqualTo("case 1");
         assertThat(nullHelper.helperFqn()).isEqualTo(RuleParams.DEFAULT_HELPER_FQN);
         assertThat(nullHelper.sourceLine()).isEqualTo(28);
         assertThat(nullHelper.returnType()).isNull();
+        assertThat(nullHelper.eventLabel()).isNull();
     }
 
     @Test
@@ -56,5 +59,6 @@ class RuleParamsTest {
 
         assertThat(params.helperFqn()).isEqualTo("com.example.Helper");
         assertThat(params.sourceLine()).isEqualTo(RuleParams.UNKNOWN_SOURCE_LINE);
+        assertThat(params.eventLabel()).isNull();
     }
 }

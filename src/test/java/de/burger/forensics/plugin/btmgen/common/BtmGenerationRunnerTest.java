@@ -118,7 +118,6 @@ class BtmGenerationRunnerTest {
         Files.createDirectories(srcDir);
         Files.writeString(srcDir.resolve("Sample.java"), """
                 package com.example;
-                import org.acme.DeploymentType;
                 public class Sample {
                   public boolean run(Object deploymentUnit) {
                     if (DeploymentType.EAR != null) { }
@@ -140,12 +139,36 @@ class BtmGenerationRunnerTest {
     }
 
     @Test
-    void runnerFailsForUnresolvedTypeReferencesWhenStrictValidationIsEnabled(@TempDir Path tempDir) throws IOException {
+    void runnerDoesNotReportImportedTypeReferences(@TempDir Path tempDir) throws IOException {
         Path srcDir = tempDir.resolve("src/main/java/com/example");
         Files.createDirectories(srcDir);
         Files.writeString(srcDir.resolve("Sample.java"), """
                 package com.example;
                 import org.acme.DeploymentType;
+                public class Sample {
+                  public boolean run(Object deploymentUnit) {
+                    if (DeploymentType.EAR != null) { }
+                    return true;
+                  }
+                }
+                """);
+        BtmGenerationRequest request = BtmGenerationRequest.builder()
+                .sourceRoot(tempDir.resolve("src/main/java"))
+                .outputFile(tempDir.resolve("build/forensics/validation.btm"))
+                .minBranchesPerMethod(0)
+                .build();
+
+        BtmGenerationResult result = new BtmGenerationRunner().generate(request);
+
+        assertFalse(result.validationReport().hasIssues());
+    }
+
+    @Test
+    void runnerFailsForUnresolvedTypeReferencesWhenStrictValidationIsEnabled(@TempDir Path tempDir) throws IOException {
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Files.writeString(srcDir.resolve("Sample.java"), """
+                package com.example;
                 public class Sample {
                   public boolean run(Object deploymentUnit) {
                     if (DeploymentType.EAR != null) { }
