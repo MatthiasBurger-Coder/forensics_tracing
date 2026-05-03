@@ -1,7 +1,9 @@
 package de.burger.forensics.domain.validation;
 
+import de.burger.forensics.domain.model.ConditionResolutionStatus;
 import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.SourceLocation;
+import de.burger.forensics.domain.model.SourceContext;
 
 import java.util.Objects;
 
@@ -12,7 +14,10 @@ public record ConditionValidationIssue(
         SourceLocation location,
         String expression,
         String symbol,
-        RuleTemplate template
+        RuleTemplate template,
+        ConditionResolutionStatus resolutionStatus,
+        String reason,
+        SourceContext sourceContext
 ) {
     private static final int PREVIEW_LIMIT = 240;
 
@@ -20,10 +25,27 @@ public record ConditionValidationIssue(
         this(location, expression, symbol, null);
     }
 
+    public ConditionValidationIssue(SourceLocation location,
+                                    String expression,
+                                    String symbol,
+                                    RuleTemplate template) {
+        this(
+                location,
+                expression,
+                symbol,
+                template,
+                ConditionResolutionStatus.UNRESOLVED,
+                "",
+                SourceContext.empty());
+    }
+
     public ConditionValidationIssue {
         Objects.requireNonNull(location, "location");
         Objects.requireNonNull(expression, "expression");
         Objects.requireNonNull(symbol, "symbol");
+        Objects.requireNonNull(resolutionStatus, "resolutionStatus");
+        reason = Objects.requireNonNullElse(reason, "");
+        sourceContext = Objects.requireNonNullElse(sourceContext, SourceContext.empty());
     }
 
     public String message() {
