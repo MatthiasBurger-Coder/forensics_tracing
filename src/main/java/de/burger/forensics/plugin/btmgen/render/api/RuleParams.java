@@ -10,7 +10,8 @@ public record RuleParams(
         String condition,    // optional IF guard (Byteman expression)
         String sqlHint,      // optional SQL preview for JDBC template
         String helperFqn,    // helper implementation invoked from the rule
-        int sourceLine       // optional source line, <= 0 if unavailable
+        int sourceLine,      // optional source line, <= 0 if unavailable
+        String returnType    // optional Java return type, null if unavailable
 ) {
     public static final String DEFAULT_HELPER_FQN = "de.burger.forensics.infrastructure.rt.RtTraceHelper";
     public static final int UNKNOWN_SOURCE_LINE = -1;
@@ -29,6 +30,7 @@ public record RuleParams(
                       String condition,
                       String sqlHint,
                       String helperFqn) {
-        this(id, className, methodName, methodDesc, displayName, condition, sqlHint, helperFqn, UNKNOWN_SOURCE_LINE);
+        this(id, className, methodName, methodDesc, displayName, condition, sqlHint, helperFqn, UNKNOWN_SOURCE_LINE, null);
     }
+
 }

@@ -49,13 +49,15 @@ class BytemanRuleRenderAdapterTest {
                 true,
                 "com.example.Helper",
                 RuleTemplate.METHOD_ENTER,
-                "work(String, int)"
+                "work(String, int)",
+                "boolean"
         );
 
         adapter.render(rule);
 
         assertThat(strategy.lastParams.methodName()).isEqualTo("work");
         assertThat(strategy.lastParams.methodDesc()).isEqualTo("(String, int)");
+        assertThat(strategy.lastParams.returnType()).isEqualTo("boolean");
     }
 
     @Test
@@ -87,7 +89,8 @@ class BytemanRuleRenderAdapterTest {
                 true,
                 "com.example.Helper",
                 RuleTemplate.METHOD_ENTER,
-                "   "
+                "   ",
+                null
         );
 
         adapter.render(rule);
@@ -106,7 +109,8 @@ class BytemanRuleRenderAdapterTest {
                 true,
                 "com.example.Helper",
                 RuleTemplate.METHOD_ENTER,
-                "(String, int)"
+                "(String, int)",
+                null
         );
 
         adapter.render(rule);
@@ -125,7 +129,8 @@ class BytemanRuleRenderAdapterTest {
                 true,
                 "com.example.Helper",
                 RuleTemplate.METHOD_ENTER,
-                "execute(String, int)"
+                "execute(String, int)",
+                null
         );
 
         adapter.render(rule);
@@ -144,7 +149,8 @@ class BytemanRuleRenderAdapterTest {
                 true,
                 "com.example.Helper",
                 RuleTemplate.METHOD_ENTER,
-                "execute"
+                "execute",
+                null
         );
 
         adapter.render(rule);

@@ -347,6 +347,9 @@ class GenerateBtmTaskTest {
                     switch (2) { case 2 -> {} }
                     throw new IllegalStateException();
                   }
+                  public boolean gamma() {
+                    return false;
+                  }
                 }
                 """);
 
@@ -355,6 +358,7 @@ class GenerateBtmTaskTest {
         var scanExtension = newExtension(project);
         scanExtension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
         scanExtension.getOutputFile().set(scanOutput.toFile());
+        scanExtension.getMinBranchesPerMethod().set(0);
         scanTask.setExtension(scanExtension);
 
         scanTask.generate();
@@ -363,6 +367,7 @@ class GenerateBtmTaskTest {
         String scanContent = Files.readString(scanOutput);
         assertFalse(scanContent.contains("helper()."));
         assertFalse(scanContent.contains("ENABLE_LOG"));
+        assertFalse(scanContent.contains("IF $!"));
         assertTrue(scanContent.contains("AT LINE 4"));
         assertTrue(scanContent.contains("AT LINE 5"));
         assertTrue(scanContent.contains("AT LINE 9"));

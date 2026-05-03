@@ -10,8 +10,6 @@ import java.util.regex.Pattern;
  * Falls back to GenericUnsafeStrategy for unknown/complex expressions.
  */
 public final class DefaultStrategyFactory implements StrategyFactory {
-    private static final String RETURN_KEYWORD = "return";
-
     private static final Pattern NULL_CHECK =
             Pattern.compile("==\\s*null|!=\\s*null", Pattern.CASE_INSENSITIVE);
     private static final Pattern INSTANCE_OF =
@@ -33,16 +31,8 @@ public final class DefaultStrategyFactory implements StrategyFactory {
         sanitized = stripTrailingSemicolon(sanitized);
 
         boolean isReturnTemplate = template == RuleTemplate.RETURN;
-        boolean isBooleanReturn = isBooleanReturnType(returnType);
         if (isReturnTemplate) {
-            sanitized = stripReturnKeyword(sanitized);
-            if (sanitized.isBlank()) {
-                return new GenericUnsafeStrategy("true");
-            }
-            if (!isBooleanReturn) {
-                return new GenericUnsafeStrategy("true");
-            }
-            return new GenericUnsafeStrategy("$!");
+            return new GenericUnsafeStrategy("true");
         }
 
         final String lower = sanitized.toLowerCase(Locale.ROOT);
@@ -68,28 +58,6 @@ public final class DefaultStrategyFactory implements StrategyFactory {
             result = result.substring(0, result.length() - 1).trim();
         }
         return result;
-    }
-
-    private static String stripReturnKeyword(String expression) {
-        String result = expression;
-        if (result.regionMatches(true, 0, RETURN_KEYWORD, 0, RETURN_KEYWORD.length())) {
-            result = result.substring(RETURN_KEYWORD.length()).trim();
-        }
-        return result;
-    }
-
-    private static boolean isBooleanReturnType(String returnType) {
-        if (returnType == null) {
-            return false;
-        }
-        String normalized = returnType.trim();
-        if (normalized.isEmpty()) {
-            return false;
-        }
-        normalized = normalized.toLowerCase(Locale.ROOT);
-        return "boolean".equals(normalized)
-            || "java.lang.boolean".equals(normalized)
-            || normalized.endsWith(".boolean");
     }
 
 }

@@ -85,7 +85,8 @@ class IfRuleStrategyTest {
                 "INSTANCE == null",
                 null,
                 RuleParams.DEFAULT_HELPER_FQN,
-                72
+                72,
+                null
         );
 
         String rule = new IfFalseRuleStrategy().render(params);
@@ -107,7 +108,8 @@ class IfRuleStrategyTest {
                 "$CLASS.INSTANCE == null",
                 null,
                 RuleParams.DEFAULT_HELPER_FQN,
-                79
+                79,
+                null
         );
 
         String rule = new IfFalseRuleStrategy().render(params);
@@ -156,7 +158,8 @@ class IfRuleStrategyTest {
                 condition,
                 null,
                 RuleParams.DEFAULT_HELPER_FQN,
-                sourceLine
+                sourceLine,
+                null
         );
     }
 }

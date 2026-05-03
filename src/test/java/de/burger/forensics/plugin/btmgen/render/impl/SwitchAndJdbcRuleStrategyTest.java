@@ -60,7 +60,8 @@ class SwitchAndJdbcRuleStrategyTest {
                 "$1.kind(\"fast\")",
                 null,
                 RuleParams.DEFAULT_HELPER_FQN,
-                37
+                37,
+                null
         );
 
         String rule = new SwitchRuleStrategy().render(params);
@@ -124,7 +125,8 @@ class SwitchAndJdbcRuleStrategyTest {
                 null,
                 null,
                 RuleParams.DEFAULT_HELPER_FQN,
-                41
+                41,
+                null
         );
 
         String rule = new SwitchCaseRuleStrategy().render(params);

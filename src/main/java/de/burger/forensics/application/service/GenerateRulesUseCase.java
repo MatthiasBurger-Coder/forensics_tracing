@@ -270,17 +270,26 @@ public final class GenerateRulesUseCase {
             ? SafeMode.wrap(base, helperFqcn, ruleId)
             : base;
         String renderedCondition = effective.toBytemanIf();
-        return new Rule(ruleId, event.location(), renderedCondition, positive, helperFqcn, overrideType, event.signature());
+        return new Rule(
+            ruleId,
+            event.location(),
+            renderedCondition,
+            positive,
+            helperFqcn,
+            overrideType,
+            event.signature(),
+            event.returnType()
+        );
     }
 
     private Rule entryRule(SourceLocation location, String methodSignature, String helperFqcn) {
         RuleId ruleId = RuleIdFactory.from(location, RuleTemplate.METHOD_ENTER);
-        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_ENTER, methodSignature);
+        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_ENTER, methodSignature, null);
     }
 
     private Rule exitRule(SourceLocation location, String methodSignature, String helperFqcn) {
         RuleId ruleId = RuleIdFactory.from(location, RuleTemplate.METHOD_EXIT);
-        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_EXIT, methodSignature);
+        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_EXIT, methodSignature, null);
     }
 
     private boolean matchesPrefixes(SourceLocation location, List<String> prefixes) {

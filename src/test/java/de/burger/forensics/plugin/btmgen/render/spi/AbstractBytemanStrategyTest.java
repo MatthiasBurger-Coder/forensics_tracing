@@ -75,7 +75,8 @@ class AbstractBytemanStrategyTest {
                 null,
                 null,
                 RuleParams.DEFAULT_HELPER_FQN,
-                23
+                23,
+                null
         );
         RuleParams withoutLine = new RuleParams(
                 "rule-2",
@@ -86,7 +87,8 @@ class AbstractBytemanStrategyTest {
                 null,
                 null,
                 RuleParams.DEFAULT_HELPER_FQN,
-                RuleParams.UNKNOWN_SOURCE_LINE
+                RuleParams.UNKNOWN_SOURCE_LINE,
+                null
         );
 
         assertThat(probe.requireSourceLineValue(withLine, "IF_TRUE")).isEqualTo(23);
