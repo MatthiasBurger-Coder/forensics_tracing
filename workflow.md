@@ -1,1632 +1,811 @@
-# Codex Workflow: Gradle- und Maven-Plugin-Adapter für Forensics BTMGen
+# workflow.md — Fix BTM Generation for Maven/Gradle Analysis
+
+## Rolle
+
+Du arbeitest als Codex-Agent in einem Java-Projekt für Forensics-Tracing und Byteman-Regelgenerierung.
+
+Du bist spezialisiert auf:
+
+* Java 17
+* Gradle 9.4
+* Maven-Plugin-Adapter
+* Byteman-Regelsyntax
+* JavaParser-basierte Source-Code-Analyse
+* JUnit 5 Tests
+* ArchUnit Tests
+* saubere Port-/Adapter-Trennung
+
+Alle Source-Code-Kommentare, JavaDoc-Kommentare, Commit Messages und technische Namen im Code müssen auf Englisch verfasst werden.
+
+Antworten und Abschlussberichte an den Nutzer dürfen auf Deutsch erfolgen.
+
+---
 
 ## Ziel
 
-Das bestehende Gradle-Plugin soll so umgebaut werden, dass Gradle- und Maven-Unterstützung sauber getrennt sind, ohne die Scanner-, Renderer- oder Rule-Generation-Logik zu duplizieren.
+Der Generator erzeugt aktuell eine `forensics.btm`, die grundsätzlich beweist, dass der Scanner läuft. Die Datei ist aber noch nicht sauber genug für belastbare Analyse großer Projekte wie WildFly.
 
-Zielstruktur im bestehenden Single-Modul:
+Diese Workflow-Aufgabe soll die Byteman-Regelerzeugung so korrigieren, dass:
 
-```text
-src/main/java/de/burger/forensics/plugin/btmgen
-├── common
-│   ├── BtmGenerationRunner.java
-│   ├── BtmGenerationRequest.java
-│   ├── BtmGenerationResult.java
-│   ├── BtmGenerationDefaults.java
-│   └── PluginLogPort.java
-│
-├── gradle
-│   ├── BtmGenPlugin.java
-│   ├── BtmGenExtension.java
-│   ├── GenerateBtmTask.java
-│   └── internal
-│       └── PluginRuntimeLocator.java
-│
-├── maven
-│   ├── BtmGenMojo.java
-│   ├── MavenBtmGenParameters.java
-│   └── MavenLogAdapter.java
-│
-├── internal
-│   └── BytemanRuleRenderAdapter.java
-│
-├── render
-│   └── ... existing renderer classes
-│
-└── writer
-    └── BtmFileWriter.java
-```
-
-Langfristig kann daraus später ein Multi-Modul-Build entstehen:
-
-```text
-forensics-core
-forensics-gradle-plugin
-forensics-tracing
-```
-
-Dieser Workflow bleibt bewusst im bestehenden Projekt, damit der Umbau kontrolliert und reviewbar bleibt.
+1. `THROW`-Regeln syntaktisch und fachlich korrekt sind.
+2. `RETURN`-/`AT EXIT`-Regeln nicht mehrfach pro Methode redundant erzeugt werden.
+3. Methodensignaturen optional bis in die Byteman-Regeln transportiert werden können.
+4. Der Maven-Scanbereich nicht versehentlich `src/test/java`, `target`, `build`, `.git` oder komplette Repository-Wurzeln analysiert.
+5. Der Gradle-Teil nicht beschädigt wird.
+6. Der Maven-Teil, falls vorhanden, denselben Use-Case wie der Gradle-Adapter nutzt.
+7. Alle Änderungen durch JUnit-Tests abgesichert werden.
 
 ---
 
-## Grundregel
+## Wichtiger Ausgangsbefund
 
-Der Maven-Support darf keine zweite Parser- oder BTM-Generation-Implementierung werden.
-
-Richtig:
+Eine erzeugte `forensics.btm` enthielt ungefähr:
 
 ```text
-GenerateBtmTask ─┐
-                 ├── BtmGenerationRunner ─── Scanner / UseCase / Renderer / Writer
-BtmGenMojo   ────┘
+125700 generated rules
+0 duplicate rule ids
+0 malformed rule blocks
+5486 THROW rules
+27589 RETURN rules
+36532 IF_TRUE / IF_FALSE rules
+25518 METHOD_ENTER rules
+25518 METHOD_EXIT rules
 ```
 
-Falsch:
+Die Datei war formal groß und generiert, aber drei Dinge waren auffällig:
+
+### Problem 1 — falsche `THROW`-Condition
+
+Aktuelles problematisches Muster:
 
 ```text
-GenerateBtmTask ─── eigene Scanner-Orchestrierung
-BtmGenMojo    ─── eigene Scanner-Orchestrierung
+RULE ... : throw some.Class#method#method
+CLASS some.Class
+METHOD method
+HELPER de.burger.forensics.infrastructure.rt.RtTraceHelper
+AT THROW
+IF SomeLogger.LOGGER.someExceptionFactoryCall($this.value)
+DO
+    onException($^);
+ENDRULE
 ```
+
+Das ist falsch, weil `IF` eine boolean expression erwartet. Ein Exception-Factory-Ausdruck ist keine sichere boolean condition.
+
+Erwartetes Muster:
+
+```text
+RULE ... : throw some.Class#method#method
+CLASS some.Class
+METHOD method
+HELPER de.burger.forensics.infrastructure.rt.RtTraceHelper
+AT THROW
+IF true
+DO
+    onException($^);
+ENDRULE
+```
+
+Optional darf später ein Exception-Type-Filter ergänzt werden, aber nicht in dieser Aufgabe.
 
 ---
 
-## Globale Constraints
+### Problem 2 — mehrfach erzeugte `RETURN`-Regeln mit identischem `AT EXIT`
 
-* Java 17 only.
-* Gradle 9.4.0 only.
-* Source-Code-Kommentare ausschließlich in Englisch.
-* Antworten, Dokumentation und Commit-Erklärungen dürfen Deutsch sein.
-* Kein Spring Boot.
-* Kein Maven-Build als primäres Buildsystem.
-* Kein `quality_gate.py` erfinden.
-* Keine Coverage-Thresholds senken.
-* Keine bestehenden Tests entfernen.
-* Keine Parserlogik in Gradle- oder Maven-Adapter duplizieren.
-* Keine H2-, SQLite-, JDBC-, Gradle- oder Maven-Typen in Domain/Application leaken.
-* Maven-Adapter darf Maven-Typen importieren.
-* Gradle-Adapter darf Gradle-Typen importieren.
-* `common` darf weder Gradle- noch Maven-Typen importieren.
-
----
-
-# Workflow-Übersicht
-
-Der Umbau erfolgt in Slices:
+Aktuelles problematisches Muster:
 
 ```text
-Slice 0: Baseline prüfen
-Slice 1: Common Request/Result/Log-Port einführen
-Slice 2: BtmGenerationRunner aus GenerateBtmTask extrahieren
-Slice 3: Gradle-Adapter verschlanken
-Slice 4: Maven-Plugin-Abhängigkeiten und Descriptor-Strategie vorbereiten
-Slice 5: Maven Mojo Adapter einführen
-Slice 6: ArchUnit-Regeln härten
-Slice 7: Funktionale Validierung mit Gradle und Maven
-Slice 8: Dokumentation aktualisieren
-Slice 9: Quality Gate, Diff-Review, Commit
+RULE ... : return some.Class#method#method
+CLASS some.Class
+METHOD method
+HELPER de.burger.forensics.infrastructure.rt.RtTraceHelper
+AT EXIT
+IF true
+DO
+    onExit(..., $!);
+ENDRULE
 ```
 
-Jeder Slice muss einzeln testbar und reviewbar sein.
+Wenn eine Methode mehrere `return`-Statements enthält, werden aktuell mehrere `RETURN`-Regeln erzeugt. Alle hängen aber an `AT EXIT`. Dadurch entstehen redundante Exit-Regeln pro Methode.
+
+Erwartung:
+
+* Pro Methode darf es maximal eine generische `AT EXIT`-Regel geben.
+* Wenn konkrete `return`-Statements später separat verfolgt werden sollen, muss das über `AT LINE <line>` oder ein separates Eventmodell erfolgen.
+* In dieser Aufgabe soll die Redundanz entfernt werden.
 
 ---
 
-# Slice 0 — Baseline prüfen
+### Problem 3 — Methodenzeilen ohne Signatur
 
-## Ziel
-
-Vor dem Umbau muss klar sein, dass das Repository sauber ist und welche Tests/Quality-Gates aktuell gelten.
-
-## Codex Prompt
-
-```md
-# Slice 0: Baseline inspection before plugin adapter split
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-The project currently contains a Gradle plugin under:
-
-`src/main/java/de/burger/forensics/plugin/btmgen/gradle`
-
-The goal of later slices is to split build-tool-specific adapters into:
-
-- `plugin/btmgen/gradle`
-- `plugin/btmgen/maven`
-- `plugin/btmgen/common`
-
-Do not implement this split in this slice.
-
-## Task
-
-Inspect the repository and establish the current baseline.
-
-## Required actions
-
-1. Inspect repository structure.
-2. Inspect `build.gradle.kts`.
-3. Inspect `settings.gradle.kts` if present.
-4. Inspect `QUALITY.md`.
-5. Inspect `AGENTS.md`.
-6. Inspect current Gradle plugin classes:
-   - `BtmGenPlugin.java`
-   - `BtmGenExtension.java`
-   - `GenerateBtmTask.java`
-7. Inspect current scanner and use-case wiring.
-8. Run the documented quality gate from `QUALITY.md`.
-9. Do not modify files.
-
-## Required output
-
-Return:
-
-1. Current plugin package layout.
-2. Current Gradle task responsibilities.
-3. Current quality gate command.
-4. Current quality gate result.
-5. Existing risks before refactoring.
-6. Suggested first implementation slice.
-
-## Restrictions
-
-Do not modify code.
-Do not add dependencies.
-Do not create Maven plugin classes.
-Do not change Java version.
-Do not invent missing scripts.
-```
-
-## Akzeptanzkriterien
-
-* Keine Dateien geändert.
-* Quality Gate wurde ausgeführt oder klar begründet, warum es nicht ausgeführt werden konnte.
-* Aktuelle Verantwortlichkeiten des Gradle-Tasks sind dokumentiert.
-
----
-
-# Slice 1 — Common Request/Result/Log-Port einführen
-
-## Ziel
-
-Build-tool-neutrale Übergabeobjekte einführen, ohne das bestehende Verhalten zu ändern.
-
-## Neue Klassen
+Aktuelles Muster:
 
 ```text
-src/main/java/de/burger/forensics/plugin/btmgen/common/BtmGenerationRequest.java
-src/main/java/de/burger/forensics/plugin/btmgen/common/BtmGenerationResult.java
-src/main/java/de/burger/forensics/plugin/btmgen/common/BtmGenerationDefaults.java
-src/main/java/de/burger/forensics/plugin/btmgen/common/PluginLogPort.java
-src/main/java/de/burger/forensics/plugin/btmgen/common/NoOpPluginLogPort.java
+METHOD deploy
+METHOD execute
+METHOD getValue
 ```
 
-## Inhaltliche Idee
+Für überladene Methoden ist das riskant.
 
-`BtmGenerationRequest` enthält nur neutrale Java-Typen:
+Ziel:
 
-```java
-Path sourceRoot;
-Path outputFile;
-Path cacheDatabaseFile;
-Path profileReportFile;
-boolean cacheEnabled;
-boolean profilingEnabled;
-boolean strictParsing;
-List<String> includePackages;
-List<String> excludePackages;
+* Die Methodensignatur soll im internen Modell vorhanden sein.
+* Der Renderer soll optional signierte Methodenzeilen erzeugen können.
+* Default darf weiterhin kompatibel bleiben, wenn bestehende Tests und Byteman-Kompatibilität das verlangen.
+
+Beispiel Zieloption:
+
+```text
+METHOD execute(org.jboss.dmr.ModelNode, org.jboss.dmr.ModelNode)
 ```
 
-Keine Gradle-Typen:
-
-```java
-RegularFileProperty
-DirectoryProperty
-Property<T>
-Project
-Logger
-```
-
-Keine Maven-Typen:
-
-```java
-MavenProject
-MojoExecutionException
-Log
-```
-
-## Codex Prompt
-
-```md
-# Slice 1: Add build-tool-neutral BTM generation request/result model
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-The current Gradle task contains build-tool-specific configuration and scanner orchestration.
-
-Before extracting the runner, introduce build-tool-neutral request/result types under:
-
-`src/main/java/de/burger/forensics/plugin/btmgen/common`
-
-## Goal
-
-Add neutral common types that can later be used by both:
-
-- Gradle task adapter
-- Maven Mojo adapter
-
-Do not change runtime behavior yet.
-
-## Required classes
-
-Create:
-
-1. `BtmGenerationRequest`
-2. `BtmGenerationResult`
-3. `BtmGenerationDefaults`
-4. `PluginLogPort`
-5. `NoOpPluginLogPort`
-
-## Requirements
-
-### BtmGenerationRequest
-
-Use only Java standard library and project-internal neutral types.
-
-Allowed field types:
-
-- `java.nio.file.Path`
-- `java.util.List`
-- `java.util.Optional` if needed
-- primitive types
-- project-internal neutral enums/value objects
-
-Do not use Gradle types.
-Do not use Maven types.
-Do not use JDBC/H2/SQLite types.
-
-Suggested fields:
-
-- `Path sourceRoot`
-- `Path outputFile`
-- `Path cacheDatabaseFile`
-- `Path profileReportFile`
-- `boolean cacheEnabled`
-- `boolean profilingEnabled`
-- `boolean strictParsing`
-- `List<String> includePackages`
-- `List<String> excludePackages`
-
-Use an immutable object or a small builder.
-
-### BtmGenerationResult
-
-Represent execution result without build-tool-specific types.
-
-Suggested fields:
-
-- `Path outputFile`
-- `Path profileReportFile`
-- `int generatedRuleCount`
-- `int scannedFileCount`
-- `int parsedFileCount`
-- `int failedFileCount`
-- `int cacheHitCount`
-- `int cacheMissCount`
-
-Adjust fields to existing project capabilities.
-
-### BtmGenerationDefaults
-
-Centralize default locations and settings.
-
-Examples:
-
-- default output file name
-- default profile report name
-- default cache database name
-- default cache enabled flag
-- default strict parsing flag
-
-### PluginLogPort
-
-Provide a tiny logging abstraction for common runner output.
-
-Suggested methods:
-
-- `info(String message)`
-- `warn(String message)`
-- `error(String message)`
-- `debug(String message)`
-
-Do not expose Gradle Logger or Maven Log.
-
-### NoOpPluginLogPort
-
-Implementation that ignores all messages.
-
-## Tests
-
-Add unit tests for:
-
-1. Request builder creates immutable request.
-2. Defaults produce expected relative paths/names.
-3. NoOp logger does not throw.
-
-## Restrictions
-
-Do not modify Gradle task behavior yet.
-Do not add Maven dependencies yet.
-Do not create Maven Mojo yet.
-Do not move scanner logic yet.
-Do not change generated BTM output.
-
-## Quality
-
-Run relevant unit tests.
-If cheap enough, run full quality gate from `QUALITY.md`.
-
-## Final response
-
-Return:
-
-1. Changed files.
-2. New common model summary.
-3. Test result.
-4. Remaining follow-up for Slice 2.
-```
-
-## Akzeptanzkriterien
-
-* Neue Common-Klassen kompilieren.
-* Keine Gradle-/Maven-Imports in `plugin/btmgen/common`.
-* Existing Gradle Plugin läuft unverändert.
+Wenn die vollständige Signatur aus dem vorhandenen AST-Modell nicht risikofrei ableitbar ist, muss der Agent sauber dokumentieren, was fehlt, und mindestens das Modell vorbereiten.
 
 ---
 
-# Slice 2 — BtmGenerationRunner extrahieren
+## Verbindliche Architekturregel
 
-## Ziel
+Der Maven-Adapter darf keine Fachlogik enthalten.
 
-Die eigentliche Orchestrierung aus `GenerateBtmTask` herauslösen.
-
-Der Gradle-Task soll später nur noch:
-
-1. Gradle-Properties lesen,
-2. `BtmGenerationRequest` bauen,
-3. `BtmGenerationRunner.generate(request)` aufrufen,
-4. Gradle-Logging/Exceptions behandeln.
-
-## Neue Klasse
+Erlaubt:
 
 ```text
-src/main/java/de/burger/forensics/plugin/btmgen/common/BtmGenerationRunner.java
+Maven Mojo
+  -> builds request
+  -> calls application use case
+  -> writes configured output
 ```
 
-## Codex Prompt
+Nicht erlaubt:
 
-```md
-# Slice 2: Extract build-tool-neutral BtmGenerationRunner from GenerateBtmTask
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-Slice 1 introduced common request/result/log types under:
-
-`src/main/java/de/burger/forensics/plugin/btmgen/common`
-
-The current Gradle task still owns too much orchestration.
-
-## Goal
-
-Extract scanner/use-case/renderer/writer orchestration from `GenerateBtmTask` into:
-
-`BtmGenerationRunner`
-
-The generated BTM output must remain identical for the same input.
-
-## Required actions
-
-1. Inspect `GenerateBtmTask`.
-2. Identify all build-tool-neutral orchestration currently inside the task.
-3. Move neutral orchestration into `BtmGenerationRunner`.
-4. Keep Gradle-specific property access inside `GenerateBtmTask`.
-5. Keep Gradle-specific task annotations inside `GenerateBtmTask`.
-6. Keep Gradle-specific logging out of `BtmGenerationRunner`.
-7. Use `PluginLogPort` for common logging if needed.
-8. Return `BtmGenerationResult` from the runner.
-
-## BtmGenerationRunner responsibilities
-
-The runner may own:
-
-- scanner construction
-- cache adapter selection if already implemented
-- profile sink selection if already implemented
-- use-case construction
-- Byteman rule rendering
-- deterministic deduplication if already done in task
-- BTM file writing
-- result summary creation
-
-The runner must not import:
-
-- `org.gradle.*`
-- `org.apache.maven.*`
-- H2/JDBC types unless already hidden behind existing adapters
-
-## GenerateBtmTask responsibilities after this slice
-
-The task should only:
-
-- expose Gradle properties
-- map Gradle properties to `BtmGenerationRequest`
-- create the runner during task execution
-- invoke the runner
-- translate failures into Gradle task failures
-
-Do not store parser/scanner/runner services as task fields if that harms Gradle configuration cache.
-
-## Tests
-
-Add or update tests:
-
-1. Runner can generate BTM output for a small fixture.
-2. Gradle task still generates the same BTM output as before.
-3. Existing plugin tests continue to pass.
-4. If there is a golden-file test for BTM output, keep it stable.
-
-## Restrictions
-
-Do not add Maven dependencies yet.
-Do not create Maven Mojo yet.
-Do not change scanner semantics.
-Do not change package filtering behavior unless a test proves the current behavior was unstable.
-Do not lower coverage thresholds.
-
-## Quality
-
-Run:
-
-- relevant unit tests
-- existing Gradle plugin tests
-- documented quality gate if feasible
-
-## Final response
-
-Return:
-
-1. Changed files.
-2. What moved from `GenerateBtmTask` to `BtmGenerationRunner`.
-3. What intentionally stayed in `GenerateBtmTask`.
-4. Test results.
-5. BTM output compatibility statement.
+```text
+Maven Mojo
+  -> scans Java files directly
+  -> renders Byteman manually
+  -> duplicates Gradle task logic
 ```
 
-## Akzeptanzkriterien
-
-* `BtmGenerationRunner` enthält keine Gradle-Imports.
-* `GenerateBtmTask` ist dünner.
-* BTM-Ausgabe bleibt gleich.
-* Existing Tests laufen.
+Die Fachlogik muss im bestehenden Application-/Domain-/Renderer-Bereich bleiben.
 
 ---
 
-# Slice 3 — Gradle-Adapter verschlanken
+## Relevante Klassen / Suchanker
 
-## Ziel
+Prüfe mindestens diese Klassen und Pakete:
 
-Den bestehenden Gradle-Adapter sauber als Adapter kennzeichnen und stabilisieren.
-
-## Codex Prompt
-
-```md
-# Slice 3: Harden Gradle adapter after runner extraction
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-`BtmGenerationRunner` now owns build-tool-neutral orchestration.
-
-`GenerateBtmTask` should be a thin Gradle adapter only.
-
-## Goal
-
-Clean up and harden the Gradle plugin adapter without changing behavior.
-
-## Required actions
-
-1. Inspect:
-   - `BtmGenPlugin`
-   - `BtmGenExtension`
-   - `GenerateBtmTask`
-2. Ensure Gradle-specific code stays only in `plugin/btmgen/gradle`.
-3. Ensure task properties are lazy and configuration-cache-friendly.
-4. Ensure no parser/scanner/database objects are stored as task fields.
-5. Ensure all file access happens during task execution.
-6. Ensure the task maps all properties into `BtmGenerationRequest`.
-7. Add a small Gradle-specific log adapter if needed:
-   - `GradlePluginLogAdapter`
-
-## Required Gradle rules
-
-The Gradle task may import:
-
-- `org.gradle.api.*`
-- `org.gradle.api.tasks.*`
-- Gradle property types
-
-The Gradle task must not contain duplicated scanner orchestration.
-
-## Tests
-
-Add or update tests for:
-
-1. Gradle task maps extension values to runner request.
-2. Gradle task creates output file.
-3. Profiling flag maps correctly if present.
-4. Cache flag maps correctly if present.
-5. Missing source root fails with a clear Gradle error.
-
-## Restrictions
-
-Do not add Maven Mojo yet.
-Do not add Maven dependencies yet unless needed by build metadata only.
-Do not change BTM semantics.
-Do not introduce eager file access during configuration.
-
-## Quality
-
-Run Gradle plugin tests and quality gate from `QUALITY.md`.
-
-## Final response
-
-Return:
-
-1. Changed files.
-2. Gradle adapter responsibilities after cleanup.
-3. Configuration-cache-relevant changes.
-4. Test results.
-5. Remaining work before Maven adapter.
+```text
+src/main/java/de/burger/forensics/adapters/javaparser/JavaParserScanner.java
+src/main/java/de/burger/forensics/adapters/javaparser/MethodEventExtractor.java
+src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java
+src/main/java/de/burger/forensics/application/service/GenerationRequest.java
+src/main/java/de/burger/forensics/application/service/RuleGenerationResult.java
+src/main/java/de/burger/forensics/plugin/btmgen/render/api/RuleParams.java
+src/main/java/de/burger/forensics/plugin/btmgen/render/strategy/ThrowRuleStrategy.java
+src/main/java/de/burger/forensics/plugin/btmgen/render/strategy/ReturnRuleStrategy.java
+src/main/java/de/burger/forensics/plugin/btmgen/render/BytemanRuleRenderer.java
+src/main/java/de/burger/forensics/plugin/btmgen/gradle/GenerateBtmTask.java
 ```
 
-## Akzeptanzkriterien
+Falls vorhanden, zusätzlich:
 
-* Gradle-Adapter ist dünn.
-* Kein Common-Code importiert Gradle.
-* Task funktioniert wie vorher.
+```text
+src/main/java/de/burger/forensics/plugin/btmgen/maven/GenerateBtmMojo.java
+```
+
+Falls der Maven-Pfad fehlt, nicht blind umfangreich umbauen. Dann nur vorbereiten oder klar berichten, dass der Maven-Adapter separat ergänzt werden muss.
 
 ---
 
-# Slice 4 — Maven-Plugin-Abhängigkeiten und Descriptor-Strategie vorbereiten
+## Phase 1 — Repository-Inspektion
 
-## Ziel
-
-Maven-Plugin technisch vorbereiten, ohne direkt die volle Mojo-Logik zu bauen.
-
-Ein Maven-Plugin braucht eine Mojo-Klasse und einen Plugin-Descriptor in:
-
-```text
-META-INF/maven/plugin.xml
-```
-
-Da das Projekt selbst Gradle-basiert bleibt, muss entschieden werden, wie dieser Descriptor erzeugt wird.
-
-## Mögliche Strategie
-
-Mit Gradle kann dafür das Plugin `org.gradlex.maven-plugin-development` verwendet werden. Vor Einbau muss Codex prüfen, ob es mit der bestehenden Gradle-Version und Projektstruktur sauber funktioniert.
-
-## Codex Prompt
-
-```md
-# Slice 4: Prepare Maven plugin build support and descriptor strategy
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-The project currently builds a Gradle plugin.
-
-The next target is to add a Maven Mojo adapter under:
-
-`src/main/java/de/burger/forensics/plugin/btmgen/maven`
-
-However, Maven plugins require plugin metadata/descriptor generation.
-
-Do not implement full Maven scanning logic in this slice.
-
-## Goal
-
-Prepare Maven plugin development support in the Gradle build safely.
-
-## Required research within repository
-
-Inspect:
-
-- `build.gradle.kts`
-- `settings.gradle.kts`
-- version catalog if present
-- existing publishing configuration
-- existing plugin configuration
-- existing dependency constraints
-- `QUALITY.md`
-
-## Required decision
-
-Decide how the Maven plugin descriptor should be generated.
-
-Preferred direction:
-
-- Use a Gradle-compatible Maven plugin development helper if it fits cleanly.
-- Keep the main build Gradle-based.
-- Do not introduce a Maven build.
-
-If the helper plugin is not suitable, document a fallback strategy and stop before forcing a broken setup.
-
-## Dependencies likely needed
-
-Maven plugin annotations and APIs may be needed later:
-
-- `org.apache.maven:maven-plugin-api`
-- `org.apache.maven.plugin-tools:maven-plugin-annotations`
-- possibly `org.apache.maven:maven-core` only if `MavenProject` is required and not provided otherwise
-
-Use compile-only/provided-like configuration where appropriate so the plugin does not package Maven runtime unnecessarily.
-
-## Required actions
-
-1. Add only the minimum build configuration required for Maven Mojo compilation and descriptor generation.
-2. Keep Gradle plugin behavior unchanged.
-3. Do not add the full Mojo implementation yet unless needed for descriptor validation.
-4. If a minimal placeholder Mojo is required for descriptor generation, create it with no scanner logic.
-5. Ensure Java 17 configuration remains correct.
-6. Ensure Gradle 9.4.0 compatibility.
-
-## Restrictions
-
-Do not create a second Maven build.
-Do not convert the project to Maven.
-Do not change Gradle plugin ID.
-Do not break existing Gradle plugin publishing.
-Do not add scanner logic to Maven classes in this slice.
-Do not duplicate `GenerateBtmTask` logic.
-
-## Tests / validation
-
-Run:
-
-- `./gradlew compileJava`
-- descriptor-related Gradle task if available
-- existing relevant tests
-- quality gate from `QUALITY.md` if feasible
-
-## Final response
-
-Return:
-
-1. Changed build files.
-2. Added dependencies/plugins.
-3. Descriptor generation strategy.
-4. Whether a placeholder Mojo was required.
-5. Test/validation results.
-6. Risks or follow-up work.
-```
-
-## Akzeptanzkriterien
-
-* Projekt kompiliert weiter.
-* Maven-Plugin-Metadatenstrategie ist klar.
-* Gradle-Plugin ist nicht beschädigt.
-
----
-
-# Slice 5 — Maven Mojo Adapter einführen
-
-## Ziel
-
-Maven bekommt einen dünnen Adapter, der dieselbe `BtmGenerationRunner`-Logik nutzt.
-
-## Neue Klassen
-
-```text
-src/main/java/de/burger/forensics/plugin/btmgen/maven/BtmGenMojo.java
-src/main/java/de/burger/forensics/plugin/btmgen/maven/MavenBtmGenParameters.java
-src/main/java/de/burger/forensics/plugin/btmgen/maven/MavenLogAdapter.java
-```
-
-## Maven Goal
-
-Für den Anfang nur:
-
-```text
-forensics:btmgen
-```
-
-## Codex Prompt
-
-````md
-# Slice 5: Add Maven Mojo adapter for BTM generation
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-Previous slices introduced:
-
-- `BtmGenerationRequest`
-- `BtmGenerationResult`
-- `BtmGenerationRunner`
-- build-tool-neutral common package
-- descriptor strategy for Maven plugin support
-
-Now add the Maven adapter.
-
-## Goal
-
-Create a Maven Mojo that calls the existing `BtmGenerationRunner`.
-
-Do not duplicate scanner logic.
-
-## Required classes
-
-Create or complete:
-
-1. `BtmGenMojo`
-2. `MavenBtmGenParameters`
-3. `MavenLogAdapter`
-
-## Package
-
-Use:
-
-`de.burger.forensics.plugin.btmgen.maven`
-
-## Mojo behavior
-
-The Mojo should:
-
-1. Read Maven project source roots.
-2. Read plugin parameters.
-3. Build `BtmGenerationRequest`.
-4. Create `BtmGenerationRunner` during execution.
-5. Run generation.
-6. Log result summary through Maven logging.
-7. Translate failures to `MojoExecutionException`.
-
-## Maven parameters
-
-Support at least:
-
-- `sourceRoot`
-- `outputFile`
-- `cacheEnabled`
-- `cacheDatabaseFile`
-- `profilingEnabled`
-- `profileReportFile`
-- `strictParsing`
-- `includePackages`
-- `excludePackages`
-- `includeTests`
-
-Suggested defaults:
-
-- source root: Maven compile source roots
-- output file: `${project.build.directory}/forensics/generated.btm`
-- profile report: `${project.build.directory}/forensics/scan-profile.json`
-- cache database: `${project.build.directory}/forensics/scan-cache.mv.db`
-- cache enabled: current project default
-- strict parsing: false
-- include tests: false
-
-## MavenProject handling
-
-If `MavenProject` is used, keep it only in the Maven adapter package.
-
-Do not expose Maven types to:
-
-- common
-- application
-- domain
-- JavaParser adapter
-- Gradle adapter
-
-## Multi-module behavior for first version
-
-Keep behavior simple and explicit:
-
-- The Mojo runs for the current Maven project/module.
-- It uses that module's compile source roots.
-- Reactor aggregation is not required in this slice.
-- Aggregator behavior can be a later feature.
-
-## Tests
-
-Add tests for:
-
-1. Maven parameters map to `BtmGenerationRequest`.
-2. Maven log adapter does not throw.
-3. Mojo fails clearly when no source root exists.
-4. Mojo uses explicit `sourceRoot` when configured.
-5. Mojo does not import Gradle types.
-
-If direct Maven plugin integration testing is too heavy, add unit tests for the parameter mapper and document remaining integration validation.
-
-## Restrictions
-
-Do not duplicate scanner logic.
-Do not make the Mojo call `GenerateBtmTask`.
-Do not import Gradle classes.
-Do not implement Maven reactor aggregation yet.
-Do not implement multiple goals yet.
-Do not change Gradle plugin behavior.
-Do not lower test coverage thresholds.
-
-## Validation
-
-Run:
-
-- compile
-- tests
-- descriptor generation
-- quality gate from `QUALITY.md` if feasible
-
-If possible, validate a minimal Maven project manually with:
+Führe zuerst aus:
 
 ```bash
-mvn de.burger.forensics:forensics-tracing:<version>:btmgen
-````
-
-Adjust group/artifact/version to the actual project coordinates.
-
-## Final response
-
-Return:
-
-1. Changed files.
-2. Maven goal name.
-3. Supported parameters.
-4. How the Mojo maps to `BtmGenerationRunner`.
-5. Test results.
-6. Descriptor generation result.
-7. Limitations.
-
-````
-
-## Akzeptanzkriterien
-
-- Maven-Mojo kompiliert.
-- Mojo verwendet `BtmGenerationRunner`.
-- Keine Gradle-Imports im Maven-Package.
-- Keine Maven-Imports im Common-Package.
-
----
-
-# Slice 6 — ArchUnit-Regeln härten
-
-## Ziel
-
-Die neue Struktur darf später nicht verwässern.
-
-## Regeln
-
-```text
-common darf nicht auf gradle zugreifen
-common darf nicht auf maven zugreifen
-gradle darf nicht auf maven zugreifen
-maven darf nicht auf gradle zugreifen
-domain/application dürfen nicht auf gradle/maven zugreifen
-````
-
-## Codex Prompt
-
-```md
-# Slice 6: Add architecture rules for Gradle/Maven adapter separation
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-The project now has build-tool-specific packages:
-
-- `de.burger.forensics.plugin.btmgen.gradle`
-- `de.burger.forensics.plugin.btmgen.maven`
-- `de.burger.forensics.plugin.btmgen.common`
-
-The separation must be protected by ArchUnit.
-
-## Goal
-
-Add or update ArchUnit tests to enforce build-tool adapter boundaries.
-
-## Required rules
-
-Add rules ensuring:
-
-1. `plugin.btmgen.common` does not depend on Gradle.
-2. `plugin.btmgen.common` does not depend on Maven.
-3. `plugin.btmgen.gradle` does not depend on Maven.
-4. `plugin.btmgen.maven` does not depend on Gradle.
-5. `domain` does not depend on Gradle.
-6. `domain` does not depend on Maven.
-7. `application` does not depend on Gradle.
-8. `application` does not depend on Maven.
-9. `adapters.javaparser` does not depend on Gradle or Maven.
-
-## Package/import checks
-
-Disallow dependencies on packages matching:
-
-- `org.gradle..`
-- `org.apache.maven..`
-
-except:
-
-- Gradle imports are allowed only in `..plugin.btmgen.gradle..`
-- Maven imports are allowed only in `..plugin.btmgen.maven..`
-
-## Tests
-
-Update the existing architecture test class if appropriate:
-
-`src/test/java/de/burger/forensics/quality/HexagonRulesTest.java`
-
-or create a dedicated test class:
-
-`PluginAdapterArchitectureTest.java`
-
-## Restrictions
-
-Do not weaken existing architecture rules.
-Do not remove existing tests.
-Do not add broad ignore rules.
-Do not move packages only to satisfy tests unless the move is architecturally correct.
-
-## Validation
-
-Run ArchUnit tests.
-Run the full test suite if feasible.
-Run quality gate from `QUALITY.md`.
-
-## Final response
-
-Return:
-
-1. Changed test files.
-2. New architecture rules.
-3. Any violations found and fixed.
-4. Test results.
+git status --short
+find src/main/java -type f | sort
+find src/test/java -type f | sort
 ```
 
-## Akzeptanzkriterien
-
-* ArchUnit schützt die Adaptergrenzen.
-* Keine breiten Ausnahmen.
-* Alte Regeln bleiben erhalten.
-
----
-
-# Slice 7 — Funktionale Validierung Gradle + Maven
-
-## Ziel
-
-Nachweisen, dass beide Adapter denselben Core verwenden und vergleichbare Ausgabe erzeugen.
-
-## Codex Prompt
-
-````md
-# Slice 7: Validate Gradle and Maven adapters against the same scanner core
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-Both adapters should now call:
-
-`BtmGenerationRunner`
-
-The goal is to prove they produce compatible BTM output for the same source input.
-
-## Goal
-
-Add validation that Gradle and Maven adapters use the same core behavior.
-
-## Required validation
-
-Use a small Java fixture project or existing test fixture.
-
-Validate:
-
-1. Core runner generates BTM output.
-2. Gradle task generates BTM output.
-3. Maven parameter mapping targets the same request structure.
-4. Maven Mojo can generate BTM output if feasible in tests.
-5. BTM output is deterministic.
-
-## Suggested fixture
-
-Create or reuse a small source tree containing:
-
-- one class
-- one method
-- one local variable
-- one method call
-- one conditional branch
-
-The output should be stable enough for golden-file comparison.
-
-## If Maven integration testing is too heavy
-
-At minimum:
-
-1. Unit-test Maven parameter mapping.
-2. Unit-test `BtmGenMojo` with a fake or temporary project structure if possible.
-3. Document the manual Maven validation command.
-
-Do not fake success.
-
-## Manual validation command
-
-Document the actual command needed after publishing to Maven local or generating plugin metadata.
-
-Example shape:
+Prüfe danach:
 
 ```bash
-./gradlew publishToMavenLocal
+./gradlew --version
+./gradlew tasks --all
+```
 
-mvn de.burger.forensics:forensics-tracing:<version>:btmgen \
-  -Dforensics.sourceRoot=/path/to/sample/src/main/java
-````
+Wenn Maven-Dateien vorhanden sind:
 
-Use actual coordinates from the project.
+```bash
+find . -name "pom.xml" -print
+find . -path "*maven*" -type f -print
+```
 
-## Restrictions
+Erwartung:
 
-Do not modify external benchmark repositories in this slice.
-Do not introduce a full external large-project benchmark.
-Do not weaken tests.
-Do not skip failing tests silently.
-
-## Validation
-
-Run:
-
-* unit tests
-* ArchUnit tests
-* Gradle plugin tests
-* Maven descriptor validation if available
-* full quality gate from `QUALITY.md` if feasible
-
-## Final response
-
-Return:
-
-1. Validation setup.
-2. Gradle validation result.
-3. Maven validation result.
-4. Whether outputs match.
-5. Test results.
-6. Any remaining limitations.
-
-````
-
-## Akzeptanzkriterien
-
-- Gemeinsamer Runner ist funktional bewiesen.
-- Maven-Adapter ist zumindest über Mapping/Unit-Test validiert.
-- Gradle-Adapter bleibt funktionsfähig.
+* Keine Änderung beginnen, bevor der aktuelle Projektzustand verstanden wurde.
+* Keine fremden Änderungen überschreiben.
+* Keine großen Architekturumbauten ohne Notwendigkeit.
 
 ---
 
-# Slice 8 — Dokumentation aktualisieren
+## Phase 2 — Aktuellen Fehler reproduzieren
 
-## Ziel
-
-README/QUALITY/AGENTS so aktualisieren, dass neue Adapterstruktur verständlich ist.
-
-## Codex Prompt
-
-```md
-# Slice 8: Document Gradle and Maven plugin adapter architecture
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-The project now separates:
-
-- common BTM generation runner
-- Gradle plugin adapter
-- Maven Mojo adapter
-
-## Goal
-
-Update documentation to describe the new build-tool adapter architecture and usage.
-
-## Files to inspect
-
-- `README.md`
-- `QUALITY.md`
-- `AGENTS.md`
-- plugin-related docs if present
-
-## Required documentation content
-
-Add or update:
-
-1. Architecture overview:
+Suche Tests für:
 
 ```text
-Gradle task  ─┐
-              ├── BtmGenerationRunner
-Maven Mojo   ─┘
-````
+ThrowRuleStrategy
+ReturnRuleStrategy
+BytemanRuleRenderer
+MethodEventExtractor
+GenerateRulesUseCase
+GenerateBtmTask
+```
 
-2. Explanation that scanner logic is build-tool-neutral.
-3. Gradle usage example.
-4. Maven usage example.
-5. Maven limitations for first version.
-6. Notes about source-code comments being English.
-7. Quality gate command if changed.
-8. Architecture rules for adapter boundaries.
+Führe relevante Tests aus:
 
-## Maven usage example
+```bash
+./gradlew test
+```
 
-Document the actual group/artifact/version from the project.
+Wenn es spezielle Testtasks gibt, ebenfalls ausführen.
 
-Example shape:
+Wenn möglich, erzeuge eine kleine Testquelle mit:
+
+```java
+package com.example;
+
+final class ExampleService {
+
+    String map(int value) {
+        if (value < 0) {
+            throw new IllegalArgumentException("negative");
+        }
+        if (value == 0) {
+            return "zero";
+        }
+        return "positive";
+    }
+}
+```
+
+Erwartete neue Generator-Eigenschaften:
+
+* Eine Throw-Regel mit `AT THROW` und `IF true`.
+* Maximal eine generische `AT EXIT`-Regel für `map`.
+* Keine mehrfachen identischen `return ... AT EXIT`-Regeln.
+
+---
+
+## Phase 3 — Fix für `THROW`-Regeln
+
+### Ziel
+
+`THROW`-Regeln dürfen keine Exception-Factory-Ausdrücke als `IF`-Condition verwenden.
+
+### Umsetzung
+
+Prüfe die Klasse:
+
+```text
+ThrowRuleStrategy.java
+```
+
+Korrigiere die Regelgenerierung so, dass `AT THROW` standardmäßig erzeugt:
+
+```text
+AT THROW
+IF true
+DO
+    onException($^);
+ENDRULE
+```
+
+### Verboten
+
+Nicht erzeugen:
+
+```text
+IF SomeLogger.LOGGER.someExceptionFactoryCall(...)
+```
+
+Nicht erzeugen:
+
+```text
+IF new IllegalArgumentException(...)
+```
+
+Nicht erzeugen:
+
+```text
+IF throwExpression
+```
+
+### Testanforderung
+
+Ergänze oder aktualisiere einen JUnit-5-Test, der sicherstellt:
+
+```text
+- rendered rule contains "AT THROW"
+- rendered rule contains "IF true"
+- rendered rule contains "onException($^)"
+- rendered rule does not contain the original throw expression in the IF line
+```
+
+Testname-Vorschlag:
+
+```java
+throwRuleShouldUseBooleanConditionInsteadOfThrowExpression()
+```
+
+---
+
+## Phase 4 — Fix für redundante `RETURN`-/`AT EXIT`-Regeln
+
+### Ziel
+
+Eine Methode mit mehreren `return`-Statements darf nicht mehrere generische `AT EXIT`-Regeln erhalten.
+
+### Analyse
+
+Prüfe, wo `RETURN`-Events entstehen:
+
+```text
+MethodEventExtractor.java
+JavaParserScanner.java
+GenerateRulesUseCase.java
+```
+
+Prüfe, wo sie gerendert werden:
+
+```text
+ReturnRuleStrategy.java
+BytemanRuleRenderer.java
+```
+
+### Bevorzugte Lösung
+
+Die sauberste Lösung ist:
+
+* `METHOD_EXIT` bleibt der generische Exit-Hook.
+* `RETURN` darf nicht zusätzlich als generischer `AT EXIT`-Hook gerendert werden, wenn dadurch mehrere identische Exit-Regeln entstehen.
+* Entweder:
+
+    * `RETURN`-Events werden dedupliziert auf eine Regel pro Methode, oder
+    * `RETURN`-Events werden künftig nur als zeilenbezogene Events modelliert, aber noch nicht gerendert, wenn keine sichere Line-Strategie vorhanden ist.
+
+### Minimal akzeptabler Fix
+
+Wenn der bestehende Renderer `RETURN` zwingend erwartet:
+
+* Gruppiere `RETURN`-Events pro Klasse + Methode + Signatur.
+* Erzeuge maximal eine `RETURN`-Regel pro Methode.
+* Verwende stabilen Rule-Namen ohne zufällige Kollisionen.
+
+### Testanforderung
+
+Ergänze einen Test mit einer Methode, die zwei oder drei `return`-Statements enthält.
+
+Erwartung:
+
+```text
+- generated rules contain at most one RETURN/AT EXIT rule for that method
+- generated rules may contain one METHOD_EXIT/AT EXIT rule
+- no duplicate AT EXIT return rules exist for the same method
+```
+
+Testname-Vorschlag:
+
+```java
+methodWithMultipleReturnsShouldNotGenerateMultipleGenericExitReturnRules()
+```
+
+---
+
+## Phase 5 — Methodensignaturen vorbereiten oder aktivieren
+
+### Ziel
+
+Das interne Modell soll Methodensignaturen tragen können.
+
+Prüfe, ob das Eventmodell bereits Felder für Parameter oder Signaturen hat.
+
+Falls nicht vorhanden, ergänze vorsichtig ein Feld wie:
+
+```java
+String methodSignature
+```
+
+oder strukturierter:
+
+```java
+List<String> parameterTypeNames
+```
+
+### Anforderungen
+
+* Keine Signatur über unsichere String-Bastelei erzeugen, wenn der AST-Typ nicht zuverlässig auflösbar ist.
+* Keine JavaParser Symbol Solver Integration erzwingen, wenn sie noch nicht im Projekt vorhanden ist.
+* Ohne Type Solver darf eine syntaktische Signatur aus AST-Typen erzeugt werden, wenn sie stabil ist.
+
+Beispiel:
+
+```java
+void execute(ModelNode operation, ModelNode model)
+```
+
+kann ohne Imports nur liefern:
+
+```text
+execute(ModelNode, ModelNode)
+```
+
+Mit vollqualifizierter Auflösung wäre möglich:
+
+```text
+execute(org.jboss.dmr.ModelNode, org.jboss.dmr.ModelNode)
+```
+
+### Akzeptanz
+
+Mindestens eines der folgenden Ergebnisse muss erreicht werden:
+
+1. Renderer kann optional signierte `METHOD`-Zeilen erzeugen.
+2. Eventmodell enthält Signaturinformationen, Renderer bleibt aus Kompatibilitätsgründen zunächst unsigniert.
+3. Agent dokumentiert nachvollziehbar, warum vollständige Signaturen ohne Type Solver nicht sicher möglich sind, und ergänzt Tests für das vorbereitete Modell.
+
+### Testanforderung
+
+Testname-Vorschlag:
+
+```java
+scannerShouldCaptureMethodSignatureFromAstParameters()
+```
+
+---
+
+## Phase 6 — Scanbereich härten
+
+### Ziel
+
+Der Generator darf bei Maven-/Gradle-Projekten nicht versehentlich das komplette Repository inklusive Testquellen, Build-Ausgaben und `.git` scannen.
+
+### Pflicht-Ausschlüsse
+
+Folgende Verzeichnisse müssen ausgeschlossen werden:
+
+```text
+.git
+.gradle
+.idea
+build
+target
+out
+src/test/java
+src/integrationTest/java
+```
+
+### Default-Verhalten
+
+Für Projektadapter soll gelten:
+
+```text
+Default source root = src/main/java
+```
+
+Nicht:
+
+```text
+Default source root = project root
+```
+
+### Gradle-Adapter
+
+Prüfe:
+
+```text
+GenerateBtmTask.java
+```
+
+Erwartung:
+
+* Default zeigt auf `project.layout.projectDirectory.dir("src/main/java")` oder äquivalent.
+* Der Nutzer kann den Pfad explizit überschreiben.
+* Excludes werden auch bei explizitem Root berücksichtigt, sofern sinnvoll.
+
+### Maven-Adapter
+
+Falls vorhanden:
+
+```text
+GenerateBtmMojo.java
+```
+
+Erwartung:
+
+```java
+@Parameter(defaultValue = "${project.basedir}/src/main/java")
+private File sourceRoot;
+```
+
+Zusätzlich sollten Excludes berücksichtigt werden.
+
+### Testanforderung
+
+Ein Test muss sicherstellen:
+
+```text
+- src/main/java wird analysiert
+- src/test/java wird nicht analysiert
+- target wird nicht analysiert
+- build wird nicht analysiert
+- .git wird nicht analysiert
+```
+
+Testname-Vorschlag:
+
+```java
+scannerShouldIgnoreBuildOutputAndTestSourcesByDefault()
+```
+
+---
+
+## Phase 7 — Maven-Konfiguration prüfen oder ergänzen
+
+### Ziel
+
+Wenn der Maven-Adapter existiert, soll er korrekt über Maven ausführbar sein.
+
+Prüfe auf:
+
+```text
+src/main/java/de/burger/forensics/plugin/btmgen/maven/GenerateBtmMojo.java
+pom.xml
+META-INF/maven/plugin.xml generation
+```
+
+Ein echter Maven-Plugin-Adapter braucht:
+
+```xml
+<packaging>maven-plugin</packaging>
+```
+
+und:
 
 ```xml
 <plugin>
-    <groupId>de.burger.forensics</groupId>
-    <artifactId>forensics-tracing</artifactId>
-    <version>...</version>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-plugin-plugin</artifactId>
     <configuration>
-        <cacheEnabled>true</cacheEnabled>
-        <strictParsing>false</strictParsing>
-        <outputFile>${project.build.directory}/forensics/generated.btm</outputFile>
+        <goalPrefix>forensics-btmgen</goalPrefix>
     </configuration>
+    <executions>
+        <execution>
+            <goals>
+                <goal>descriptor</goal>
+                <goal>helpmojo</goal>
+            </goals>
+        </execution>
+    </executions>
 </plugin>
 ```
 
-Command example:
+Die Mojo-Klasse braucht sinngemäß:
+
+```java
+@Mojo(
+        name = "generate-btm-rules",
+        defaultPhase = LifecyclePhase.GENERATE_TEST_RESOURCES,
+        threadSafe = true,
+        requiresProject = true
+)
+public final class GenerateBtmMojo extends AbstractMojo {
+    // adapter only
+}
+```
+
+### Wichtig
+
+Wenn das Projekt weiterhin primär Gradle-basiert ist, darf diese Aufgabe nicht ungefragt die gesamte Buildstruktur in ein Maven-Multi-Modul-Projekt umbauen.
+
+Wenn Maven noch nicht vollständig vorhanden ist, dokumentiere klar:
+
+```text
+Maven adapter source exists: yes/no
+Maven plugin descriptor generation exists: yes/no
+Maven execution tested: yes/no
+Remaining blocker: ...
+```
+
+---
+
+## Phase 8 — Tests und Quality Gate
+
+Führe aus:
 
 ```bash
-mvn forensics:btmgen
+./gradlew clean test
 ```
 
-Only document prefix usage if plugin prefix metadata actually supports it.
+Falls vorhanden:
 
-## Restrictions
+```bash
+./gradlew jacocoTestReport jacocoTestCoverageVerification
+```
 
-Do not claim full support for a specific external large project unless validated.
-Do not claim Maven Central availability unless implemented.
-Do not claim Maven reactor aggregation unless implemented.
-Do not change code in this documentation slice unless needed for broken docs tests.
+Falls `check` sauber verdrahtet ist:
 
-## Validation
+```bash
+./gradlew clean check
+```
 
-Run docs-related checks if any.
-Run quality gate from `QUALITY.md` if feasible.
+Wenn Maven-Adapter vorhanden und baubar:
 
-## Final response
+```bash
+mvn clean package
+```
 
-Return:
+oder, falls Maven nur in einem Untermodul liegt:
 
-1. Changed documentation files.
-2. New documented architecture.
-3. Usage examples added.
-4. Limitations documented.
-5. Validation result.
+```bash
+mvn -f plugin/maven/pom.xml clean package
+```
 
-````
+Danach prüfen, ob ein Maven-Plugin-Descriptor im JAR liegt:
 
-## Akzeptanzkriterien
+```bash
+jar tf target/*.jar | grep "META-INF/maven/plugin.xml"
+```
 
-- README erklärt Gradle und Maven.
-- Keine falschen Versprechen.
-- AGENTS schützt neue Architekturregeln.
+Wenn der Befehl wegen Gradle-Struktur nicht passt, passenden tatsächlichen JAR-Pfad verwenden.
 
 ---
 
-# Slice 9 — Quality Gate, Diff-Review, Commit
+## Phase 9 — Mini-Regressionsanalyse mit erzeugter BTM-Datei
 
-## Ziel
+Erzeuge, falls möglich, eine kleine `forensics.btm` gegen Testquellen oder ein kleines Beispielprojekt.
 
-Nach der Umsetzung sauber prüfen und committen.
-
-## Codex Prompt
-
-```md
-# Slice 9: Final quality gate, diff review, and commit
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-The previous slices introduced:
-
-- build-tool-neutral BTM generation runner
-- Gradle adapter cleanup
-- Maven Mojo adapter
-- architecture rules
-- documentation
-
-## Goal
-
-Run final validation, inspect all changes, create a meaningful commit, and optionally push if configured by the user.
-
-## Required execution order
-
-### Phase 1 — Repository inspection
-
-1. Run `git status`.
-2. Inspect unstaged changes.
-3. Inspect staged changes if any.
-4. Inspect changed file list.
-5. Inspect relevant diffs.
-
-### Phase 2 — Quality gate
-
-1. Read `QUALITY.md`.
-2. Run the documented quality gate exactly as documented.
-3. Do not invent `quality_gate.py`.
-4. If the quality gate fails, fix only task-related issues.
-5. Re-run the quality gate.
-6. If remaining failures are unrelated or not realistically fixable, report them clearly.
-
-### Phase 3 — Architecture validation
-
-Verify:
-
-1. `common` has no Gradle imports.
-2. `common` has no Maven imports.
-3. `gradle` has no Maven imports.
-4. `maven` has no Gradle imports.
-5. domain/application have no Gradle/Maven imports.
-6. Maven Mojo calls `BtmGenerationRunner`.
-7. Gradle task calls `BtmGenerationRunner`.
-8. Scanner logic is not duplicated.
-
-### Phase 4 — Commit preparation
-
-Create a commit message that explains:
-
-1. what changed
-2. why it changed
-3. how it changed
-4. affected files/components
-5. tests added/updated
-6. behavior changes
-7. limitations
-8. breaking changes if any
-
-### Phase 5 — Commit
-
-Stage only relevant files.
-Create the commit.
-Do not push unless explicitly requested.
-
-## Commit message format
-
-Use a clear multi-line commit message:
+Prüfe automatisch oder manuell:
 
 ```text
-refactor: split BTM generation into shared runner and build-tool adapters
+No THROW rule has a non-boolean throw expression as IF condition.
+No method has multiple generic RETURN AT EXIT rules.
+No rules are generated for src/test/java when default sourceRoot is used.
+No rules are generated for target/build/.git directories.
+Rule ids remain unique.
+Rule blocks remain syntactically complete.
+```
 
-Extract build-tool-neutral BTM generation orchestration from the Gradle task
-into a shared runner so Gradle and Maven integrations can use the same scanner,
-renderer, writer, profiling, and cache wiring.
+Nützliche Prüfkommandos:
 
-Changed:
-- add plugin/btmgen/common request/result/runner types
-- reduce GenerateBtmTask to a Gradle adapter
-- add Maven Mojo adapter for btmgen goal
-- add architecture rules for Gradle/Maven adapter boundaries
-- document Gradle and Maven usage
+```bash
+grep -n "AT THROW" target/forensics/forensics.btm | head
+
+grep -n "IF " target/forensics/forensics.btm | head
+
+grep -n "AT EXIT" target/forensics/forensics.btm | head
+```
+
+Wenn ein Skript ergänzt wird, dann nur als Test- oder Verification-Helfer, nicht als Produktionsumgehung.
+
+---
+
+## Phase 10 — Diff prüfen
+
+Vor dem Abschluss:
+
+```bash
+git status --short
+git diff --stat
+git diff
+```
+
+Prüfe besonders:
+
+```text
+- keine generierten Großdateien committed
+- keine forensics.btm committed, außer sie ist bewusst eine kleine Testfixture
+- keine WildFly-Analyse-Artefakte committed
+- keine IDE-Dateien committed
+- keine target/build-Dateien committed
+```
+
+---
+
+## Akzeptanzkriterien
+
+Die Aufgabe ist erfüllt, wenn:
+
+```text
+1. THROW rules use a boolean condition, normally IF true.
+2. THROW rules call onException($^).
+3. RETURN rules no longer create multiple generic AT EXIT rules per method.
+4. The scanner or adapter does not scan src/test/java by default.
+5. Build output directories are excluded from scanning.
+6. Existing Gradle behavior remains intact.
+7. Maven adapter status is clearly verified or blocker is documented.
+8. JUnit tests cover the fixed behavior.
+9. ./gradlew clean test passes.
+10. ./gradlew clean check passes, unless an existing unrelated blocker is documented.
+```
+
+---
+
+## Nicht-Ziele
+
+Nicht in dieser Aufgabe erledigen:
+
+```text
+- Full Control Flow Graph implementation
+- Data Flow Graph or Program Dependence Graph implementation
+- JavaParser Symbol Solver full integration, unless already present and low-risk
+- Graph database integration
+- UML renderer implementation
+- Massive Maven/Gradle build restructuring
+- WildFly-specific hardcoding
+- Lowering coverage thresholds
+- Disabling failing tests
+- Removing quality gates
+```
+
+---
+
+## Abschlussbericht
+
+Am Ende muss Codex berichten:
+
+```text
+Summary:
+- What changed
+- Why it changed
+- Which files were affected
+
+Verification:
+- Commands run
+- Results
+
+BTM behavior:
+- THROW rule behavior after fix
+- RETURN rule behavior after fix
+- Scan scope behavior after fix
+
+Maven status:
+- Maven adapter present: yes/no
+- Maven plugin descriptor generation present: yes/no
+- Maven execution tested: yes/no
+- Remaining Maven blocker, if any
+
+Risks / Follow-ups:
+- Remaining limitations
+- Especially method signature limitations if full FQNs are not available
+```
+
+---
+
+## Commit Message Vorlage
+
+```text
+fix: harden BTM rule generation for Maven and Gradle analysis
+
+Fix Byteman rule generation issues discovered during large-project analysis.
+
+Changes:
+- Use a boolean condition for THROW rules instead of rendering throw expressions as IF conditions.
+- Prevent redundant generic RETURN AT EXIT rules for methods with multiple return statements.
+- Prepare or propagate method signature information where safely available.
+- Restrict default scan scope to production Java sources and exclude build/test/output directories.
+- Keep Maven adapter behavior aligned with the shared application use case.
 
 Why:
-- avoid duplicating scanner logic for Maven support
-- allow Maven-based projects to use the plugin directly later
-- keep build-tool-specific code isolated
-
-Validation:
-- <insert actual commands and results>
-
-Limitations:
-- Maven reactor aggregation is not implemented yet
-- external large-project benchmark is not part of this commit
-````
-
-Adjust the message to actual changes.
-
-## Restrictions
-
-Do not stage unrelated files.
-Do not commit generated build outputs.
-Do not commit local cache DB files.
-Do not commit external benchmark repository files.
-Do not suppress failing tests.
-Do not push unless asked.
-
-## Final response
-
-Return:
-
-1. Commit hash.
-2. Quality gate result.
-3. Test commands run.
-4. Summary of changed files.
-5. Known limitations.
-6. Whether anything was not committed and why.
-
-````
-
-## Akzeptanzkriterien
-
-- Quality Gate ist gelaufen.
-- Diff wurde geprüft.
-- Commit ist sauber und nachvollziehbar.
-- Keine generierten Artefakte committed.
-
----
-
-# Empfohlene Commit-Schnittfolge
-
-Nicht alles in einen riesigen Commit drücken.
-
-Besser:
-
-```text
-Commit 1: add common BTM generation request/result model
-Commit 2: extract BTM generation runner from Gradle task
-Commit 3: harden Gradle adapter boundaries
-Commit 4: add Maven plugin build support
-Commit 5: add Maven btmgen Mojo adapter
-Commit 6: add architecture tests for plugin adapters
-Commit 7: document Gradle/Maven adapter usage
-````
-
-Wenn Codex gut durchläuft, kann man 1–3 zusammenfassen, aber Maven sollte eher separat bleiben.
-
----
-
-# Master-Prompt für Codex-Orchestrierung
-
-Falls du Codex einen Gesamtauftrag geben willst, aber trotzdem Slice-förmig arbeiten lassen möchtest:
-
-````md
-# Master Task: Split BTM generation into shared runner plus Gradle and Maven adapters
-
-## Context
-
-Repository: forensics_tracing
-Runtime: Java 17 only
-Build system: Gradle 9.4.0 only
-Architecture: Hexagonal architecture
-Testing: JUnit 5 and ArchUnit
-Source-code comments: English only.
-
-The project currently provides a Gradle plugin for generating Byteman BTM rules from Java source code.
-
-The next productization step is to support Maven projects without duplicating scanner logic.
-
-## Target architecture
-
-Create this build-tool adapter structure:
-
-```text
-src/main/java/de/burger/forensics/plugin/btmgen
-├── common
-│   ├── BtmGenerationRunner.java
-│   ├── BtmGenerationRequest.java
-│   ├── BtmGenerationResult.java
-│   ├── BtmGenerationDefaults.java
-│   └── PluginLogPort.java
-│
-├── gradle
-│   └── existing Gradle plugin adapter classes
-│
-└── maven
-    └── Maven Mojo adapter classes
-````
-
-The core rule is:
-
-```text
-GenerateBtmTask ─┐
-                 ├── BtmGenerationRunner ─── Scanner / UseCase / Renderer / Writer
-BtmGenMojo   ────┘
-```
-
-The Maven Mojo must not duplicate Gradle task scanner logic.
-
-## Execution style
-
-Work slice by slice.
-
-For each slice:
-
-1. Inspect relevant code.
-2. Make the smallest coherent change.
-3. Add/update tests.
-4. Run relevant tests.
-5. Inspect diff.
-6. Stop and report before moving to the next slice if there is an architectural uncertainty.
-
-## Required slices
-
-### Slice 0 — Baseline
-
-Inspect current repository, plugin task, quality gate, and current architecture.
-Do not modify code.
-
-### Slice 1 — Common model
-
-Add build-tool-neutral request/result/default/log types.
-No behavior change.
-
-### Slice 2 — Runner extraction
-
-Extract scanner/use-case/render/write orchestration from `GenerateBtmTask` into `BtmGenerationRunner`.
-BTM output must remain identical.
-
-### Slice 3 — Gradle adapter cleanup
-
-Reduce `GenerateBtmTask` to a thin Gradle adapter.
-No duplicated scanner orchestration.
-
-### Slice 4 — Maven build support
-
-Add minimum Maven plugin API/annotation support and descriptor generation strategy while keeping Gradle as the build system.
-Do not convert the project to Maven.
-
-### Slice 5 — Maven Mojo
-
-Add `BtmGenMojo` under `plugin/btmgen/maven`.
-It must call `BtmGenerationRunner`.
-Support one goal: `btmgen`.
-
-### Slice 6 — Architecture tests
-
-Add ArchUnit rules:
-
-* common must not depend on Gradle
-* common must not depend on Maven
-* Gradle adapter must not depend on Maven
-* Maven adapter must not depend on Gradle
-* domain/application must not depend on Gradle or Maven
-
-### Slice 7 — Validation
-
-Validate Gradle and Maven paths against the same fixture where feasible.
-Document manual Maven validation if full integration is too heavy.
-
-### Slice 8 — Documentation
-
-Update README/AGENTS/QUALITY if needed.
-Document Gradle usage, Maven usage, adapter boundaries, and limitations.
-
-### Slice 9 — Final quality gate and commit
-
-Run documented quality gate from `QUALITY.md`.
-Inspect diff.
-Commit only relevant changes.
-Do not push unless explicitly requested.
-
-## Hard restrictions
-
-Do not add a second scanner implementation.
-Do not call Gradle task from Maven Mojo.
-Do not call Maven Mojo from Gradle task.
-Do not import Gradle classes outside `plugin.btmgen.gradle`.
-Do not import Maven classes outside `plugin.btmgen.maven`.
-Do not leak Gradle/Maven types into domain/application/common.
-Do not use Spring Boot.
-Do not introduce Maven as project build system.
-Do not lower coverage thresholds.
-Do not remove tests.
-Do not invent missing scripts.
-Do not commit generated cache DBs, build outputs, or external repositories.
-
-## Required final output
-
-Return:
-
-1. Summary of implemented slices.
-2. Changed files.
-3. Test commands and results.
-4. Quality gate result.
-5. Maven descriptor generation result.
-6. Gradle plugin compatibility result.
-7. Known limitations.
-8. Commit hash if committed.
-
-```
-
----
-
-# Grenzen und Risiken
-
-## Risiko 1: Single-Modul-JAR enthält Gradle- und Maven-Abhängigkeiten zusammen
-
-Kurzfristig ist das akzeptabel, wenn Abhängigkeiten sauber scoped sind. Langfristig ist ein Multi-Modul-Build besser.
-
-## Risiko 2: Maven-Plugin-Descriptor wird nicht erzeugt
-
-Ein Maven-Mojo allein reicht nicht für komfortable Maven-Nutzung. Maven erwartet einen Plugin-Descriptor im Jar. Deshalb muss Descriptor-Generierung entweder sauber eingebaut oder als expliziter Folgeschritt dokumentiert werden.
-
-## Risiko 3: Gradle-Task verliert Configuration-Cache-Fähigkeit
-
-Task-Felder dürfen keine nicht serialisierbaren Parser-, Scanner-, Renderer- oder Maven-Objekte halten. Diese Objekte müssen während der Task-Ausführung erzeugt werden.
-
-## Risiko 4: BTM-Ausgabe ändert sich
-
-Jede Änderung am Runner muss gegen bestehende BTM-Tests abgesichert werden. Wenn die Reihenfolge instabil war, darf sie deterministisch gemacht werden, aber nur mit Testanpassung und klarer Begründung.
-
-## Grenzen dieses Workflows
-
-Dieser Workflow baut die Adapterstruktur. Er löst noch nicht:
-
-- H2-/SQLite-Cache
-- Dependency-aware invalidation
-- external large-project benchmark
-- CLI-Unterstützung
-- Multi-Modul-Publishing
-- Maven-Central-Release
-
-Diese Punkte bleiben Folgearbeiten.
-
+- Byteman IF clauses require boolean expressions.
+- Multiple RETURN rules bound to the same AT EXIT location create redundant instrumentation.
+- Large projects such as WildFly expose scan-scope and overload-resolution weaknesses.
+
+Verification:
+- ./gradlew clean test
+- ./gradlew clean check
+- Maven plugin verification if applicable
+
+Notes:
+- No generated large BTM files are committed.
 ```
