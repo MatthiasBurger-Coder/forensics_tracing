@@ -43,7 +43,7 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
         String signature = declaration.getSignature().asString();
         String returnType = declaration.getType().asString();
 
-        MethodScanContext context = methodContext(declaration);
+        MethodScanContext context = methodContext(declaration, pkg);
 
         declaration.findAll(IfStmt.class).forEach(ifStmt -> {
             IfStmt current = ifStmt;
@@ -106,12 +106,20 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
     }
 
     MethodScanContext methodContext(MethodDeclaration declaration) {
+        return methodContext(declaration, packageName(declaration));
+    }
+
+    MethodScanContext methodContext(MethodDeclaration declaration, String packageName) {
         return new MethodScanContext(
                 declaration,
                 parameterIndexes(declaration),
                 localVariableNames(declaration),
                 typeImports(declaration),
-                staticMemberImports(declaration));
+                staticMemberImports(declaration),
+                wildcardTypeImports(declaration),
+                wildcardStaticImports(declaration),
+                packageName,
+                resolveSourceEnclosingType(declaration));
     }
 
     Map<String, String> typeImports(MethodDeclaration declaration) {
@@ -127,6 +135,16 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
                 .orElseGet(LinkedHashMap::new);
     }
 
+    Set<String> wildcardTypeImports(MethodDeclaration declaration) {
+        return declaration.findCompilationUnit()
+                .map(cu -> cu.getImports().stream()
+                        .filter(importDeclaration -> !importDeclaration.isStatic())
+                        .filter(ImportDeclaration::isAsterisk)
+                        .map(ImportDeclaration::getNameAsString)
+                        .collect(Collectors.toCollection(LinkedHashSet::new)))
+                .orElseGet(LinkedHashSet::new);
+    }
+
     Map<String, String> staticMemberImports(MethodDeclaration declaration) {
         return declaration.findCompilationUnit()
                 .map(cu -> cu.getImports().stream()
@@ -138,6 +156,16 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
                                 (left, right) -> left,
                                 LinkedHashMap::new)))
                 .orElseGet(LinkedHashMap::new);
+    }
+
+    Set<String> wildcardStaticImports(MethodDeclaration declaration) {
+        return declaration.findCompilationUnit()
+                .map(cu -> cu.getImports().stream()
+                        .filter(ImportDeclaration::isStatic)
+                        .filter(ImportDeclaration::isAsterisk)
+                        .map(ImportDeclaration::getNameAsString)
+                        .collect(Collectors.toCollection(LinkedHashSet::new)))
+                .orElseGet(LinkedHashSet::new);
     }
 
     Set<String> localVariableNames(MethodDeclaration declaration) {
@@ -157,6 +185,14 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
     }
 
     String resolveEnclosingType(MethodDeclaration declaration) {
+        return resolveEnclosingType(declaration, "$");
+    }
+
+    String resolveSourceEnclosingType(MethodDeclaration declaration) {
+        return resolveEnclosingType(declaration, ".");
+    }
+
+    private String resolveEnclosingType(MethodDeclaration declaration, String delimiter) {
         LinkedList<String> parts = new LinkedList<>();
         Node current = declaration.getParentNode().orElse(null);
         while (current != null) {
@@ -169,6 +205,13 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
             }
             current = current.getParentNode().orElse(null);
         }
-        return String.join("$", parts);
+        return String.join(delimiter, parts);
+    }
+
+    private String packageName(MethodDeclaration declaration) {
+        return declaration.findCompilationUnit()
+                .flatMap(compilationUnit -> compilationUnit.getPackageDeclaration()
+                        .map(packageDeclaration -> packageDeclaration.getNameAsString()))
+                .orElse("");
     }
 }

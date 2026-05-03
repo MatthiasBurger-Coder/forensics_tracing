@@ -39,7 +39,9 @@ public final class StaticFieldQualifier {
     boolean resolvesToStaticField(NameExpr name) {
         try {
             var resolved = name.resolve();
-            return resolved.isField() && resolved.asField().isStatic();
+            return resolved.isField()
+                    && resolved.asField().isStatic()
+                    && isDeclaredByCurrentType(name, resolved.asField().declaringType().getQualifiedName());
         } catch (RuntimeException ignored) {
             return false;
         }
@@ -104,5 +106,29 @@ public final class StaticFieldQualifier {
             .filter(type::isInstance)
             .map(type::cast)
             .findFirst();
+    }
+
+    private boolean isDeclaredByCurrentType(NameExpr name, String declaringTypeName) {
+        return currentTypeName(name)
+                .map(declaringTypeName::equals)
+                .orElse(false);
+    }
+
+    private Optional<String> currentTypeName(NameExpr name) {
+        java.util.LinkedList<String> parts = new java.util.LinkedList<>();
+        name.stream(Node.TreeTraversal.PARENTS)
+                .filter(node -> node instanceof TypeDeclaration<?>)
+                .map(node -> (TypeDeclaration<?>) node)
+                .map(TypeDeclaration::getNameAsString)
+                .forEach(parts::addFirst);
+        if (parts.isEmpty()) {
+            return Optional.empty();
+        }
+        String typeName = String.join(".", parts);
+        String packageName = name.findCompilationUnit()
+                .flatMap(compilationUnit -> compilationUnit.getPackageDeclaration()
+                        .map(packageDeclaration -> packageDeclaration.getNameAsString()))
+                .orElse("");
+        return Optional.of(packageName.isBlank() ? typeName : packageName + "." + typeName);
     }
 }
