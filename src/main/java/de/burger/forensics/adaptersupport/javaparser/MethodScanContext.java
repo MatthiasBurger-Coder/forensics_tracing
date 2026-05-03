@@ -16,12 +16,29 @@ public record MethodScanContext(MethodDeclaration declaration, Map<String, Integ
                                 Set<String> wildcardTypeImports,
                                 Set<String> wildcardStaticImports,
                                 String packageName,
-                                String sourceTypeName) {
+                                String sourceFilePath,
+                                String sourceTypeName,
+                                String simpleClassName,
+                                String methodName,
+                                String methodSignature) {
 
     public MethodScanContext(MethodDeclaration declaration,
                              Map<String, Integer> parameterIndexes,
                              Set<String> localVariables) {
-        this(declaration, parameterIndexes, localVariables, Map.of(), Map.of(), Set.of(), Set.of(), "", "");
+        this(
+                declaration,
+                parameterIndexes,
+                localVariables,
+                Map.of(),
+                Map.of(),
+                Set.of(),
+                Set.of(),
+                "",
+                "",
+                "",
+                "",
+                "",
+                "");
     }
 
     public MethodScanContext(MethodDeclaration declaration,
@@ -29,7 +46,20 @@ public record MethodScanContext(MethodDeclaration declaration, Map<String, Integ
                              Set<String> localVariables,
                              Map<String, String> typeImports,
                              Map<String, String> staticMemberImports) {
-        this(declaration, parameterIndexes, localVariables, typeImports, staticMemberImports, Set.of(), Set.of(), "", "");
+        this(
+                declaration,
+                parameterIndexes,
+                localVariables,
+                typeImports,
+                staticMemberImports,
+                Set.of(),
+                Set.of(),
+                "",
+                "",
+                "",
+                "",
+                "",
+                "");
     }
 
     public MethodScanContext(MethodDeclaration declaration,
@@ -40,7 +70,11 @@ public record MethodScanContext(MethodDeclaration declaration, Map<String, Integ
                              Set<String> wildcardTypeImports,
                              Set<String> wildcardStaticImports,
                              String packageName,
-                             String sourceTypeName) {
+                             String sourceFilePath,
+                             String sourceTypeName,
+                             String simpleClassName,
+                             String methodName,
+                             String methodSignature) {
         this.declaration = Objects.requireNonNull(declaration, "declaration");
         this.parameterIndexes = Map.copyOf(parameterIndexes);
         this.localVariables = Set.copyOf(localVariables);
@@ -49,7 +83,11 @@ public record MethodScanContext(MethodDeclaration declaration, Map<String, Integ
         this.wildcardTypeImports = Set.copyOf(wildcardTypeImports);
         this.wildcardStaticImports = Set.copyOf(wildcardStaticImports);
         this.packageName = Objects.requireNonNullElse(packageName, "");
+        this.sourceFilePath = Objects.requireNonNullElse(sourceFilePath, "");
         this.sourceTypeName = Objects.requireNonNullElse(sourceTypeName, "");
+        this.simpleClassName = Objects.requireNonNullElse(simpleClassName, "");
+        this.methodName = Objects.requireNonNullElse(methodName, "");
+        this.methodSignature = Objects.requireNonNullElse(methodSignature, "");
     }
 
     public Integer parameterIndex(String name) {

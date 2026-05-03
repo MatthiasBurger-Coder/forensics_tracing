@@ -110,6 +110,7 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
     }
 
     MethodScanContext methodContext(MethodDeclaration declaration, String packageName) {
+        String sourceTypeName = resolveSourceEnclosingType(declaration);
         return new MethodScanContext(
                 declaration,
                 parameterIndexes(declaration),
@@ -119,7 +120,11 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
                 wildcardTypeImports(declaration),
                 wildcardStaticImports(declaration),
                 packageName,
-                resolveSourceEnclosingType(declaration));
+                sourceFilePath(declaration),
+                sourceTypeName,
+                simpleClassName(sourceTypeName),
+                declaration.getNameAsString(),
+                declaration.getSignature().asString());
     }
 
     Map<String, String> typeImports(MethodDeclaration declaration) {
@@ -213,5 +218,17 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
                 .flatMap(compilationUnit -> compilationUnit.getPackageDeclaration()
                         .map(packageDeclaration -> packageDeclaration.getNameAsString()))
                 .orElse("");
+    }
+
+    private String sourceFilePath(MethodDeclaration declaration) {
+        return declaration.findCompilationUnit()
+                .flatMap(compilationUnit -> compilationUnit.getStorage()
+                        .map(storage -> storage.getPath().toString()))
+                .orElse("");
+    }
+
+    private String simpleClassName(String sourceTypeName) {
+        int nestedTypeSeparator = sourceTypeName.lastIndexOf('.');
+        return nestedTypeSeparator < 0 ? sourceTypeName : sourceTypeName.substring(nestedTypeSeparator + 1);
     }
 }
