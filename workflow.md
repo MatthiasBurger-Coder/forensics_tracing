@@ -1,846 +1,595 @@
-# workplan.md — AST Context Propagation Fix
+# workflow.md — Fix für StackOverflowError im JavaParser Symbol Solver
 
-## Ziel
+## Ausgangslage
 
-Die aktuell beobachteten Warnungen
-
-```text
-Suspicious unresolved type references: 947 occurrences, 252 unique names.
-```
-
-sollen nicht durch pauschale Symbol-Unterdrückung kaschiert werden. Stattdessen muss der AST-Kontext, der beim Scannen bereits vorhanden ist, sauber bis zur Bedingungs-Erzeugung und zur Validierung durchgereicht werden.
-
-Das Ziel ist:
+Der aktuelle WildFly-Lauf bricht beim Maven-Ziel ab:
 
 ```text
-AST scan context
-  -> condition rendering with type context
-  -> ScanEvent with traceable metadata
-  -> rule generation
-  -> BTM rule with resolvable IF expression
-  -> grouped validation report
+./mvnw.cmd -N generate-test-resources -Dforensics "-Dforensics.sourceRoot=$root" "-Dforensics.excludePackages=org.jboss.as.test,org.wildfly.test" -DskipTests
 ```
 
-Die BTM-Regeln dürfen keine vermeidbaren unqualifizierten Source-Level-Typreferenzen in `IF`-Ausdrücken enthalten, wenn diese Typen über JavaParser Symbol Solver, explizite Imports oder deterministische Scanner-Kontexte auflösbar sind.
+Fehlerbild aus `log.log`:
+
+```text
+[INFO] --- forensics:0.0.3-SNAPSHOT:btmgen (generate-forensics-btm-rules) @ wildfly-parent ---
+[INFO] Scanning sources in D:\Projects\wildfly
+[INFO] Starting rule generation at 2026-05-03T22:48:02.133278500Z for D:\Projects\wildfly
+[INFO] BUILD FAILURE
+Exception in thread "main" java.lang.StackOverflowError
+    at com.github.javaparser.ast.expr.Name.asString(Name.java:117)
+    at com.github.javaparser.ast.body.TypeDeclaration.getFullyQualifiedName(TypeDeclaration.java:221)
+    at com.github.javaparser.symbolsolver.javaparsermodel.contexts.CompilationUnitContext.solveType(...)
+    at com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserClassDeclaration.getSuperClass(...)
+    at com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserClassDeclaration.getAncestors(...)
+    at com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserClassDeclaration.getAllFields(...)
+    ... repeated ...
+```
+
+Der Build stirbt während des Source-Scans, bevor die BTM-Erzeugung sauber abgeschlossen werden kann.
 
 ---
 
-## Rahmenbedingungen
+## Analyse
 
-* Gradle-Version bleibt unverändert bei der im Projekt verwendeten Version.
-* Java-Version bleibt unverändert bei der im Projekt verwendeten Toolchain.
-* Keine Umstellung auf Spring, Maven oder andere Frameworks.
-* Keine globale Deduplizierung nach Symbolname.
-* Keine pauschale Suppression von Warnungen.
-* Source-Code-Kommentare müssen auf Englisch formuliert werden.
-* Antworten, Dokumentation und Workplan dürfen deutsch sein.
-* Bestehende öffentliche APIs dürfen nur bewusst und testgestützt erweitert werden.
-* Existing behavior must be preserved unless a regression test proves the previous behavior was wrong.
+### Direkt sichtbarer Fehler
 
----
-
-## Problemzusammenfassung
-
-Der Scanner erzeugt aus JavaParser-AST-Daten BTM-Regeln. Während des Scans existiert bereits ein `MethodScanContext`, der Teile des AST-Kontexts kennt:
-
-* `MethodDeclaration`
-* Parameter-Indizes
-* lokale Variablennamen
-* explizite nicht-statische Type-Imports
-* explizite statische Member-Imports
-
-Der aktuelle kritische Punkt ist:
+Der Stacktrace zeigt eine endlose Rekursion im JavaParser Symbol Solver:
 
 ```text
-MethodEventExtractor
-  -> renderingStrategy.renderCondition(condition, context)
-  -> String renderedCondition
-  -> ScanEvent.conditionText()
-  -> GenerateRulesUseCase
-  -> ConditionStrategy
-  -> Byteman renderer
-  -> IF <plain string>
+JavaParserClassDeclaration.getAllFields()
+ -> getAncestors()
+ -> getSuperClass()
+ -> solveType()
+ -> getFullyQualifiedName()
+ -> Name.asString()
+ -> wieder getAllFields()
 ```
 
-Damit wird der AST-Kontext zu früh auf einen String reduziert. Nach der Erzeugung von `ScanEvent.conditionText()` sind wichtige Kontextinformationen nicht mehr verfügbar.
+Das ist kein Byteman-Renderfehler. Der Fehler entsteht vorher beim AST-Scan beziehungsweise beim condition rendering.
 
-Verloren oder nicht modelliert sind insbesondere:
+### Wahrscheinlicher Auslöser im aktuellen Source-Stand
 
-* Wildcard-Type-Imports
-* Wildcard-Static-Imports
-* Same-Package-Type-Kandidaten
-* Nested-Type-Kontext
-* resolved symbol metadata
-* Source-Import-Tabelle
-* aufgelöste Fully-Qualified-Type-Namen
-* Herkunftsinformationen für unresolved warnings
-
-Dadurch können unqualifizierte Typreferenzen wie diese in finale BTM-Regeln gelangen:
+Im aktuellen Stand existieren zwei Stellen, die JavaParser Symbol Resolution direkt auf `NameExpr` ausführen:
 
 ```text
-IF eval("...", "!DeploymentTypeMarker.isType(DeploymentType.EAR, $deploymentUnit)", !DeploymentTypeMarker.isType(DeploymentType.EAR, $deploymentUnit))
+src/main/java/de/burger/forensics/adaptersupport/javaparser/InstanceFieldNormalizer.java
+src/main/java/de/burger/forensics/adaptersupport/javaparser/StaticFieldQualifier.java
 ```
 
-Das ist verhaltensrelevant, weil Byteman diese einfachen Namen beim Laden oder Ausführen der Rule möglicherweise nicht auflösen kann.
+Kritische Methoden:
+
+```java
+boolean resolvesToInstanceField(NameExpr name) {
+   try {
+      var resolved = name.resolve();
+      return resolved.isField() && !resolved.asField().isStatic();
+   } catch (RuntimeException ignored) {
+      return false;
+   }
+}
+```
+
+und:
+
+```java
+boolean resolvesToStaticField(NameExpr name) {
+    try {
+        var resolved = name.resolve();
+        return resolved.isField() && resolved.asField().isStatic();
+    } catch (RuntimeException ignored) {
+        return false;
+    }
+}
+```
+
+Das Problem: `StackOverflowError` ist kein `RuntimeException`, sondern ein `Error`.
+
+Damit wird der Fehler nicht abgefangen und beendet den Maven-Prozess.
+
+### Verstärkender Faktor
+
+Die aktuelle Reihenfolge in beiden Normalizern ist ungünstig:
+
+```java
+if (resolvesToStaticField(name) || isLikelyStaticField(name, name.getNameAsString(), localVariables)) {
+    ...
+}
+```
+
+und sinngemäß auch für Instance Fields.
+
+Damit wird der teure und potenziell instabile Symbol Solver zuerst aufgerufen, obwohl viele Fälle lokal und AST-basiert entschieden werden könnten.
+
+Für ein großes Projekt wie WildFly ist das riskant, weil `name.resolve()` durch komplexe Typ- und Vererbungshierarchien laufen kann.
+
+### Warum der Fehler durch den aktuellen Umbau sichtbar wird
+
+Der aktuelle Umbau versucht, Bedingungen besser für Byteman zu normalisieren:
+
+```text
+INSTANCE == null
+ -> $CLASS.INSTANCE == null
+```
+
+Dafür wurde `StaticFieldQualifier` ergänzt. Diese Klasse ruft jetzt bei jedem passenden `NameExpr` ebenfalls `name.resolve()` auf.
+
+Dadurch erhöht sich die Anzahl der Symbol-Solver-Aufrufe deutlich. In kleinen Unit Tests funktioniert das, bei WildFly triggert es eine rekursive JavaParser-Solver-Kante.
 
 ---
 
 ## Architekturentscheidung
 
-Der Fix erfolgt nicht im BTM-Renderer und nicht durch nachträgliches Parsen fertiger Rules.
+Der Scanner muss resilient gegenüber JavaParser Symbol-Solver-Fehlern sein.
 
-Der Fix muss vor oder während der Erstellung von `ScanEvent` erfolgen.
+Eine einzelne nicht auflösbare oder solver-instabile Expression darf niemals den gesamten BTM-Generierungslauf abbrechen.
 
-Richtig ist:
-
-```text
-AST expression + MethodScanContext + SymbolSolver
-  -> rendered condition with qualified type references
-  -> structured diagnostics
-  -> ScanEvent
-```
-
-Falsch wäre:
+Richtige Regel:
 
 ```text
-BTM rule string
-  -> nachträglich analysieren
-  -> Typen erraten
+JavaParser symbol resolution is optional enrichment.
+AST scanning must continue when symbol resolution fails.
 ```
 
-Begründung:
+Das bedeutet:
 
-Die BTM-Rule ist ein abgeleitetes Artefakt. Die Quelle der Wahrheit ist der AST-Kontext während des Scans.
+```text
+symbol solver success
+  -> use resolved information
+
+symbol solver failure / StackOverflowError
+  -> fall back to deterministic AST-local heuristics
+  -> optionally record diagnostic
+  -> continue scan
+```
+
+Nicht akzeptabel:
+
+```text
+name.resolve()
+  -> StackOverflowError
+  -> Maven build dies
+```
 
 ---
 
-## Zielmodell
+## Sofort-Fix vor AST Context Propagation
 
-### 1. Scanner-Kontext erweitern
+Dieser Fehler muss vor der weiteren AST-Context-Propagation stabilisiert werden.
 
-`MethodScanContext` soll nicht nur explizite Imports tragen, sondern einen vollständiger nutzbaren Source-Kontext.
+Grund:
 
-Zielstruktur, sinngemäß:
+Die geplante Context Propagation wird tendenziell noch mehr Resolver-Informationen nutzen. Ohne robuste Resolver-Grenzen würde der Umbau weitere WildFly-Abbrüche erzeugen.
 
-```java
-public record SourceScanContext(
-        String packageName,
-        String sourceFilePath,
-        String fullyQualifiedClassName,
-        String simpleClassName,
-        String methodName,
-        String methodSignature,
-        ImportTable importTable,
-        TypeResolutionContext typeResolutionContext
-) {
-}
-```
+---
 
-Hinweis: Die konkrete Benennung muss sich an der bestehenden Projektstruktur orientieren. Nicht blind neue Klassen erzeugen, wenn es bereits passende Modellklassen gibt.
+# Umsetzung in Slices
 
-### 2. Import-Tabelle modellieren
+## Slice 1 — Regressionstest für Solver-Fehler hinzufügen
 
-Die Import-Daten sollen explizit modelliert werden.
+### Ziel
 
-Zielstruktur, sinngemäß:
+Der Fehler muss testbar werden: Ein Symbol-Solver-Fehler darf den Scanner oder Renderer nicht abbrechen.
 
-```java
-public record ImportTable(
-        Map<String, String> explicitTypeImports,
-        Set<String> wildcardTypeImports,
-        Map<String, String> explicitStaticMemberImports,
-        Set<String> wildcardStaticImports
-) {
-}
-```
+### Testfälle
 
-Dabei gilt:
-
-* Explizite Imports sind deterministisch auflösbar.
-* Wildcard-Imports sind Kandidaten, aber nicht automatisch eindeutig.
-* Same-Package-Kandidaten dürfen nur verwendet werden, wenn sie sicher bestimmt werden können.
-* Ambige Fälle bleiben sichtbar und werden nicht still geraten.
-
-### 3. Condition Rendering typbewusst machen
-
-Die Bedingung darf nicht mehr nur als plain AST-to-string Rendering entstehen.
+#### 1. StaticFieldQualifier fängt StackOverflowError ab
 
 Ziel:
 
 ```text
-NameExpr / FieldAccessExpr / MethodCallExpr
-  -> type candidate detection
-  -> symbol solver resolution if possible
-  -> deterministic import fallback if possible
-  -> qualified condition expression
-  -> unresolved diagnostic if not possible
+resolvesToStaticField(NameExpr)
+ -> resolver throws StackOverflowError
+ -> method returns false
+ -> no crash
 ```
 
-Beispiel vorher:
+Wenn ein direkter Mock von `NameExpr.resolve()` schwer ist, dann den Test über einen kleinen synthetischen Source-Scan bauen.
 
-```java
-DeploymentTypeMarker.isType(DeploymentType.EAR, deploymentUnit)
+#### 2. InstanceFieldNormalizer fängt StackOverflowError ab
+
+Ziel:
+
+```text
+resolvesToInstanceField(NameExpr)
+ -> resolver throws StackOverflowError
+ -> method returns false
+ -> no crash
 ```
 
-Beispiel nachher:
+#### 3. JavaParserScanner bleibt resilient
+
+Mini-Projekt mit problematischer oder zyklischer Typstruktur:
 
 ```java
-org.jboss.as.server.deployment.DeploymentTypeMarker.isType(org.jboss.as.server.deployment.DeploymentType.EAR, deploymentUnit)
-```
+package example;
 
-Der exakte Fully-Qualified-Name ist aus dem Projekt/SymbolSolver zu bestimmen, nicht aus diesem Workplan zu übernehmen.
+class A extends B {
+    int a;
+}
 
----
+class B extends A {
+    int b;
+}
 
-## Geplante Umsetzung in Slices
-
-## Slice 1 — Regression Tests für aktuelle Fehlerklasse
-
-### Ziel
-
-Vor jeder Änderung müssen Tests zeigen, dass die aktuellen Fälle wirklich abgedeckt werden.
-
-### Neue oder erweiterte Tests
-
-Tests für Condition Rendering mit:
-
-1. explizitem Type-Import
-2. explizitem Static-Import
-3. Wildcard-Type-Import
-4. Wildcard-Static-Import
-5. Same-Package-Type
-6. Nested-Type
-7. unresolved type reference
-8. ambigem Typnamen
-
-### Erwartung
-
-Explizit auflösbare Typen werden qualifiziert.
-
-Nicht sicher auflösbare Typen werden nicht geraten, sondern als Diagnostic erhalten.
-
-### Beispiel-Testfälle
-
-#### Expliziter Type-Import
-
-Input:
-
-```java
-import com.example.DeploymentType;
-
-class Sample {
-    boolean test(Unit unit) {
-        return DeploymentType.EAR != null;
+class Sample extends A {
+    void run() {
+        if (a > 0) {
+        }
     }
 }
 ```
 
-Expected:
-
-```text
-com.example.DeploymentType.EAR
-```
-
-#### Same-Package-Type
-
-Input:
+Erwartung:
 
 ```java
-package com.example;
+assertDoesNotThrow(() -> scanner.scan(tempDir).toList());
+```
 
-class Sample {
-    boolean test() {
-        return LocalType.enabled();
+Der Test muss nicht beweisen, dass jede Rule erzeugt wird. Er muss beweisen, dass der Scanner nicht den Build beendet.
+
+### Akzeptanzkriterien
+
+* Mindestens ein Test bildet `StackOverflowError` oder eine solver-rekursive Struktur ab.
+* Der Test läuft vor dem Fix rot oder würde ohne den Fix den Lauf abbrechen.
+* Nach dem Fix läuft der Test grün.
+
+---
+
+## Slice 2 — Symbol-Solver-Aufrufe absichern
+
+### Ziel
+
+`name.resolve()` darf nicht mehr ungeschützt aufgerufen werden.
+
+### Änderung in `StaticFieldQualifier`
+
+Aktuell:
+
+```java
+boolean resolvesToStaticField(NameExpr name) {
+    try {
+        var resolved = name.resolve();
+        return resolved.isField() && resolved.asField().isStatic();
+    } catch (RuntimeException ignored) {
+        return false;
     }
 }
 ```
 
-Expected, wenn `com.example.LocalType` im Scan-Kontext sicher bekannt ist:
-
-```text
-com.example.LocalType.enabled()
-```
-
-#### Unresolved
-
-Input:
+Ziel:
 
 ```java
-class Sample {
-    boolean test() {
-        return UnknownType.enabled();
+boolean resolvesToStaticField(NameExpr name) {
+    try {
+        var resolved = name.resolve();
+        return resolved.isField() && resolved.asField().isStatic();
+    } catch (StackOverflowError | RuntimeException ignored) {
+        return false;
     }
 }
 ```
 
-Expected:
+### Änderung in `InstanceFieldNormalizer`
 
-```text
-UnknownType.enabled()
-```
-
-plus Diagnostic:
-
-```text
-symbol=UnknownType
-resolutionStatus=UNRESOLVED
-```
-
-### Akzeptanzkriterien
-
-* Tests laufen vor dem Fix mindestens teilweise rot.
-* Tests laufen nach dem Fix grün.
-* Keine Tests werden durch globale Symbol-Suppression grün gemacht.
-
----
-
-## Slice 2 — Source-Kontext sauber modellieren
-
-### Ziel
-
-Der Scanner muss den Kontext, aus dem die BTM-Rule ohnehin entsteht, als wiederverwendbares Modell bereitstellen.
-
-### Aufgaben
-
-1. Bestehende Klassen prüfen:
-
-    * `MethodScanContext`
-    * `MethodEventExtractor`
-    * vorhandene Import-/Resolver-Hilfsklassen
-    * vorhandene Finding-/Diagnostic-Modelle
-
-2. Entscheiden, ob `MethodScanContext` erweitert oder durch ein ergänzendes Modell gekapselt wird.
-
-3. Zusätzliche Kontextdaten ergänzen:
-
-    * Package-Name
-    * Source-Datei
-    * Fully-Qualified-Class-Name
-    * Simple-Class-Name
-    * Method-Name
-    * Method-Signature
-    * Import-Tabelle inklusive Wildcard-Imports
-
-4. Sicherstellen, dass Nested Classes korrekt abgebildet werden:
-
-```text
-Outer.Inner in Java source
-Outer$Inner in BTM CLASS target
-```
-
-### Akzeptanzkriterien
-
-* BTM-Rule-Erzeugung bleibt unverändert funktionsfähig.
-* Bestehende Tests bleiben grün.
-* Neue Kontextdaten sind im Scanner verfügbar, bevor `conditionText` erzeugt wird.
-
----
-
-## Slice 3 — ImportTable einführen oder vervollständigen
-
-### Ziel
-
-Imports dürfen nicht länger nur teilweise und gefiltert als Map existieren.
-
-Aktuelles Problem:
+Aktuell:
 
 ```java
-.filter(importDeclaration -> !importDeclaration.isAsterisk())
-```
-
-Wildcard-Imports werden dadurch aktiv aus dem Kontext entfernt.
-
-### Aufgaben
-
-1. Import-Erfassung so umbauen, dass folgende Gruppen separat erhalten bleiben:
-
-```text
-explicit type imports
-wildcard type imports
-explicit static member imports
-wildcard static imports
-```
-
-2. Keine automatische Auflösung von Wildcard-Imports ohne eindeutige Kandidaten.
-
-3. Explizite Imports weiterhin deterministisch verwenden.
-
-4. Tests ergänzen für:
-
-    * `import com.example.TypeName;`
-    * `import com.example.*;`
-    * `import static com.example.TypeName.MEMBER;`
-    * `import static com.example.TypeName.*;`
-
-### Akzeptanzkriterien
-
-* Wildcard-Imports werden im Kontext sichtbar.
-* Explizite Imports funktionieren wie bisher oder besser.
-* Keine ambigen Wildcard-Kandidaten werden stillschweigend falsch qualifiziert.
-
----
-
-## Slice 4 — Type Reference Qualification im Condition Rendering
-
-### Ziel
-
-Der Condition Renderer soll einfache Typnamen qualifizieren, wenn dies sicher möglich ist.
-
-### Aufgaben
-
-1. Bestehende Renderer prüfen:
-
-    * `DefaultConditionRenderingStrategy`
-    * `InstanceFieldNormalizer`
-    * `StaticFieldQualifier`
-    * weitere Hilfsklassen für Ausdrucksnormalisierung
-
-2. Einen dedizierten Service einführen oder vorhandene Logik erweitern:
-
-```java
-public interface TypeReferenceQualifier {
-    QualifiedExpression qualify(Expression expression, MethodScanContext context);
+boolean resolvesToInstanceField(NameExpr name) {
+    try {
+        var resolved = name.resolve();
+        return resolved.isField() && !resolved.asField().isStatic();
+    } catch (RuntimeException ignored) {
+        return false;
+    }
 }
 ```
 
-3. Priorität der Auflösung:
-
-```text
-1. JavaParser Symbol Solver
-2. explicit type imports
-3. same-package known types, only if indexed and unique
-4. nested type context
-5. explicit static member imports
-6. wildcard imports as candidates only if unique
-7. unresolved diagnostic
-```
-
-4. Niemals blind qualifizieren, wenn mehrere Kandidaten möglich sind.
-
-5. Bei unresolved Fällen die ursprüngliche Expression erhalten.
-
-### Akzeptanzkriterien
-
-* Auflösbare Typreferenzen in IF-Bedingungen werden vollqualifiziert.
-* Nicht auflösbare Typreferenzen bleiben unverändert, erzeugen aber strukturierte Diagnostics.
-* Keine pauschale Symbol-Unterdrückung.
-* Keine nachträgliche String-Heuristik im BTM-Renderer.
-
----
-
-## Slice 5 — ScanEvent um Diagnostics erweitern
-
-### Ziel
-
-`ScanEvent` darf weiterhin `conditionText` enthalten, aber zusätzlich müssen Diagnoseinformationen mitgeführt werden.
-
-### Zielstruktur, sinngemäß
+Ziel:
 
 ```java
-public record ScanEvent(
-        ...,
-        String conditionText,
-        List<ConditionDiagnostic> conditionDiagnostics
-) {
+boolean resolvesToInstanceField(NameExpr name) {
+    try {
+        var resolved = name.resolve();
+        return resolved.isField() && !resolved.asField().isStatic();
+    } catch (StackOverflowError | RuntimeException ignored) {
+        return false;
+    }
 }
 ```
 
-Beispiel Diagnostic:
+### Wichtige Einschränkung
+
+Nicht pauschal `Throwable` fangen.
+
+Nicht fangen:
+
+```text
+OutOfMemoryError
+ThreadDeath
+VirtualMachineError allgemein
+```
+
+`StackOverflowError` wird gezielt gefangen, weil JavaParser bei komplexen Typgraphen rekursiv scheitern kann und der Scanner trotzdem weiterlaufen muss.
+
+### Akzeptanzkriterien
+
+* `StackOverflowError` aus JavaParser Symbol Resolution beendet den Scan nicht mehr.
+* Resolver-Ausfall führt nur dazu, dass der konkrete Name nicht per Symbol Solver klassifiziert wird.
+* Bestehende Unit Tests bleiben grün.
+
+---
+
+## Slice 3 — AST-lokale Heuristik vor Symbol Solver ausführen
+
+### Ziel
+
+Der Symbol Solver soll nicht mehr der erste Pfad sein.
+
+Aktuell:
 
 ```java
-public record ConditionDiagnostic(
-        String symbol,
-        String expressionPreview,
-        String resolutionStatus,
-        String reason,
-        SourceLocation location,
-        SourceContext sourceContext
-) {
+if (resolvesToStaticField(name) || isLikelyStaticField(name, name.getNameAsString(), localVariables)) {
+    ...
 }
 ```
 
-Statuswerte, sinngemäß:
+Ziel:
 
-```text
-RESOLVED_BY_SYMBOL_SOLVER
-RESOLVED_BY_EXPLICIT_IMPORT
-RESOLVED_BY_SAME_PACKAGE
-RESOLVED_BY_NESTED_TYPE
-UNRESOLVED
-AMBIGUOUS
-UNSUPPORTED
+```java
+if (isLikelyStaticField(name, name.getNameAsString(), localVariables) || resolvesToStaticField(name)) {
+    ...
+}
 ```
 
-### Migrationsregel
+Analog für Instance Fields:
 
-Wenn `ScanEvent` aktuell ein Domain-Record ist, die Änderung minimal halten:
+```java
+if (isLikelyInstanceField(name, name.getNameAsString(), localVariables) || resolvesToInstanceField(name)) {
+    ...
+}
+```
 
-* Konstruktoren/Factory-Methoden anpassen
-* bestehende Aufrufer aktualisieren
-* Default `List.of()` für Events ohne Diagnostics verwenden
+### Begründung
+
+AST-lokale Informationen sind:
+
+* deterministischer,
+* schneller,
+* frei von Classpath-Problemen,
+* frei von rekursiver Type-Solver-Auflösung.
+
+Der Symbol Solver bleibt nur Ergänzung für Fälle, die lokal nicht erkennbar sind.
 
 ### Akzeptanzkriterien
 
-* `ScanEvent.conditionText()` bleibt verfügbar.
-* Diagnostics werden nicht im BTM-Renderer benötigt.
-* Validierung/Reporting kann Diagnostics verwenden.
-* Bestehende Rule-Erzeugung bleibt stabil.
+* Lokale Felder werden weiterhin erkannt.
+* Statische Felder werden weiterhin erkannt.
+* Resolver-Aufrufe sinken deutlich.
+* WildFly-Scan hat weniger Risiko für rekursive Solver-Pfade.
 
 ---
 
-## Slice 6 — Validierungsreport gruppieren
+## Slice 4 — Scanner-Level Safety Net ergänzen
 
 ### Ziel
 
-Der Report soll Rauschen reduzieren, ohne Rohdaten zu verlieren.
+Auch wenn später an anderer Stelle wieder ein `StackOverflowError` aus JavaParser entsteht, darf nicht der komplette Build sterben.
 
-Nicht mehr nur flach:
+Aktuelle Stelle:
 
-```text
-947 occurrences, 252 unique names
+```java
+try {
+    CompilationUnit cu = StaticJavaParser.parse(file);
+    ...
+} catch (IOException | RuntimeException ignored) {
+    // Ignore parsing issues to keep scanning resilient.
+}
 ```
 
-Sondern zusätzlich gruppiert:
+Ziel:
 
-```text
-symbol
- └── package
-     └── class
-         └── method
-             └── locations
+```java
+try {
+    CompilationUnit cu = StaticJavaParser.parse(file);
+    ...
+} catch (IOException | RuntimeException | StackOverflowError ignored) {
+    // Ignore parsing and symbol-resolution issues to keep scanning resilient.
+}
 ```
-
-### Zielausgabe
-
-Beispiel:
-
-```text
-Suspicious unresolved type references: 947 occurrences, 252 unique names.
-
-Symbol: DeploymentTypeMarker
-Total occurrences: 12
-Packages: 2
-Classes: 3
-Methods: 5
-
-  org.jboss.as.server.deployment
-    DeploymentProcessor
-      deploy()
-        - DeploymentProcessor.java:184
-        - DeploymentProcessor.java:195
-```
-
-### Zählweise
-
-```text
-Total findings              = alle relevanten Fundstellen
-Unique symbols              = unterschiedliche Symbolnamen
-Technical duplicates removed = echte technische Dubletten
-Suppressed by allowlist      = bewusst unterdrückte False Positives
-Reported symbol groups       = Anzahl gruppierter Symbole
-```
-
-### Wichtige Regel
-
-```text
-Grouping is presentation only.
-It must not change raw findings.
-```
-
-### Akzeptanzkriterien
-
-* Raw Findings bleiben vollständig erhalten.
-* Report ist nach Symbol, Package, Class, Method und Location gruppiert.
-* Derselbe Symbolname an mehreren Fundstellen bleibt sichtbar.
-* Exakte technische Duplikate werden weiterhin entfernt.
-
----
-
-## Slice 7 — Exakte technische Duplikate absichern
-
-### Ziel
-
-Doppelte Findings sollen nur entfernt werden, wenn sie wirklich technisch identisch sind.
-
-### Duplicate Key
-
-Ein technisches Duplikat liegt nur vor bei gleicher Kombination aus:
-
-```text
-normalized location
-symbol
-expressionPreview or expression hash
-source context
-```
-
-Nicht ausreichend ist:
-
-```text
-symbol
-```
-
-### Aufgaben
-
-1. Bestehende Deduplizierungslogik prüfen.
-2. Test für identische Findings ergänzen.
-3. Test für gleichen Symbolnamen an unterschiedlichen Locations ergänzen.
-4. Report-Zählung prüfen.
-
-### Akzeptanzkriterien
-
-* Gleicher Symbolname an unterschiedlichen Stellen bleibt erhalten.
-* Identische Kombination aus Location, Symbol und Expression wird kollabiert.
-* Occurrence Count wird nicht künstlich verfälscht.
-
----
-
-## Slice 8 — Optional: Explizite Allowlist vorbereiten
-
-### Ziel
-
-Bekannte False Positives sollen später bewusst unterdrückt werden können, ohne das aktuelle Problem zu verdecken.
 
 ### Wichtig
 
-Diese Slice ist optional und darf erst umgesetzt werden, wenn die Context Propagation und Report-Gruppierung funktionieren.
-
-### Beispielstruktur
-
-```json
-{
-  "allowedUnresolvedSymbols": [
-    {
-      "symbol": "SomeEnum",
-      "reason": "Known enum resolved through wildcard import in target runtime",
-      "scope": "global"
-    },
-    {
-      "symbol": "CustomerType",
-      "reason": "Same-package type not available in scanner classpath",
-      "scope": "package",
-      "packageName": "com.example.customer"
-    }
-  ]
-}
-```
+Dieser Catch ist nur ein Safety Net. Der eigentliche Fix gehört an die Resolver-Grenze in `InstanceFieldNormalizer` und `StaticFieldQualifier`.
 
 ### Akzeptanzkriterien
 
-* Jeder Allowlist-Eintrag benötigt einen Grund.
-* Allowlist-Zählung erscheint separat im Report.
-* Allowlist ersetzt keine technische Auflösung.
+* Eine einzelne kaputte Datei oder eine JavaParser-Solver-Rekursion bricht nicht mehr den gesamten Scan ab.
+* Der Scanner überspringt problematische Dateien und fährt fort.
+* Optional: später Diagnostic/Warnung erfassen, aber nicht in diesem Sofort-Fix erzwingen.
 
 ---
 
-## Nicht-Ziele
+## Slice 5 — Optionalen Resolver Guard extrahieren
 
-Diese Dinge sind ausdrücklich nicht Teil dieses Fixes:
+### Ziel
 
-* globale Suppression nach Symbolname
-* Entfernen von Warnungen ohne Ursache zu beheben
-* nachträgliches Erraten von Typen aus fertigen BTM-Dateien
-* Umbau des gesamten Scanners
-* Einführung einer Datenbank
-* Einführung einer Graphdatenbank
-* Änderung des Byteman Runtime Helpers ohne konkrete Notwendigkeit
-* Änderung des Rule-Formats ohne Rückwärtsprüfung
+Wenn die Resolver-Sicherheit an mehreren Stellen benötigt wird, nicht überall eigene try/catch-Blöcke kopieren.
 
----
-
-## Erwartete technische Leitplanken
-
-### Keine String-Heuristik als Hauptlösung
-
-String-Ersetzung wie diese ist nur als letzter, eng getesteter Fallback erlaubt:
-
-```text
-replace("DeploymentType.", "org.example.DeploymentType.")
-```
-
-Bevorzugt ist AST-basierte Transformation.
-
-### Symbol Solver bevorzugen
-
-Da das Projekt bereits konfiguriert:
+Mögliche Klasse:
 
 ```java
-configuration.setSymbolResolver(new JavaSymbolSolver(typeSolver));
+final class JavaParserResolutionGuard {
+
+   private JavaParserResolutionGuard() {
+   }
+
+   static Optional<ResolvedValueDeclaration> resolveValue(NameExpr name) {
+      try {
+         return Optional.of(name.resolve());
+      } catch (StackOverflowError | RuntimeException ignored) {
+         return Optional.empty();
+      }
+   }
+}
 ```
 
-soll diese Fähigkeit genutzt werden, wo sie zuverlässig funktioniert.
+Hinweis:
 
-### Resolver-Fehler dürfen den Scan nicht abbrechen
+Den konkreten Rückgabetyp an die tatsächlich verwendete JavaParser API anpassen.
 
-Wenn JavaParser nicht auflösen kann:
+### Akzeptanzkriterien
 
-```text
-catch resolution failure
-  -> keep original expression
-  -> add diagnostic
-  -> continue scan
-```
-
-### Keine stillen Annahmen
-
-Bei Ambiguität:
-
-```text
-AMBIGUOUS diagnostic
-```
-
-Nicht:
-
-```text
-nimm den ersten Kandidaten
-```
+* `InstanceFieldNormalizer` und `StaticFieldQualifier` verwenden dieselbe Resolver-Grenze.
+* Kommentare im Source-Code sind auf Englisch.
+* Kein Catch von `Throwable`.
+* Keine fachliche Logik im Guard, nur Schutz der externen Solver-API.
 
 ---
 
-## Konkrete Prüfpunkte im vorhandenen Code
+## Slice 6 — Performance-/Stabilitätsprüfung auf WildFly
 
-Die folgenden Dateien sind gezielt zu prüfen und wahrscheinlich anzupassen:
+### Ziel
+
+Der Fix muss am realen Problemprojekt geprüft werden.
+
+### Reproduktionskommando
+
+```powershell
+PS D:\Projects\wildfly> .\mvnw.cmd -N generate-test-resources -Dforensics "-Dforensics.sourceRoot=$root" "-Dforensics.excludePackages=org.jboss.as.test,org.wildfly.test" -DskipTests
+```
+
+### Erwartung nach Fix
+
+Nicht mehr:
 
 ```text
-src/main/java/de/burger/forensics/adaptersupport/javaparser/MethodEventExtractor.java
-src/main/java/de/burger/forensics/adaptersupport/javaparser/MethodScanContext.java
-src/main/java/de/burger/forensics/adaptersupport/javaparser/DefaultConditionRenderingStrategy.java
+Exception in thread "main" java.lang.StackOverflowError
+```
+
+Sondern:
+
+```text
+[INFO] Starting rule generation ...
+[INFO] Finished rule generation ...
+```
+
+oder ein kontrollierter Plugin-Fehler mit eigener Fehlermeldung, aber kein roher JVM-StackOverflow aus JavaParser.
+
+### Zusatzprüfung
+
+Die erzeugte BTM-Datei prüfen auf:
+
+```text
+.forensics/build/btm/*.btm
+```
+
+Insbesondere sicherstellen:
+
+* Entry-/Exit-Rules werden weiterhin erzeugt.
+* IF-Rules werden weiterhin erzeugt.
+* `$this.`-Qualifizierung für Instance Fields bleibt erhalten.
+* `$CLASS.`-Qualifizierung für static fields bleibt erhalten.
+* Keine neue globale Symbol-Suppression wurde eingeführt.
+
+---
+
+# Minimaler Codex-Auftrag
+
+````md
+## Task
+
+Fix the JavaParser Symbol Solver StackOverflowError during large project scans.
+
+## Problem
+
+WildFly scan fails with:
+
+```text
+Exception in thread "main" java.lang.StackOverflowError
+    at com.github.javaparser.ast.expr.Name.asString(Name.java:117)
+    at com.github.javaparser.symbolsolver.javaparsermodel.declarations.JavaParserClassDeclaration.getAllFields(...)
+````
+
+The current scanner calls `NameExpr.resolve()` in:
+
+```text
+InstanceFieldNormalizer.resolvesToInstanceField
+StaticFieldQualifier.resolvesToStaticField
+```
+
+Both methods catch only `RuntimeException`, but JavaParser may throw `StackOverflowError` while resolving complex type hierarchies.
+
+## Requirements
+
+1. Add regression tests proving that Symbol Solver failures do not crash rendering/scanning.
+2. Catch `StackOverflowError` explicitly around JavaParser `name.resolve()` calls.
+3. Do not catch `Throwable` broadly.
+4. Reorder field detection so AST-local heuristics run before Symbol Solver resolution:
+
+```java
+isLikelyStaticField(...) || resolvesToStaticField(...)
+isLikelyInstanceField(...) || resolvesToInstanceField(...)
+```
+
+5. Add scanner-level safety net in `JavaParserScanner.visitFile` for `StackOverflowError`.
+6. Preserve existing behavior for `$this.` instance field qualification and `$CLASS.` static field qualification.
+7. Do not introduce global symbol suppression.
+8. Do not move type resolution into the Byteman renderer.
+9. Source-code comments must be written in English.
+
+## Files to inspect/change
+
+```text
 src/main/java/de/burger/forensics/adaptersupport/javaparser/InstanceFieldNormalizer.java
 src/main/java/de/burger/forensics/adaptersupport/javaparser/StaticFieldQualifier.java
-src/main/java/de/burger/forensics/domain/model/ScanEvent.java
-src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java
-src/main/java/de/burger/forensics/plugin/btmgen/internal/BytemanRuleRenderAdapter.java
-src/main/java/de/burger/forensics/plugin/btmgen/render/impl/AbstractIfRuleStrategy.java
+src/main/java/de/burger/forensics/adapters/javaparser/JavaParserScanner.java
+src/test/java/de/burger/forensics/adaptersupport/javaparser/DefaultConditionRenderingStrategyTest.java
+src/test/java/de/burger/forensics/adaptersupport/javaparser/InstanceFieldNormalizerTest.java
+src/test/java/de/burger/forensics/adapters/javaparser/JavaParserScannerTest.java
 ```
 
-Wichtig:
+## Verification
 
-`BytemanRuleRenderAdapter` und `AbstractIfRuleStrategy` sollten möglichst nicht die neue Typauflösung übernehmen. Sie dienen nur als Nachweis, dass downstream aktuell nur noch ein String ankommt.
-
----
-
-## Teststrategie
-
-### Unit Tests
-
-* `MethodEventExtractorTest`
-* `DefaultConditionRenderingStrategyTest`
-* Tests für neuen `TypeReferenceQualifier`
-* Tests für `ImportTable`
-* Tests für grouped report model
-* Tests für duplicate key behavior
-
-### Integration Tests
-
-* Mini-Projekt mit expliziten Imports
-* Mini-Projekt mit Wildcard-Imports
-* Mini-Projekt mit Same-Package-Typen
-* Mini-Projekt mit Nested Types
-* Mini-Projekt mit bewusst unresolved Typen
-
-### Golden Master / Snapshot Tests
-
-Für BTM-Ausgabe:
-
-```text
-input Java source
-  -> generated .btm
-  -> assert IF expression contains qualified type names where expected
-```
-
-### Negative Tests
-
-* Ambiger Typ wird nicht blind qualifiziert.
-* Unbekannter Typ bleibt sichtbar.
-* Gleicher Symbolname an mehreren Orten wird nicht global dedupliziert.
-
----
-
-## Verifikation
-
-Nach Umsetzung der Slices müssen mindestens diese Prüfungen laufen:
+Run:
 
 ```bash
 ./gradlew clean test
 ./gradlew check
 ```
 
-Wenn im Projekt vorhanden und relevant zusätzlich:
+Then verify against WildFly with the Maven command that produced the StackOverflowError.
 
-```bash
-./gradlew jacocoTestReport
-./gradlew jacocoTestCoverageVerification
-./gradlew validatePlugins
 ```
-
-Wenn Dependency Verification aktiv ist:
-
-```bash
-./gradlew check --dependency-verification strict
-```
-
-Die tatsächlich im Projekt dokumentierten Quality-Gate-Kommandos sind zu verwenden. Falls `QUALITY.md` davon abweicht, nicht im Rahmen dieses Fixes ändern, sondern als separates Dokumentationsproblem melden.
 
 ---
 
-## Erwartetes Ergebnis
+# Nicht-Ziele
 
-Nach erfolgreichem Fix sollte gelten:
+Diese Punkte sind nicht Bestandteil dieses Fehlerfixes:
 
-1. Der Scanner trägt Kontextinformationen nicht nur bis zum Rule Target, sondern auch bis zur Condition-Erzeugung.
-2. Auflösbare Type References werden vor `ScanEvent.conditionText()` qualifiziert.
-3. Nicht auflösbare Type References werden strukturiert diagnostiziert.
-4. Die Anzahl behavior-relevanter unresolved warnings sinkt durch echte Auflösung, nicht durch Unterdrückung.
-5. Verbleibende Warnings sind gruppiert lesbar:
+- vollständige AST Context Propagation
+- ImportTable-Modellierung
+- Wildcard-Import-Auflösung
+- grouped unresolved-symbol report
+- globale Allowlist
+- globale Symbol-Deduplizierung
+- Umstellung auf einen anderen Parser
+- nachträgliches Reparieren fertiger BTM-Regeln
 
-```text
-symbol
- └── package
-     └── class
-         └── method
-             └── locations
-```
-
-6. Gleiche Symbole an verschiedenen Fundstellen bleiben sichtbar.
-7. Exakte technische Duplikate bleiben dedupliziert.
-8. Finale BTM-Regeln enthalten keine vermeidbaren unqualifizierten Typreferenzen in `IF`-Ausdrücken.
+Diese Themen bleiben wichtig, aber zuerst muss der Scanner stabil werden.
 
 ---
 
-## Codex-Arbeitsanweisung
+# Abschlusskriterien
 
-Arbeite Slice für Slice.
+Der Fehler gilt als behoben, wenn:
 
-Für jede Slice:
+1. `StackOverflowError` aus JavaParser Symbol Resolution den Build nicht mehr beendet.
+2. Unit Tests den Resolver-Fehlerfall absichern.
+3. Der WildFly-Lauf mindestens über die bisherige Abbruchstelle hinausläuft.
+4. `$this.`- und `$CLASS.`-Normalisierung weiterhin funktionieren.
+5. Keine pauschale Suppression nach Symbolname eingebaut wurde.
+6. Der Fix vor der geplanten AST Context Propagation erfolgt.
+7. Der BTM-Renderer weiterhin nur rendert und keine AST-Kontext-Rekonstruktion übernimmt.
 
-```text
-1. Inspect current implementation.
-2. Add or update regression tests first.
-3. Implement the smallest production change needed.
-4. Run the relevant tests.
-5. Review the diff.
-6. Do not continue to the next slice if tests fail.
 ```
-
-Bei Unsicherheit:
-
-```text
-Stop and report.
-Do not guess class names, package names, existing APIs, or resolver behavior.
-Do not silently introduce fallback heuristics without tests.
-```
-
-Keine Dateien ändern, die nicht für diese Aufgabe notwendig sind.
-
----
-
-## Abschlusskriterien
-
-Der Workplan gilt als erfüllt, wenn:
-
-* alle neuen Regression Tests grün sind,
-* bestehende Tests grün bleiben,
-* BTM-Output für bekannte Testfälle qualifizierte Typreferenzen enthält,
-* unresolved warnings weiterhin sichtbar, aber gruppiert sind,
-* keine globale Symbol-Suppression eingeführt wurde,
-* der Fix vor der String-Reduktion auf `conditionText` ansetzt,
-* der Byteman Renderer weiterhin nur rendert und keine AST-Kontext-Rekonstruktion übernimmt.
