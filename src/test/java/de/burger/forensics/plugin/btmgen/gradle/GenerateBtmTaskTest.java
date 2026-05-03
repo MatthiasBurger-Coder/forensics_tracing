@@ -329,29 +329,9 @@ class GenerateBtmTaskTest {
     }
 
     @Test
-    void generatedRulesInvokeHelpersDirectly(@TempDir Path tempDir) throws IOException {
+    void generatedScanRulesInvokeHelpersDirectly(@TempDir Path tempDir) throws IOException {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
-        Path srcDir = tempDir.resolve("src/main/java/com/example");
-        Files.createDirectories(srcDir);
-        Path javaFile = srcDir.resolve("Sample.java");
-        Files.writeString(javaFile, """
-                package com.example;
-                public class Sample {
-                  public int alpha() {
-                    if (true) { }
-                    switch (1) { case 1 -> {} }
-                    return 1;
-                  }
-                  public void beta() {
-                    if (false) { }
-                    switch (2) { case 2 -> {} }
-                    throw new IllegalStateException();
-                  }
-                  public boolean gamma() {
-                    return false;
-                  }
-                }
-                """);
+        writeHelperSampleSource(tempDir);
 
         Path scanOutput = tempDir.resolve("build/forensics/helpers-scan.btm");
         var scanTask = project.getTasks().register("generateBtmHelpersScan", GenerateBtmTask.class).get();
@@ -382,6 +362,12 @@ class GenerateBtmTaskTest {
         assertTrue(scanContent.contains("onSwitch("));
         assertTrue(scanContent.contains("onCase("));
         assertTrue(scanContent.contains("onException("));
+    }
+
+    @Test
+    void generatedJdbcRulesInvokeHelpersDirectly(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Files.createDirectories(tempDir.resolve("src/main/java"));
 
         Path jdbcOutput = tempDir.resolve("build/forensics/helpers-jdbc.btm");
         var jdbcTask = project.getTasks().register("generateBtmHelpersJdbc", GenerateBtmTask.class).get();
@@ -400,6 +386,12 @@ class GenerateBtmTaskTest {
         assertFalse(jdbcContent.contains("helper()."));
         assertTrue(jdbcContent.contains("ioBegin("));
         assertTrue(jdbcContent.contains("ioEnd("));
+    }
+
+    @Test
+    void generatedThreadRulesInvokeHelpersDirectly(@TempDir Path tempDir) throws IOException {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Files.createDirectories(tempDir.resolve("src/main/java"));
 
         Path threadOutput = tempDir.resolve("build/forensics/helpers-thread.btm");
         var threadTask = project.getTasks().register("generateBtmHelpersThread", GenerateBtmTask.class).get();
@@ -785,6 +777,29 @@ class GenerateBtmTaskTest {
 
     private static SourceSetContainer mainSourceSets(org.gradle.api.Project project) {
         return project.getExtensions().getByType(SourceSetContainer.class);
+    }
+
+    private static void writeHelperSampleSource(Path tempDir) throws IOException {
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Files.writeString(srcDir.resolve("Sample.java"), """
+                package com.example;
+                public class Sample {
+                  public int alpha() {
+                    if (true) { }
+                    switch (1) { case 1 -> {} }
+                    return 1;
+                  }
+                  public void beta() {
+                    if (false) { }
+                    switch (2) { case 2 -> {} }
+                    throw new IllegalStateException();
+                  }
+                  public boolean gamma() {
+                    return false;
+                  }
+                }
+                """);
     }
 
     private static void assertRenderedRuleContent(String content) {

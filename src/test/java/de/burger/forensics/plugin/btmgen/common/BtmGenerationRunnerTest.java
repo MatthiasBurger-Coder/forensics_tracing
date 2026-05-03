@@ -183,8 +183,9 @@ class BtmGenerationRunnerTest {
                 .strictConditionValidation(true)
                 .build();
 
-        BtmGenerationException exception = assertThrows(BtmGenerationException.class,
-                () -> new BtmGenerationRunner().generate(request));
+        BtmGenerationRunner runner = new BtmGenerationRunner();
+
+        BtmGenerationException exception = assertThrows(BtmGenerationException.class, () -> runner.generate(request));
 
         assertTrue(exception.getMessage().contains("Condition validation failed with 1 unresolved type reference warning(s)"));
     }

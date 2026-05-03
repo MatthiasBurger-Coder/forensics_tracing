@@ -123,7 +123,7 @@ class AbstractBytemanStrategyTest {
         }
 
         private String atExitValue() {
-            return atExit();
+            return AT_EXIT;
         }
 
         private String orValue(String fallback, String value) {

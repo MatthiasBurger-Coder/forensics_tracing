@@ -24,7 +24,7 @@ public final class ReturnRuleStrategy extends AbstractBytemanStrategy implements
                 p.className(),
                 methodSig(p.methodName(), p.methodDesc()),
                 p.helperFqn(),
-                atExit(),
+                AT_EXIT,
                 p.className(), p.methodName(), returnValue
         );
     }

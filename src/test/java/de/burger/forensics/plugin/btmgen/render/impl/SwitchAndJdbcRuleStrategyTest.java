@@ -168,8 +168,9 @@ class SwitchAndJdbcRuleStrategyTest {
                 null,
                 RuleParams.DEFAULT_HELPER_FQN
         );
+        SwitchRuleStrategy strategy = new SwitchRuleStrategy();
 
-        assertThatThrownBy(() -> new SwitchRuleStrategy().render(params))
+        assertThatThrownBy(() -> strategy.render(params))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SWITCH rule requires a valid source line for com.example.Foo#work");
     }
@@ -186,8 +187,9 @@ class SwitchAndJdbcRuleStrategyTest {
                 null,
                 RuleParams.DEFAULT_HELPER_FQN
         );
+        SwitchCaseRuleStrategy strategy = new SwitchCaseRuleStrategy();
 
-        assertThatThrownBy(() -> new SwitchCaseRuleStrategy().render(params))
+        assertThatThrownBy(() -> strategy.render(params))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SWITCH_CASE rule requires a valid source line for com.example.Foo#work");
     }
