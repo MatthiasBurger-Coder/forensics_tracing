@@ -29,6 +29,10 @@ class AbstractBytemanStrategyTest {
         assertThat(probe.orValue("  ", "fallback")).isEqualTo("fallback");
         assertThat(probe.ruleTargetValue(params("com.example.Foo#work")))
                 .isEqualTo("com.example.Foo#work");
+        assertThat(probe.ruleTargetValue(params("case 1")))
+                .isEqualTo("com.example.Foo#work");
+        assertThat(probe.ruleTargetValue(params("com.example.Foo#work#work")))
+                .isEqualTo("com.example.Foo#work");
         assertThat(probe.ruleTargetValue(params(" ")))
                 .isEqualTo("com.example.Foo#work");
         assertThat(probe.ruleTargetValue(params(null, null, null)))

@@ -29,9 +29,10 @@ public final class BytemanRuleRenderAdapter implements RuleRenderPort {
         String methodName = defaultIfBlank(location.method(), "<method>");
         String displayName = className + "#" + methodName;
         String condition = rule.condition();
+        String eventLabel = null;
 
         if (template == RuleTemplate.SWITCH_CASE && rule.condition() != null && !rule.condition().isBlank()) {
-            displayName = rule.condition();
+            eventLabel = rule.condition();
             condition = null;
         }
 
@@ -45,7 +46,8 @@ public final class BytemanRuleRenderAdapter implements RuleRenderPort {
                 null,
                 rule.helperFqn(),
                 location.line(),
-                rule.returnType()
+                rule.returnType(),
+                eventLabel
         );
         return renderer.render(template.name(), params);
     }

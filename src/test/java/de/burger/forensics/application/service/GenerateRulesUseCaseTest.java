@@ -51,7 +51,7 @@ class GenerateRulesUseCaseTest {
         RuleGenerationResult result = useCase(events).generate(request);
 
         assertThat(result.renderedRules()).anyMatch(rule -> rule.contains("METHOD_ENTER|doWork"));
-        assertThat(result.renderedRules()).anyMatch(rule -> rule.contains("METHOD_EXIT|doWork"));
+        assertThat(result.renderedRules()).noneMatch(rule -> rule.contains("METHOD_EXIT|doWork"));
         assertThat(result.renderedRules()).anyMatch(rule -> rule.contains("IF_TRUE|doWork|com.example.SafeEval.eval"));
         assertThat(result.renderedRules()).noneMatch(rule -> rule.contains("skipMe"));
 
@@ -96,7 +96,7 @@ class GenerateRulesUseCaseTest {
     }
 
     @Test
-    void methodWithMultipleReturnsShouldNotGenerateMultipleGenericExitReturnRules() {
+    void methodWithReturnRuleDoesNotReceiveGenericExitRule() {
         List<ScanEvent> events = List.of(
             event("com.example.Foo", "map", 10, "(int value)", RuleTemplate.RETURN, "zero", "java", "String"),
             event("com.example.Foo", "map", 12, "(int value)", RuleTemplate.RETURN, "positive", "java", "String")
@@ -120,7 +120,31 @@ class GenerateRulesUseCaseTest {
             .containsExactly("RETURN|map|zero");
         assertThat(result.renderedRules())
             .filteredOn(rule -> rule.startsWith("METHOD_EXIT|map|"))
-            .hasSize(1);
+            .isEmpty();
+    }
+
+    @Test
+    void methodWithoutReturnRuleStillReceivesGenericExitRule() {
+        List<ScanEvent> events = List.of(
+            event("com.example.Foo", "consume", 10, "(String value)", RuleTemplate.IF_TRUE, "$1 != null", "java", "void")
+        );
+
+        GenerationRequest request = new GenerationRequest(
+            Path.of("/tmp/project"),
+            GenerationRequest.DEFAULT_HELPER_FQCN,
+            false,
+            true,
+            List.of("com.example"),
+            0,
+            false,
+            List.of()
+        );
+
+        RuleGenerationResult result = useCase(events).generate(request);
+
+        assertThat(result.renderedRules())
+            .filteredOn(rule -> rule.startsWith("METHOD_EXIT|consume|"))
+            .containsExactly("METHOD_EXIT|consume|true");
     }
 
     @Test

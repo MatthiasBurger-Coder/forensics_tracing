@@ -26,13 +26,19 @@ public abstract class AbstractBytemanStrategy {
     }
     protected static String ruleTarget(RuleParams params) {
         String displayName = params.displayName();
-        if (displayName != null && !displayName.isBlank()) {
+        if (looksLikeTargetLabel(displayName, params.methodName())) {
             return displayName;
         }
 
+        return targetLabel(params);
+    }
+    protected static String targetLabel(RuleParams params) {
         String className = (params.className() == null || params.className().isBlank()) ? "<unknown>" : params.className();
         String methodName = (params.methodName() == null || params.methodName().isBlank()) ? "<method>" : params.methodName();
         return className + "#" + methodName;
+    }
+    protected static String optionalLabel(String value, String fallback) {
+        return (value == null || value.isBlank()) ? fallback : value;
     }
     protected static String esc(String s) {
         if (s == null) {
@@ -115,6 +121,15 @@ public abstract class AbstractBytemanStrategy {
     private static final Pattern STATIC_NULL_CHECK = Pattern.compile(
             "^\\(?\\s*([A-Z][A-Z0-9_]*)\\s*(==|!=)\\s*null\\s*\\)?$"
     );
+
+    private static boolean looksLikeTargetLabel(String value, String methodName) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+
+        String method = (methodName == null || methodName.isBlank()) ? "<method>" : methodName;
+        return value.chars().filter(ch -> ch == '#').count() == 1 && value.endsWith("#" + method);
+    }
 
     private static String unwrapParentheses(String expression) {
         String result = expression;

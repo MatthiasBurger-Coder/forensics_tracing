@@ -790,7 +790,7 @@ class GenerateBtmTaskTest {
     private static void assertRenderedRuleContent(String content) {
         assertTrue(content.contains("METHOD_ENTER:com.example.Sample#alpha"));
         assertTrue(content.contains("METHOD_ENTER:com.example.Sample#beta"));
-        assertTrue(content.contains("METHOD_EXIT:com.example.Sample#alpha"));
+        assertFalse(content.contains("METHOD_EXIT:com.example.Sample#alpha"));
         assertTrue(content.contains("METHOD_EXIT:com.example.Sample#beta"));
         assertTrue(content.contains("RETURN:com.example.Sample#alpha"));
         assertTrue(content.contains("THROW:com.example.Sample#beta"));
@@ -800,13 +800,14 @@ class GenerateBtmTaskTest {
         assertTrue(content.contains("IF_FALSE:com.example.Sample#beta:false"));
         assertTrue(content.contains("SWITCH:com.example.Sample#alpha:1"));
         assertTrue(content.contains("SWITCH:com.example.Sample#beta:2"));
-        assertTrue(content.contains("SWITCH_CASE:1"));
-        assertTrue(content.contains("SWITCH_CASE:2"));
+        assertTrue(content.contains("SWITCH_CASE:com.example.Sample#alpha:1"));
+        assertTrue(content.contains("SWITCH_CASE:com.example.Sample#beta:2"));
     }
 
     private static void assertStrategyInvocations(Map<String, RecordingStrategy> strategies) {
         assertEquals(2, strategies.get("METHOD_ENTER").calls.size());
-        assertEquals(2, strategies.get("METHOD_EXIT").calls.size());
+        assertEquals(1, strategies.get("METHOD_EXIT").calls.size());
+        assertEquals("beta", strategies.get("METHOD_EXIT").calls.get(0).methodName());
         assertEquals(1, strategies.get("RETURN").calls.size());
         assertEquals("alpha", strategies.get("RETURN").calls.get(0).methodName());
         assertEquals(1, strategies.get("THROW").calls.size());
@@ -828,8 +829,10 @@ class GenerateBtmTaskTest {
         assertEquals(2, strategies.get("SWITCH_CASE").calls.size());
         assertEquals(List.of(5, 10),
                 strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::sourceLine).toList());
-        assertEquals(List.of("1", "2"),
+        assertEquals(List.of("com.example.Sample#alpha", "com.example.Sample#beta"),
                 strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::displayName).toList());
+        assertEquals(List.of("1", "2"),
+                strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::eventLabel).toList());
 
         strategies.values().forEach(recording ->
                 recording.calls.forEach(params ->
@@ -856,6 +859,9 @@ class GenerateBtmTaskTest {
             sb.append(id).append(":").append(params.displayName());
             if (params.condition() != null) {
                 sb.append(":").append(params.condition());
+            }
+            if (params.eventLabel() != null) {
+                sb.append(":").append(params.eventLabel());
             }
             return sb.toString();
         }

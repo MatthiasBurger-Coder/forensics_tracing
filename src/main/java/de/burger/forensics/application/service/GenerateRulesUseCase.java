@@ -188,7 +188,8 @@ public final class GenerateRulesUseCase {
                                       GenerationRequest request,
                                       List<Rule> rules) {
         boolean hasExit = methodEvents.stream().anyMatch(e -> e.kind() == RuleTemplate.METHOD_EXIT);
-        if (!hasExit) {
+        boolean hasReturn = methodEvents.stream().anyMatch(e -> e.kind() == RuleTemplate.RETURN);
+        if (!hasExit && !hasReturn) {
             ScanEvent last = methodEvents.get(methodEvents.size() - 1);
             rules.add(exitRule(last.location(), last.signature(), request.helperFqcn()));
         }
