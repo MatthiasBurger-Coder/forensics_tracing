@@ -1,811 +1,516 @@
-# workflow.md — Fix BTM Generation for Maven/Gradle Analysis
+# workload.md — Stabilize BTM Rule Generation
 
-## Rolle
+## Context
 
-Du arbeitest als Codex-Agent in einem Java-Projekt für Forensics-Tracing und Byteman-Regelgenerierung.
+The BTM rule generation was reworked and the current generated output was provided as `forensics.btm`. The current repository snapshot was provided as `forensics_tracing.zip`, and a slice-based workflow was provided as `workflow.md`.
 
-Du bist spezialisiert auf:
+The goal of this workload is to make the generator, tests, and generated BTM output consistent and reliable for large Java projects such as WildFly.
 
-* Java 17
-* Gradle 9.4
-* Maven-Plugin-Adapter
-* Byteman-Regelsyntax
-* JavaParser-basierte Source-Code-Analyse
-* JUnit 5 Tests
-* ArchUnit Tests
-* saubere Port-/Adapter-Trennung
+## Hard Constraints
 
-Alle Source-Code-Kommentare, JavaDoc-Kommentare, Commit Messages und technische Namen im Code müssen auf Englisch verfasst werden.
+* Use Gradle 9.1 via the Gradle Wrapper.
+* Use the Java toolchain configured by the repository. Do not change the Java toolchain as part of this workload.
+* Do not weaken dependency verification if dependency verification is present.
+* Do not manually patch generated BTM files as the primary fix.
+* Fix the generator and tests first, then regenerate the BTM output.
+* Keep production source code and source comments in English.
+* Keep changes slice-based, small, testable, and reviewable.
+* Do not mix functional generator changes with unrelated formatting or cleanup.
 
-Antworten und Abschlussberichte an den Nutzer dürfen auf Deutsch erfolgen.
+## Current BTM Output Review
 
----
+The current `forensics.btm` output is structurally complete at file level:
 
-## Ziel
+* Rule blocks found: `81,194`
+* `ENDRULE` blocks found: `81,194`
+* `helper().` occurrences: `0`
+* `ENABLE_LOG` occurrences: `0`
+* IF branch rules using `AT LINE`: `28,858`
 
-Der Generator erzeugt aktuell eine `forensics.btm`, die grundsätzlich beweist, dass der Scanner läuft. Die Datei ist aber noch nicht sauber genug für belastbare Analyse großer Projekte wie WildFly.
+  * `if-true`: `14,429`
+  * `if-false`: `14,429`
+* Method enter rules: `15,496`
+* Method exit rules: `15,496`
+* Return rules: `12,874`
+* Throw rules: `3,790`
+* Switch rules: `909`
+* Switch-case rules: `3,771`
 
-Diese Workflow-Aufgabe soll die Byteman-Regelerzeugung so korrigieren, dass:
+This shows meaningful progress: IF conditions are now emitted at source lines instead of method entry, and helper calls are direct.
 
-1. `THROW`-Regeln syntaktisch und fachlich korrekt sind.
-2. `RETURN`-/`AT EXIT`-Regeln nicht mehrfach pro Methode redundant erzeugt werden.
-3. Methodensignaturen optional bis in die Byteman-Regeln transportiert werden können.
-4. Der Maven-Scanbereich nicht versehentlich `src/test/java`, `target`, `build`, `.git` oder komplette Repository-Wurzeln analysiert.
-5. Der Gradle-Teil nicht beschädigt wird.
-6. Der Maven-Teil, falls vorhanden, denselben Use-Case wie der Gradle-Adapter nutzt.
-7. Alle Änderungen durch JUnit-Tests abgesichert werden.
+## Blocking Findings
 
----
+### Finding 1 — Source ZIP and generated BTM output are inconsistent
 
-## Wichtiger Ausgangsbefund
+The provided `forensics.btm` contains IF branch rules with `AT LINE <n>`.
 
-Eine erzeugte `forensics.btm` enthielt ungefähr:
+Example from generated output:
 
-```text
-125700 generated rules
-0 duplicate rule ids
-0 malformed rule blocks
-5486 THROW rules
-27589 RETURN rules
-36532 IF_TRUE / IF_FALSE rules
-25518 METHOD_ENTER rules
-25518 METHOD_EXIT rules
-```
-
-Die Datei war formal groß und generiert, aber drei Dinge waren auffällig:
-
-### Problem 1 — falsche `THROW`-Condition
-
-Aktuelles problematisches Muster:
-
-```text
-RULE ... : throw some.Class#method#method
-CLASS some.Class
-METHOD method
+```btm
+RULE df5ccf8ac84134c187c7d8540efce065 : if-true org.jboss.as.appclient.deployment.ActiveApplicationClientProcessor#deploy#deploy
+CLASS org.jboss.as.appclient.deployment.ActiveApplicationClientProcessor
+METHOD deploy(DeploymentPhaseContext)
 HELPER de.burger.forensics.infrastructure.rt.RtTraceHelper
-AT THROW
-IF SomeLogger.LOGGER.someExceptionFactoryCall($this.value)
+AT LINE 40
+IF eval("df5ccf8ac84134c187c7d8540efce065", "!DeploymentTypeMarker.isType(DeploymentType.EAR, $deploymentUnit)", !DeploymentTypeMarker.isType(DeploymentType.EAR, $deploymentUnit))
 DO
-    onException($^);
+    onBranch(org.jboss.as.appclient.deployment.ActiveApplicationClientProcessor.class, "deploy", "IF_TRUE");
 ENDRULE
 ```
 
-Das ist falsch, weil `IF` eine boolean expression erwartet. Ein Exception-Factory-Ausdruck ist keine sichere boolean condition.
+However, the provided Java source snapshot still renders IF rules with `AT ENTRY` in:
 
-Erwartetes Muster:
+* `src/main/java/de/burger/forensics/plugin/btmgen/render/impl/IfTrueRuleStrategy.java`
+* `src/main/java/de/burger/forensics/plugin/btmgen/render/impl/IfFalseRuleStrategy.java`
 
-```text
-RULE ... : throw some.Class#method#method
-CLASS some.Class
-METHOD method
+The current `RuleParams` record also has no line-number field, and `BytemanRuleRenderAdapter` does not pass `SourceLocation.line()` to render strategies.
+
+#### Required correction
+
+Align the committed source with the generated output strategy:
+
+* Extend rule rendering input with the source line.
+* Pass `Rule.location().line()` from the domain rule into the renderer.
+* Render `AT LINE <line>` for line-bound rules when `line > 0`.
+* Fall back explicitly and predictably when `line <= 0`.
+* Add tests proving that IF rules generated from scanned source render with `AT LINE`.
+
+### Finding 2 — Switch and switch-case rules still fire at method entry
+
+The generated output still renders switch-related rules as `AT ENTRY`:
+
+* `switch`: `909` rules at `AT ENTRY`
+* `switch-case`: `3,771` rules at `AT ENTRY`
+
+This is semantically wrong for branch tracing because these rules fire when the method is entered, not when the switch statement or case is reached.
+
+Current output example:
+
+```btm
+RULE 580cd80db4ed339ba955f892f27e2d7d : switch org.jboss.as.appclient.subsystem.parsing.AppClientXml_All#parseSocketBindingGroup#parseSocketBindingGroup
+CLASS org.jboss.as.appclient.subsystem.parsing.AppClientXml_All
+METHOD parseSocketBindingGroup(XMLExtendedStreamReader, Set, ModelNode, List)
 HELPER de.burger.forensics.infrastructure.rt.RtTraceHelper
-AT THROW
+AT ENTRY
 IF true
 DO
-    onException($^);
+    onSwitch(org.jboss.as.appclient.subsystem.parsing.AppClientXml_All.class, "parseSocketBindingGroup", "org.jboss.as.appclient.subsystem.parsing.AppClientXml_All#parseSocketBindingGroup" );
 ENDRULE
 ```
 
-Optional darf später ein Exception-Type-Filter ergänzt werden, aber nicht in dieser Aufgabe.
+#### Required correction
 
----
+Switch tracing must be line-aware as well:
 
-### Problem 2 — mehrfach erzeugte `RETURN`-Regeln mit identischem `AT EXIT`
+* `SWITCH` should render at the selector/source line using `AT LINE <line>`.
+* `SWITCH_CASE` should render at the case/source line when a reliable line exists.
+* The switch selector expression must not be lost.
+* The generated action should include useful selector or label metadata.
+* Add tests proving switch and switch-case rules no longer default to `AT ENTRY` when line data is available.
 
-Aktuelles problematisches Muster:
+### Finding 3 — Return rules for boolean methods lose `false` return values
 
-```text
-RULE ... : return some.Class#method#method
-CLASS some.Class
-METHOD method
+The generated output contains `1,319` return rules with:
+
+```btm
+IF $!
+```
+
+Example:
+
+```btm
+RULE 4bf1a0af98603ed89878e5ff108aa036 : return org.jboss.as.appclient.component.ApplicationClientComponentDescription#isIntercepted#isIntercepted
+CLASS org.jboss.as.appclient.component.ApplicationClientComponentDescription
+METHOD isIntercepted()
 HELPER de.burger.forensics.infrastructure.rt.RtTraceHelper
 AT EXIT
-IF true
+IF $!
 DO
-    onExit(..., $!);
+    onExit(org.jboss.as.appclient.component.ApplicationClientComponentDescription.class, "isIntercepted", $! );
 ENDRULE
 ```
 
-Wenn eine Methode mehrere `return`-Statements enthält, werden aktuell mehrere `RETURN`-Regeln erzeugt. Alle hängen aber an `AT EXIT`. Dadurch entstehen redundante Exit-Regeln pro Methode.
+This means the return-value rule fires only when the returned boolean is `true`. If the method returns `false`, the rule does not run and the actual returned value is not captured.
 
-Erwartung:
+#### Required correction
 
-* Pro Methode darf es maximal eine generische `AT EXIT`-Regel geben.
-* Wenn konkrete `return`-Statements später separat verfolgt werden sollen, muss das über `AT LINE <line>` oder ein separates Eventmodell erfolgen.
-* In dieser Aufgabe soll die Redundanz entfernt werden.
+Return value tracing must not be filtered by the returned value:
 
----
+* Return value rules should use `IF true` when they are intended to capture the return value.
+* For non-void methods, `AT EXIT` may use `$!` as the return value.
+* For void methods, do not use `$!`.
+* Do not create a condition strategy that turns boolean return values into `IF $!`.
+* Add tests for boolean methods returning both `true` and `false` expectations at rule-rendering level.
 
-### Problem 3 — Methodenzeilen ohne Signatur
+### Finding 4 — Rule display names duplicate the method name
 
-Aktuelles Muster:
+Most generated rule names contain the method name twice:
 
-```text
-METHOD deploy
-METHOD execute
-METHOD getValue
+```btm
+RULE 2a448d3bed00317092cb992f4f671a67 : enter org.jboss.as.appclient.component.ApplicationClientComponentDescription#create#create
 ```
 
-Für überladene Methoden ist das riskant.
+Observed count:
 
-Ziel:
+* Duplicated `class#method#method` style rule names: `75,932`
 
-* Die Methodensignatur soll im internen Modell vorhanden sein.
-* Der Renderer soll optional signierte Methodenzeilen erzeugen können.
-* Default darf weiterhin kompatibel bleiben, wenn bestehende Tests und Byteman-Kompatibilität das verlangen.
+This is mostly cosmetic, but it makes large BTM files harder to read and review.
 
-Beispiel Zieloption:
+#### Required correction
 
-```text
-METHOD execute(org.jboss.dmr.ModelNode, org.jboss.dmr.ModelNode)
-```
+Normalize the display naming contract:
 
-Wenn die vollständige Signatur aus dem vorhandenen AST-Modell nicht risikofrei ableitbar ist, muss der Agent sauber dokumentieren, was fehlt, und mindestens das Modell vorbereiten.
+* Either `displayName` is the full `class#method` label and strategies must not append `#methodName` again.
+* Or `displayName` is only a human label, and strategies compose `class#method` themselves.
+* Apply one consistent rule across all render strategies.
+* Add renderer tests that assert rule names are not duplicated.
 
----
+### Finding 5 — Safe `eval` currently records both condition evaluation and taken branch semantics through the same event path
 
-## Verbindliche Architekturregel
+The generated IF rules use:
 
-Der Maven-Adapter darf keine Fachlogik enthalten.
-
-Erlaubt:
-
-```text
-Maven Mojo
-  -> builds request
-  -> calls application use case
-  -> writes configured output
-```
-
-Nicht erlaubt:
-
-```text
-Maven Mojo
-  -> scans Java files directly
-  -> renders Byteman manually
-  -> duplicates Gradle task logic
-```
-
-Die Fachlogik muss im bestehenden Application-/Domain-/Renderer-Bereich bleiben.
-
----
-
-## Relevante Klassen / Suchanker
-
-Prüfe mindestens diese Klassen und Pakete:
-
-```text
-src/main/java/de/burger/forensics/adapters/javaparser/JavaParserScanner.java
-src/main/java/de/burger/forensics/adapters/javaparser/MethodEventExtractor.java
-src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java
-src/main/java/de/burger/forensics/application/service/GenerationRequest.java
-src/main/java/de/burger/forensics/application/service/RuleGenerationResult.java
-src/main/java/de/burger/forensics/plugin/btmgen/render/api/RuleParams.java
-src/main/java/de/burger/forensics/plugin/btmgen/render/strategy/ThrowRuleStrategy.java
-src/main/java/de/burger/forensics/plugin/btmgen/render/strategy/ReturnRuleStrategy.java
-src/main/java/de/burger/forensics/plugin/btmgen/render/BytemanRuleRenderer.java
-src/main/java/de/burger/forensics/plugin/btmgen/gradle/GenerateBtmTask.java
-```
-
-Falls vorhanden, zusätzlich:
-
-```text
-src/main/java/de/burger/forensics/plugin/btmgen/maven/GenerateBtmMojo.java
-```
-
-Falls der Maven-Pfad fehlt, nicht blind umfangreich umbauen. Dann nur vorbereiten oder klar berichten, dass der Maven-Adapter separat ergänzt werden muss.
-
----
-
-## Phase 1 — Repository-Inspektion
-
-Führe zuerst aus:
-
-```bash
-git status --short
-find src/main/java -type f | sort
-find src/test/java -type f | sort
-```
-
-Prüfe danach:
-
-```bash
-./gradlew --version
-./gradlew tasks --all
-```
-
-Wenn Maven-Dateien vorhanden sind:
-
-```bash
-find . -name "pom.xml" -print
-find . -path "*maven*" -type f -print
-```
-
-Erwartung:
-
-* Keine Änderung beginnen, bevor der aktuelle Projektzustand verstanden wurde.
-* Keine fremden Änderungen überschreiben.
-* Keine großen Architekturumbauten ohne Notwendigkeit.
-
----
-
-## Phase 2 — Aktuellen Fehler reproduzieren
-
-Suche Tests für:
-
-```text
-ThrowRuleStrategy
-ReturnRuleStrategy
-BytemanRuleRenderer
-MethodEventExtractor
-GenerateRulesUseCase
-GenerateBtmTask
-```
-
-Führe relevante Tests aus:
-
-```bash
-./gradlew test
-```
-
-Wenn es spezielle Testtasks gibt, ebenfalls ausführen.
-
-Wenn möglich, erzeuge eine kleine Testquelle mit:
-
-```java
-package com.example;
-
-final class ExampleService {
-
-    String map(int value) {
-        if (value < 0) {
-            throw new IllegalArgumentException("negative");
-        }
-        if (value == 0) {
-            return "zero";
-        }
-        return "positive";
-    }
-}
-```
-
-Erwartete neue Generator-Eigenschaften:
-
-* Eine Throw-Regel mit `AT THROW` und `IF true`.
-* Maximal eine generische `AT EXIT`-Regel für `map`.
-* Keine mehrfachen identischen `return ... AT EXIT`-Regeln.
-
----
-
-## Phase 3 — Fix für `THROW`-Regeln
-
-### Ziel
-
-`THROW`-Regeln dürfen keine Exception-Factory-Ausdrücke als `IF`-Condition verwenden.
-
-### Umsetzung
-
-Prüfe die Klasse:
-
-```text
-ThrowRuleStrategy.java
-```
-
-Korrigiere die Regelgenerierung so, dass `AT THROW` standardmäßig erzeugt:
-
-```text
-AT THROW
-IF true
+```btm
+IF eval("ruleId", "expression", expression)
 DO
-    onException($^);
+    onBranch(Target.class, "method", "IF_TRUE");
 ENDRULE
 ```
 
-### Verboten
+The helper method `eval(...)` records the evaluated boolean value, while the `DO` block records the actually taken branch. This can be useful, but it must be explicit because otherwise branch traces may look duplicated or misleading.
 
-Nicht erzeugen:
+#### Required correction
 
-```text
-IF SomeLogger.LOGGER.someExceptionFactoryCall(...)
+Decide and document the semantics:
+
+* `eval(...)` should represent condition evaluation, not branch taken.
+* `onBranch(...)` should represent branch taken.
+* If both are kept, use separate event types or clearly distinct labels.
+* If only branch-taken tracing is required, remove branch event emission from `eval(...)` and keep it only for safe failure handling.
+* Add tests around helper behavior and expected output semantics.
+
+### Finding 6 — Unqualified source type names may fail Byteman type checking
+
+Some generated IF expressions contain unqualified source-level type references, for example:
+
+```btm
+DeploymentTypeMarker.isType(DeploymentType.EAR, $deploymentUnit)
+SubsystemResourceRegistration.of("infinispan")
 ```
 
-Nicht erzeugen:
+Byteman rule expressions are type-checked Java-like expressions at injection time. Without imports or fully qualified names, these expressions may fail depending on target classloader and type resolution.
 
-```text
-IF new IllegalArgumentException(...)
-```
+#### Required correction
 
-Nicht erzeugen:
+Add an explicit validation strategy:
 
-```text
-IF throwExpression
-```
+* Preserve source imports during scanning, or qualify static/type references where possible.
+* Alternatively, generate `IMPORT` lines if supported by the chosen Byteman usage mode.
+* At minimum, create a validation/report mode that flags expressions containing unresolved simple type names.
+* Add tests for imported static/type references in conditions.
 
-### Testanforderung
+## Target Architecture Change
 
-Ergänze oder aktualisiere einen JUnit-5-Test, der sicherstellt:
+### Rendering input must become line-aware
 
-```text
-- rendered rule contains "AT THROW"
-- rendered rule contains "IF true"
-- rendered rule contains "onException($^)"
-- rendered rule does not contain the original throw expression in the IF line
-```
-
-Testname-Vorschlag:
+Extend `RuleParams` or introduce a better value object:
 
 ```java
-throwRuleShouldUseBooleanConditionInsteadOfThrowExpression()
-```
-
----
-
-## Phase 4 — Fix für redundante `RETURN`-/`AT EXIT`-Regeln
-
-### Ziel
-
-Eine Methode mit mehreren `return`-Statements darf nicht mehrere generische `AT EXIT`-Regeln erhalten.
-
-### Analyse
-
-Prüfe, wo `RETURN`-Events entstehen:
-
-```text
-MethodEventExtractor.java
-JavaParserScanner.java
-GenerateRulesUseCase.java
-```
-
-Prüfe, wo sie gerendert werden:
-
-```text
-ReturnRuleStrategy.java
-BytemanRuleRenderer.java
-```
-
-### Bevorzugte Lösung
-
-Die sauberste Lösung ist:
-
-* `METHOD_EXIT` bleibt der generische Exit-Hook.
-* `RETURN` darf nicht zusätzlich als generischer `AT EXIT`-Hook gerendert werden, wenn dadurch mehrere identische Exit-Regeln entstehen.
-* Entweder:
-
-    * `RETURN`-Events werden dedupliziert auf eine Regel pro Methode, oder
-    * `RETURN`-Events werden künftig nur als zeilenbezogene Events modelliert, aber noch nicht gerendert, wenn keine sichere Line-Strategie vorhanden ist.
-
-### Minimal akzeptabler Fix
-
-Wenn der bestehende Renderer `RETURN` zwingend erwartet:
-
-* Gruppiere `RETURN`-Events pro Klasse + Methode + Signatur.
-* Erzeuge maximal eine `RETURN`-Regel pro Methode.
-* Verwende stabilen Rule-Namen ohne zufällige Kollisionen.
-
-### Testanforderung
-
-Ergänze einen Test mit einer Methode, die zwei oder drei `return`-Statements enthält.
-
-Erwartung:
-
-```text
-- generated rules contain at most one RETURN/AT EXIT rule for that method
-- generated rules may contain one METHOD_EXIT/AT EXIT rule
-- no duplicate AT EXIT return rules exist for the same method
-```
-
-Testname-Vorschlag:
-
-```java
-methodWithMultipleReturnsShouldNotGenerateMultipleGenericExitReturnRules()
-```
-
----
-
-## Phase 5 — Methodensignaturen vorbereiten oder aktivieren
-
-### Ziel
-
-Das interne Modell soll Methodensignaturen tragen können.
-
-Prüfe, ob das Eventmodell bereits Felder für Parameter oder Signaturen hat.
-
-Falls nicht vorhanden, ergänze vorsichtig ein Feld wie:
-
-```java
-String methodSignature
-```
-
-oder strukturierter:
-
-```java
-List<String> parameterTypeNames
-```
-
-### Anforderungen
-
-* Keine Signatur über unsichere String-Bastelei erzeugen, wenn der AST-Typ nicht zuverlässig auflösbar ist.
-* Keine JavaParser Symbol Solver Integration erzwingen, wenn sie noch nicht im Projekt vorhanden ist.
-* Ohne Type Solver darf eine syntaktische Signatur aus AST-Typen erzeugt werden, wenn sie stabil ist.
-
-Beispiel:
-
-```java
-void execute(ModelNode operation, ModelNode model)
-```
-
-kann ohne Imports nur liefern:
-
-```text
-execute(ModelNode, ModelNode)
-```
-
-Mit vollqualifizierter Auflösung wäre möglich:
-
-```text
-execute(org.jboss.dmr.ModelNode, org.jboss.dmr.ModelNode)
-```
-
-### Akzeptanz
-
-Mindestens eines der folgenden Ergebnisse muss erreicht werden:
-
-1. Renderer kann optional signierte `METHOD`-Zeilen erzeugen.
-2. Eventmodell enthält Signaturinformationen, Renderer bleibt aus Kompatibilitätsgründen zunächst unsigniert.
-3. Agent dokumentiert nachvollziehbar, warum vollständige Signaturen ohne Type Solver nicht sicher möglich sind, und ergänzt Tests für das vorbereitete Modell.
-
-### Testanforderung
-
-Testname-Vorschlag:
-
-```java
-scannerShouldCaptureMethodSignatureFromAstParameters()
-```
-
----
-
-## Phase 6 — Scanbereich härten
-
-### Ziel
-
-Der Generator darf bei Maven-/Gradle-Projekten nicht versehentlich das komplette Repository inklusive Testquellen, Build-Ausgaben und `.git` scannen.
-
-### Pflicht-Ausschlüsse
-
-Folgende Verzeichnisse müssen ausgeschlossen werden:
-
-```text
-.git
-.gradle
-.idea
-build
-target
-out
-src/test/java
-src/integrationTest/java
-```
-
-### Default-Verhalten
-
-Für Projektadapter soll gelten:
-
-```text
-Default source root = src/main/java
-```
-
-Nicht:
-
-```text
-Default source root = project root
-```
-
-### Gradle-Adapter
-
-Prüfe:
-
-```text
-GenerateBtmTask.java
-```
-
-Erwartung:
-
-* Default zeigt auf `project.layout.projectDirectory.dir("src/main/java")` oder äquivalent.
-* Der Nutzer kann den Pfad explizit überschreiben.
-* Excludes werden auch bei explizitem Root berücksichtigt, sofern sinnvoll.
-
-### Maven-Adapter
-
-Falls vorhanden:
-
-```text
-GenerateBtmMojo.java
-```
-
-Erwartung:
-
-```java
-@Parameter(defaultValue = "${project.basedir}/src/main/java")
-private File sourceRoot;
-```
-
-Zusätzlich sollten Excludes berücksichtigt werden.
-
-### Testanforderung
-
-Ein Test muss sicherstellen:
-
-```text
-- src/main/java wird analysiert
-- src/test/java wird nicht analysiert
-- target wird nicht analysiert
-- build wird nicht analysiert
-- .git wird nicht analysiert
-```
-
-Testname-Vorschlag:
-
-```java
-scannerShouldIgnoreBuildOutputAndTestSourcesByDefault()
-```
-
----
-
-## Phase 7 — Maven-Konfiguration prüfen oder ergänzen
-
-### Ziel
-
-Wenn der Maven-Adapter existiert, soll er korrekt über Maven ausführbar sein.
-
-Prüfe auf:
-
-```text
-src/main/java/de/burger/forensics/plugin/btmgen/maven/GenerateBtmMojo.java
-pom.xml
-META-INF/maven/plugin.xml generation
-```
-
-Ein echter Maven-Plugin-Adapter braucht:
-
-```xml
-<packaging>maven-plugin</packaging>
-```
-
-und:
-
-```xml
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-plugin-plugin</artifactId>
-    <configuration>
-        <goalPrefix>forensics-btmgen</goalPrefix>
-    </configuration>
-    <executions>
-        <execution>
-            <goals>
-                <goal>descriptor</goal>
-                <goal>helpmojo</goal>
-            </goals>
-        </execution>
-    </executions>
-</plugin>
-```
-
-Die Mojo-Klasse braucht sinngemäß:
-
-```java
-@Mojo(
-        name = "generate-btm-rules",
-        defaultPhase = LifecyclePhase.GENERATE_TEST_RESOURCES,
-        threadSafe = true,
-        requiresProject = true
-)
-public final class GenerateBtmMojo extends AbstractMojo {
-    // adapter only
+public record RuleParams(
+        String id,
+        String className,
+        String methodName,
+        String methodDesc,
+        String displayName,
+        String condition,
+        String sqlHint,
+        String helperFqn,
+        int line
+) {
+    public static final String DEFAULT_HELPER_FQN = "de.burger.forensics.infrastructure.rt.RtTraceHelper";
 }
 ```
 
-### Wichtig
+If constructor compatibility is important, add an overloaded factory or compact compatibility constructor instead of breaking all tests at once.
 
-Wenn das Projekt weiterhin primär Gradle-basiert ist, darf diese Aufgabe nicht ungefragt die gesamte Buildstruktur in ein Maven-Multi-Modul-Projekt umbauen.
+### Introduce location rendering helper
 
-Wenn Maven noch nicht vollständig vorhanden ist, dokumentiere klar:
+Create one shared method in the rendering SPI:
 
-```text
-Maven adapter source exists: yes/no
-Maven plugin descriptor generation exists: yes/no
-Maven execution tested: yes/no
-Remaining blocker: ...
+```java
+protected static String atLineOrEntry(int line) {
+    return line > 0 ? "AT LINE " + line : "AT ENTRY";
+}
 ```
 
----
+Use a different helper for return/exit rules:
 
-## Phase 8 — Tests und Quality Gate
-
-Führe aus:
-
-```bash
-./gradlew clean test
+```java
+protected static String atExit() {
+    return "AT EXIT";
+}
 ```
 
-Falls vorhanden:
+The goal is to avoid each strategy inventing its own fallback rules.
 
-```bash
-./gradlew jacocoTestReport jacocoTestCoverageVerification
-```
+### Recommended rule location policy
 
-Falls `check` sauber verdrahtet ist:
+| Rule type                         | Preferred location                          | Reason                                                     |
+| --------------------------------- | ------------------------------------------- | ---------------------------------------------------------- |
+| METHOD_ENTER                      | `AT ENTRY`                                  | Method boundary                                            |
+| METHOD_EXIT for void/generic exit | `AT EXIT`                                   | Method boundary                                            |
+| RETURN value capture              | `AT EXIT`                                   | `$!` is only valid at method exit for return value capture |
+| IF_TRUE                           | `AT LINE <condition line>`                  | Branch condition line                                      |
+| IF_FALSE                          | `AT LINE <condition line>`                  | Branch condition line                                      |
+| SWITCH                            | `AT LINE <selector line>`                   | Switch reached                                             |
+| SWITCH_CASE                       | `AT LINE <case line>` if reliable           | Case reached, with known limits                            |
+| THROW                             | `AT THROW`                                  | Throwable available as `$^`                                |
+| JDBC_EXECUTE                      | `AT ENTRY` + `AT EXIT` around JDBC call     | IO timing boundary                                         |
+| THREAD_LIFECYCLE                  | `AT ENTRY` on `Thread.start()` / `join(..)` | Lifecycle call boundary                                    |
 
-```bash
-./gradlew clean check
-```
+## Slice Plan
 
-Wenn Maven-Adapter vorhanden und baubar:
+### Slice 0 — Baseline and reproducibility
 
-```bash
-mvn clean package
-```
+Goal: Establish current behavior without changing production logic.
 
-oder, falls Maven nur in einem Untermodul liegt:
+Files likely inspected:
 
-```bash
-mvn -f plugin/maven/pom.xml clean package
-```
+* `forensics.btm`
+* `src/main/java/de/burger/forensics/plugin/btmgen/render/api/RuleParams.java`
+* `src/main/java/de/burger/forensics/plugin/btmgen/internal/BytemanRuleRenderAdapter.java`
+* `src/main/java/de/burger/forensics/plugin/btmgen/render/impl/*RuleStrategy.java`
+* `src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java`
+* `src/main/java/de/burger/forensics/domain/strategy/DefaultStrategyFactory.java`
+* `src/test/java/de/burger/forensics/plugin/btmgen/**`
 
-Danach prüfen, ob ein Maven-Plugin-Descriptor im JAR liegt:
-
-```bash
-jar tf target/*.jar | grep "META-INF/maven/plugin.xml"
-```
-
-Wenn der Befehl wegen Gradle-Struktur nicht passt, passenden tatsächlichen JAR-Pfad verwenden.
-
----
-
-## Phase 9 — Mini-Regressionsanalyse mit erzeugter BTM-Datei
-
-Erzeuge, falls möglich, eine kleine `forensics.btm` gegen Testquellen oder ein kleines Beispielprojekt.
-
-Prüfe automatisch oder manuell:
-
-```text
-No THROW rule has a non-boolean throw expression as IF condition.
-No method has multiple generic RETURN AT EXIT rules.
-No rules are generated for src/test/java when default sourceRoot is used.
-No rules are generated for target/build/.git directories.
-Rule ids remain unique.
-Rule blocks remain syntactically complete.
-```
-
-Nützliche Prüfkommandos:
-
-```bash
-grep -n "AT THROW" target/forensics/forensics.btm | head
-
-grep -n "IF " target/forensics/forensics.btm | head
-
-grep -n "AT EXIT" target/forensics/forensics.btm | head
-```
-
-Wenn ein Skript ergänzt wird, dann nur als Test- oder Verification-Helfer, nicht als Produktionsumgehung.
-
----
-
-## Phase 10 — Diff prüfen
-
-Vor dem Abschluss:
+Commands:
 
 ```bash
 git status --short
-git diff --stat
 git diff
+git diff --cached
+./gradlew test --stacktrace
 ```
 
-Prüfe besonders:
+Expected result:
+
+* Current tests may pass even though the generated output is semantically incomplete.
+* If Gradle Wrapper must download Gradle and network is unavailable, record the blocker exactly.
+
+### Slice 1 — Make rendering line-aware
+
+Goal: Pass `SourceLocation.line()` into renderer strategies.
+
+Expected changes:
+
+* Extend `RuleParams` with `line` or introduce `RuleLocationParams`.
+* Update `BytemanRuleRenderAdapter` to pass `rule.location().line()`.
+* Add shared SPI helper for `AT LINE` fallback.
+* Update tests for constructor/factory changes.
+
+Expected tests:
+
+```bash
+./gradlew test --tests "de.burger.forensics.plugin.btmgen.render.impl.*" --stacktrace
+./gradlew test --tests "de.burger.forensics.plugin.btmgen.gradle.GenerateBtmTaskTest" --stacktrace
+```
+
+### Slice 2 — Render IF rules at source lines from the committed source
+
+Goal: Ensure source and generated BTM output are aligned for IF rules.
+
+Expected changes:
+
+* `IfTrueRuleStrategy` uses `AT LINE <line>` when line is available.
+* `IfFalseRuleStrategy` uses `AT LINE <line>` when line is available.
+* Tests assert no `AT ENTRY` for IF rules with line data.
+
+Acceptance criteria:
+
+* IF rules generated from scanned Java source contain `AT LINE`.
+* IF fallback is explicit for missing line numbers.
+* No `ENABLE_LOG` appears.
+* No `helper().` appears.
+
+### Slice 3 — Fix switch and switch-case rendering semantics
+
+Goal: Prevent switch/case rules from firing at method entry.
+
+Expected changes:
+
+* `SwitchRuleStrategy` uses line-aware location.
+* `SwitchCaseRuleStrategy` uses line-aware location where available.
+* Preserve selector/label metadata correctly.
+* Do not discard `Rule.condition()` for `SWITCH`.
+
+Expected tests:
+
+* Switch rule generated from a source `switch` contains `AT LINE`.
+* Switch-case generated from a source case contains `AT LINE` when line is available.
+* `onSwitch(...)` contains useful selector metadata.
+* `onCase(...)` contains the case label only, not a duplicated method label.
+
+### Slice 4 — Fix return-value tracing for boolean methods
+
+Goal: Boolean return values must be traced for both `true` and `false`.
+
+Expected changes:
+
+* `DefaultStrategyFactory` must not turn boolean return tracing into `IF $!`.
+* `ReturnRuleStrategy` should render `IF true` for return value capture.
+* Keep `$!` only in the `DO` action for non-void return value capture.
+* Avoid `$!` for void methods.
+
+Expected tests:
+
+* Boolean return rule uses `IF true`.
+* Boolean return rule action still passes `$!`.
+* Non-boolean return rule uses `IF true`.
+* Void method exit uses `null` and does not use `$!`.
+
+### Slice 5 — Normalize display names
+
+Goal: Remove duplicated `class#method#method` names.
+
+Expected changes:
+
+* Define one display-name contract.
+* Update all strategy rule titles consistently.
+* Keep action payloads stable unless explicitly changed.
+
+Expected tests:
+
+* Rule title contains `com.example.Foo#bar`.
+* Rule title does not contain `com.example.Foo#bar#bar`.
+* Switch-case rule title does not become `CASE#method` unless that is intentionally documented.
+
+### Slice 6 — Clarify safe-eval event semantics
+
+Goal: Avoid misleading duplicate branch telemetry.
+
+Expected changes:
+
+Choose one of these policies:
+
+A. Keep both evaluation and branch-taken events, but rename/structure evaluation output so it is not emitted as `BRANCH_TAKEN`.
+
+B. Use `eval(...)` only as a safe boolean guard and emit branch events only in the `DO` block.
+
+Recommended: Policy B for lower noise in large traces.
+
+Expected tests:
+
+* `eval(...)` returns the condition value.
+* `eval(...)` records condition errors.
+* `eval(...)` does not emit a misleading branch-taken event for the non-taken branch.
+* `onBranch(...)` remains the only branch-taken event.
+
+### Slice 7 — Add validation/reporting for unresolved type references
+
+Goal: Make Byteman injection risks visible before loading a huge `.btm` file.
+
+Expected changes:
+
+* Add a lightweight validation/report object for expressions that contain suspicious unresolved simple type names.
+* Do not fail generation by default unless strict validation mode is enabled.
+* Document known limitations around imports, debug information, and local variable names.
+
+Expected tests:
+
+* Condition with imported simple type name is reported or qualified.
+* Condition with already fully qualified type is accepted.
+* Local variables and parameters using `$name` / `$1` are not falsely reported as unresolved types.
+
+### Slice 8 — Regenerate and verify `forensics.btm`
+
+Goal: Produce a new generated output that matches the fixed source.
+
+Expected commands:
+
+```bash
+./gradlew clean test --stacktrace
+./gradlew generateForensicsRules --stacktrace
+```
+
+If testing against WildFly or another external project:
+
+```bash
+./gradlew generateForensicsRules --stacktrace
+```
+
+Expected output checks:
+
+```bash
+grep -c '^RULE ' build/forensics/forensics.btm
+grep -c '^ENDRULE' build/forensics/forensics.btm
+grep -c 'helper().' build/forensics/forensics.btm
+grep -c 'ENABLE_LOG' build/forensics/forensics.btm
+grep -c 'AT ENTRY' build/forensics/forensics.btm
+grep -c 'AT LINE' build/forensics/forensics.btm
+grep -c 'IF \$!' build/forensics/forensics.btm
+grep -E ':[[:space:]]+[a-z-]+ .*#([^#]+)#\1$' build/forensics/forensics.btm
+```
+
+Acceptance criteria:
+
+* `RULE` count equals `ENDRULE` count.
+* `helper().` count is `0`.
+* `ENABLE_LOG` count is `0`.
+* IF branch rules use `AT LINE` when line data exists.
+* Switch rules no longer default to `AT ENTRY` when line data exists.
+* Switch-case rules no longer default to `AT ENTRY` when line data exists.
+* Return value rules do not use `IF $!`.
+* No duplicated `class#method#method` rule display names remain.
+
+### Slice 9 — Final quality gate and report
+
+Goal: Verify final state and document remaining limits.
+
+Commands:
+
+```bash
+git status --short
+./gradlew test --stacktrace
+./gradlew check --stacktrace
+```
+
+If `QUALITY.md` defines a broader command, use that command exactly.
+
+Final report must include:
+
+* Files changed
+* Tests executed
+* Quality gate result
+* BTM rule count summary
+* Known Byteman limitations
+* Any unresolved validation warnings
+* Whether the generated `forensics.btm` was regenerated from source
+
+## Definition of Done
+
+The workload is complete only when all of the following are true:
+
+* The committed source can actually generate the observed BTM strategy.
+* IF branch rules are line-aware.
+* Switch and switch-case rules are line-aware where possible.
+* Boolean `false` return values are not lost.
+* Rule display names are not duplicated.
+* Helper calls remain direct.
+* No `ENABLE_LOG` placeholder leaks into generated rules.
+* Tests cover line-aware rendering, return-value tracing, switch rendering, and display-name normalization.
+* The final BTM output is regenerated from the fixed generator.
+* Remaining Byteman limitations are explicitly documented instead of hidden.
+
+## Recommended Commit Structure
 
 ```text
-- keine generierten Großdateien committed
-- keine forensics.btm committed, außer sie ist bewusst eine kleine Testfixture
-- keine WildFly-Analyse-Artefakte committed
-- keine IDE-Dateien committed
-- keine target/build-Dateien committed
+test: capture current btm rendering expectations
+feat: pass source line metadata into btm rule rendering
+fix: render branch rules at source line locations
+fix: render switch rules at source line locations
+fix: trace boolean return values without filtering false results
+fix: normalize btm rule display names
+docs: document btm generation limits and validation workflow
 ```
 
----
-
-## Akzeptanzkriterien
-
-Die Aufgabe ist erfüllt, wenn:
-
-```text
-1. THROW rules use a boolean condition, normally IF true.
-2. THROW rules call onException($^).
-3. RETURN rules no longer create multiple generic AT EXIT rules per method.
-4. The scanner or adapter does not scan src/test/java by default.
-5. Build output directories are excluded from scanning.
-6. Existing Gradle behavior remains intact.
-7. Maven adapter status is clearly verified or blocker is documented.
-8. JUnit tests cover the fixed behavior.
-9. ./gradlew clean test passes.
-10. ./gradlew clean check passes, unless an existing unrelated blocker is documented.
-```
-
----
-
-## Nicht-Ziele
-
-Nicht in dieser Aufgabe erledigen:
-
-```text
-- Full Control Flow Graph implementation
-- Data Flow Graph or Program Dependence Graph implementation
-- JavaParser Symbol Solver full integration, unless already present and low-risk
-- Graph database integration
-- UML renderer implementation
-- Massive Maven/Gradle build restructuring
-- WildFly-specific hardcoding
-- Lowering coverage thresholds
-- Disabling failing tests
-- Removing quality gates
-```
-
----
-
-## Abschlussbericht
-
-Am Ende muss Codex berichten:
-
-```text
-Summary:
-- What changed
-- Why it changed
-- Which files were affected
-
-Verification:
-- Commands run
-- Results
-
-BTM behavior:
-- THROW rule behavior after fix
-- RETURN rule behavior after fix
-- Scan scope behavior after fix
-
-Maven status:
-- Maven adapter present: yes/no
-- Maven plugin descriptor generation present: yes/no
-- Maven execution tested: yes/no
-- Remaining Maven blocker, if any
-
-Risks / Follow-ups:
-- Remaining limitations
-- Especially method signature limitations if full FQNs are not available
-```
-
----
-
-## Commit Message Vorlage
-
-```text
-fix: harden BTM rule generation for Maven and Gradle analysis
-
-Fix Byteman rule generation issues discovered during large-project analysis.
-
-Changes:
-- Use a boolean condition for THROW rules instead of rendering throw expressions as IF conditions.
-- Prevent redundant generic RETURN AT EXIT rules for methods with multiple return statements.
-- Prepare or propagate method signature information where safely available.
-- Restrict default scan scope to production Java sources and exclude build/test/output directories.
-- Keep Maven adapter behavior aligned with the shared application use case.
-
-Why:
-- Byteman IF clauses require boolean expressions.
-- Multiple RETURN rules bound to the same AT EXIT location create redundant instrumentation.
-- Large projects such as WildFly expose scan-scope and overload-resolution weaknesses.
-
-Verification:
-- ./gradlew clean test
-- ./gradlew clean check
-- Maven plugin verification if applicable
-
-Notes:
-- No generated large BTM files are committed.
-```
+Do not squash these slices until review is complete.
