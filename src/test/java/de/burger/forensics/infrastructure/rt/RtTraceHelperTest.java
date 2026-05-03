@@ -21,18 +21,26 @@ class RtTraceHelperTest {
     void evalReturnsValueFromSupplier() {
         RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
 
-        boolean result = helper.eval("rule-1", "flag", () -> true);
+        AtomicBoolean result = new AtomicBoolean(false);
+        String output = RtTraceLogCapture.capture(() ->
+                result.set(helper.eval("rule-1", "flag", () -> true)));
 
-        assertThat(result).isTrue();
+        assertThat(result.get()).isTrue();
+        assertThat(output)
+                .doesNotContain("\"event\":\"BRANCH_TAKEN\"")
+                .doesNotContain("\"event\":\"CONDITION_ERROR\"");
     }
 
     @Test
     void evalPropagatesFalseValueFromBooleanOverload() {
         RtTraceHelper helper = new RtTraceHelper(mock(Rule.class));
 
-        boolean result = helper.eval("rule-2", "flag", false);
+        AtomicBoolean result = new AtomicBoolean(true);
+        String output = RtTraceLogCapture.capture(() ->
+                result.set(helper.eval("rule-2", "flag", false)));
 
-        assertThat(result).isFalse();
+        assertThat(result.get()).isFalse();
+        assertThat(output).doesNotContain("\"event\":\"BRANCH_TAKEN\"");
     }
 
     @Test
@@ -46,7 +54,8 @@ class RtTraceHelperTest {
         assertThat(result.get()).isFalse();
         assertThat(output)
             .contains("\"event\":\"CONDITION_ERROR\"")
-            .contains("\"rule\":\"rule-3\"");
+            .contains("\"rule\":\"rule-3\"")
+            .doesNotContain("\"event\":\"BRANCH_TAKEN\"");
     }
 
     @Test
