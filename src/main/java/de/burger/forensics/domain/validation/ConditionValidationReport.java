@@ -12,16 +12,25 @@ import java.util.Set;
 /**
  * Immutable report for non-fatal condition validation findings.
  */
-public record ConditionValidationReport(List<ConditionValidationIssue> issues) {
+public record ConditionValidationReport(List<ConditionValidationIssue> issues,
+                                        List<ConditionValidationIssue> suppressedIssues) {
+
+    public ConditionValidationReport(List<ConditionValidationIssue> issues) {
+        this(issues, List.of());
+    }
 
     public ConditionValidationReport {
         LinkedHashMap<IssueKey, ConditionValidationIssue> unique = new LinkedHashMap<>();
         Objects.requireNonNull(issues, "issues").forEach(issue -> unique.putIfAbsent(issueKey(issue), issue));
         issues = List.copyOf(unique.values());
+        LinkedHashMap<IssueKey, ConditionValidationIssue> suppressed = new LinkedHashMap<>();
+        Objects.requireNonNull(suppressedIssues, "suppressedIssues")
+                .forEach(issue -> suppressed.putIfAbsent(issueKey(issue), issue));
+        suppressedIssues = List.copyOf(suppressed.values());
     }
 
     public static ConditionValidationReport empty() {
-        return new ConditionValidationReport(List.of());
+        return new ConditionValidationReport(List.of(), List.of());
     }
 
     public boolean hasIssues() {
@@ -34,6 +43,14 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues) {
 
     public int uniqueSymbolCount() {
         return uniqueSymbols().size();
+    }
+
+    public boolean hasSuppressedIssues() {
+        return !suppressedIssues.isEmpty();
+    }
+
+    public int suppressedIssueCount() {
+        return suppressedIssues.size();
     }
 
     public Set<String> uniqueSymbols() {
@@ -64,7 +81,10 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues) {
         LinkedHashMap<IssueKey, ConditionValidationIssue> merged = new LinkedHashMap<>();
         issues.forEach(issue -> merged.put(issueKey(issue), issue));
         other.issues().forEach(issue -> merged.putIfAbsent(issueKey(issue), issue));
-        return new ConditionValidationReport(new ArrayList<>(merged.values()));
+        LinkedHashMap<IssueKey, ConditionValidationIssue> mergedSuppressed = new LinkedHashMap<>();
+        suppressedIssues.forEach(issue -> mergedSuppressed.put(issueKey(issue), issue));
+        other.suppressedIssues().forEach(issue -> mergedSuppressed.putIfAbsent(issueKey(issue), issue));
+        return new ConditionValidationReport(new ArrayList<>(merged.values()), new ArrayList<>(mergedSuppressed.values()));
     }
 
     private static IssueKey issueKey(ConditionValidationIssue issue) {

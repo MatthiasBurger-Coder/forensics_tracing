@@ -85,6 +85,7 @@ public final class JsonScanProfileSinkAdapter implements ScanProfileSinkPort {
         json.append("  \"conditionValidation\": {\n");
         json.append("    \"issueCount\": ").append(validationReport.issueCount()).append(",\n");
         json.append("    \"uniqueSymbolCount\": ").append(validationReport.uniqueSymbolCount()).append(",\n");
+        json.append("    \"suppressedByAllowlist\": ").append(validationReport.suppressedIssueCount()).append(",\n");
         json.append("    \"issues\": [");
         if (!validationReport.issues().isEmpty()) {
             json.append('\n');

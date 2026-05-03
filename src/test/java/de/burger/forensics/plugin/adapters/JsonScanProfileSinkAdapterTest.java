@@ -133,6 +133,23 @@ class JsonScanProfileSinkAdapterTest {
     }
 
     @Test
+    void writesSuppressedAllowlistCount(@TempDir Path tempDir) throws Exception {
+        Path report = tempDir.resolve("scan-profile.json");
+        JsonScanProfileSinkAdapter sink = new JsonScanProfileSinkAdapter(report);
+        ConditionValidationIssue suppressed = new ConditionValidationIssue(
+                new SourceLocation("com.example.Sample", "run", 42),
+                "DeploymentType.EAR != null",
+                "DeploymentType",
+                RuleTemplate.IF_TRUE);
+        ConditionValidationReport validationReport = new ConditionValidationReport(List.of(), List.of(suppressed));
+
+        sink.publish(ScanProfile.empty(), validationReport);
+
+        String json = Files.readString(report);
+        assertThat(json).contains("\"suppressedByAllowlist\": 1");
+    }
+
+    @Test
     void writesLegacyValidationIssuesWithoutTemplate(@TempDir Path tempDir) throws Exception {
         Path report = tempDir.resolve("scan-profile.json");
         JsonScanProfileSinkAdapter sink = new JsonScanProfileSinkAdapter(report);
