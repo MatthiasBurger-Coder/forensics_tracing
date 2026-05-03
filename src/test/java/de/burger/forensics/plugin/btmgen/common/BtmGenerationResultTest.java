@@ -1,5 +1,6 @@
 package de.burger.forensics.plugin.btmgen.common;
 
+import de.burger.forensics.domain.validation.ConditionValidationReport;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -22,7 +23,8 @@ class BtmGenerationResultTest {
                 6,
                 1,
                 4,
-                3
+                3,
+                ConditionValidationReport.empty()
         );
 
         assertEquals(OUTPUT_FILE, result.outputFile());
@@ -33,6 +35,7 @@ class BtmGenerationResultTest {
         assertEquals(1, result.failedFileCount());
         assertEquals(4, result.cacheHitCount());
         assertEquals(3, result.cacheMissCount());
+        assertFalse(result.validationReport().hasIssues());
     }
 
     @Test
@@ -45,7 +48,8 @@ class BtmGenerationResultTest {
                 0,
                 0,
                 0,
-                0
+                0,
+                ConditionValidationReport.empty()
         ));
         assertThrows(NullPointerException.class, () -> new BtmGenerationResult(
                 OUTPUT_FILE,
@@ -55,7 +59,19 @@ class BtmGenerationResultTest {
                 0,
                 0,
                 0,
-                0
+                0,
+                ConditionValidationReport.empty()
+        ));
+        assertThrows(NullPointerException.class, () -> new BtmGenerationResult(
+                OUTPUT_FILE,
+                PROFILE_REPORT_FILE,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                null
         ));
     }
 
@@ -81,7 +97,8 @@ class BtmGenerationResultTest {
                             counters[2],
                             counters[3],
                             counters[4],
-                            counters[5]
+                            counters[5],
+                            ConditionValidationReport.empty()
                     )
             );
 

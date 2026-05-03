@@ -13,6 +13,7 @@ public record GenerationRequest(Path root,
                                 boolean includeEntryExit,
                                 List<String> packagePrefixes,
                                 int minBranches,
+                                boolean strictConditionValidation,
                                 List<String> trackedVariables) {
     public static final String DEFAULT_HELPER_FQCN = "de.burger.forensics.infrastructure.rt.RtTraceHelper";
 

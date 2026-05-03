@@ -25,6 +25,7 @@ class BtmGenerationRequestTest {
                 .cacheBackend("h2")
                 .profilingEnabled(true)
                 .strictParsing(true)
+                .strictConditionValidation(true)
                 .dependencyAwareInvalidation(false)
                 .includePackages(includePackages)
                 .excludePackages(excludePackages)
@@ -49,6 +50,7 @@ class BtmGenerationRequestTest {
         assertEquals("h2", request.cacheBackend());
         assertTrue(request.profilingEnabled());
         assertTrue(request.strictParsing());
+        assertTrue(request.strictConditionValidation());
         assertFalse(request.dependencyAwareInvalidation());
         assertEquals("com.example.Helper", request.helperFqn());
         assertFalse(request.includeEntryExit());
@@ -71,6 +73,7 @@ class BtmGenerationRequestTest {
         assertEquals(BtmGenerationDefaults.DEFAULT_CACHE_BACKEND, request.cacheBackend());
         assertFalse(request.profilingEnabled());
         assertFalse(request.strictParsing());
+        assertFalse(request.strictConditionValidation());
         assertFalse(request.dependencyAwareInvalidation());
         assertEquals(List.of(), request.includePackages());
         assertEquals(List.of(), request.excludePackages());

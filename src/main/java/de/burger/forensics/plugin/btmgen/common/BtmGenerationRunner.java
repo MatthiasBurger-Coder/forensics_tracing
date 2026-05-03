@@ -4,6 +4,7 @@ import de.burger.forensics.adapters.javaparser.CachedJavaParserScanner;
 import de.burger.forensics.adapters.javaparser.JavaParserScanner;
 import de.burger.forensics.adapters.persistence.h2.H2ScanCacheAdapter;
 import de.burger.forensics.adaptersupport.javaparser.DefaultSourceFingerprintPort;
+import de.burger.forensics.application.service.ConditionValidationException;
 import de.burger.forensics.application.service.GenerateRulesUseCase;
 import de.burger.forensics.application.service.GenerationRequest;
 import de.burger.forensics.application.service.RuleGenerationResult;
@@ -15,6 +16,7 @@ import de.burger.forensics.domain.port.out.LogPort;
 import de.burger.forensics.domain.port.out.RuleRenderPort;
 import de.burger.forensics.domain.port.out.ScanProfileSinkPort;
 import de.burger.forensics.domain.strategy.DefaultStrategyFactory;
+import de.burger.forensics.domain.validation.ConditionValidationReport;
 import de.burger.forensics.plugin.adapters.JsonScanProfileSinkAdapter;
 import de.burger.forensics.plugin.adapters.SystemClockAdapter;
 import de.burger.forensics.plugin.btmgen.internal.BytemanRuleRenderAdapter;
@@ -64,11 +66,13 @@ public final class BtmGenerationRunner {
 
         createOutputDirectory(outputFile);
 
-        List<String> allRules = request.templateRequest()
-                .map(template -> renderTemplate(renderer, request, template, profileCollector))
+        RunOutput output = request.templateRequest()
+                .map(template -> new RunOutput(
+                        renderTemplate(renderer, request, template, profileCollector),
+                        ConditionValidationReport.empty()))
                 .orElseGet(() -> scanSources(renderer, request, profileCollector));
 
-        List<String> uniqueRules = new ArrayList<>(new LinkedHashSet<>(allRules));
+        List<String> uniqueRules = new ArrayList<>(new LinkedHashSet<>(output.rules()));
         List<String> dedupedRuleNames = dedupeRuleHeaders(uniqueRules);
         profileCollector.measure(ScanPhase.BTM_FILE_WRITING, () -> {
             writeRules(request, dedupedRuleNames);
@@ -87,7 +91,8 @@ public final class BtmGenerationRunner {
                 profile.parsedFiles(),
                 profile.failedFiles(),
                 profile.cacheHitFiles(),
-                profile.cacheMissFiles()
+                profile.cacheMissFiles(),
+                output.validationReport()
         );
     }
 
@@ -128,9 +133,9 @@ public final class BtmGenerationRunner {
                 () -> renderer.render(template.templateId(), params)));
     }
 
-    private List<String> scanSources(BytemanRuleRenderer renderer,
-                                     BtmGenerationRequest request,
-                                     ScanProfileCollector profileCollector) {
+    private RunOutput scanSources(BytemanRuleRenderer renderer,
+                                  BtmGenerationRequest request,
+                                  ScanProfileCollector profileCollector) {
         RuleRenderPort ruleRenderer = profileCollector.wrap(new BytemanRuleRenderAdapter(renderer));
         GenerateRulesUseCase useCase = new GenerateRulesUseCase(
                 createScanner(request, profileCollector),
@@ -140,6 +145,7 @@ public final class BtmGenerationRunner {
                 new DefaultStrategyFactory()
         );
         List<String> allRules = new ArrayList<>();
+        ConditionValidationReport validationReport = ConditionValidationReport.empty();
         for (Path srcRoot : request.sourceRoots()) {
             log.info("Scanning sources in " + srcRoot.toAbsolutePath());
             GenerationRequest generationRequest = new GenerationRequest(
@@ -149,12 +155,19 @@ public final class BtmGenerationRunner {
                     request.includeEntryExit(),
                     request.includePackages(),
                     request.minBranchesPerMethod(),
+                    request.strictConditionValidation(),
                     List.of()
             );
-            RuleGenerationResult result = useCase.generate(generationRequest);
+            RuleGenerationResult result;
+            try {
+                result = useCase.generate(generationRequest);
+            } catch (ConditionValidationException exception) {
+                throw new BtmGenerationException(exception.getMessage(), exception);
+            }
             allRules.addAll(result.renderedRules());
+            validationReport = validationReport.merge(result.validationReport());
         }
-        return allRules;
+        return new RunOutput(allRules, validationReport);
     }
 
     private CodeScanPort createScanner(BtmGenerationRequest request, ScanProfileCollector profileCollector) {
@@ -371,5 +384,8 @@ public final class BtmGenerationRunner {
     }
 
     private record RuleHeader(int startIndex, int endIndex, String prefix, String name) {
+    }
+
+    private record RunOutput(List<String> rules, ConditionValidationReport validationReport) {
     }
 }

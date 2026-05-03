@@ -20,6 +20,7 @@ class BtmGenerationDefaultsTest {
         assertFalse(BtmGenerationDefaults.DEFAULT_CACHE_ENABLED);
         assertFalse(BtmGenerationDefaults.DEFAULT_PROFILING_ENABLED);
         assertFalse(BtmGenerationDefaults.DEFAULT_STRICT_PARSING);
+        assertFalse(BtmGenerationDefaults.DEFAULT_STRICT_CONDITION_VALIDATION);
         assertFalse(BtmGenerationDefaults.DEFAULT_DEPENDENCY_AWARE_INVALIDATION);
         assertFalse(BtmGenerationDefaults.DEFAULT_INCLUDE_TIMESTAMP_HEADER);
         assertTrue(BtmGenerationDefaults.DEFAULT_INCLUDE_ENTRY_EXIT);

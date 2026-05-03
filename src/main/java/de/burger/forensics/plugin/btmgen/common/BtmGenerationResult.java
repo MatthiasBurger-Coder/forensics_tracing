@@ -1,5 +1,7 @@
 package de.burger.forensics.plugin.btmgen.common;
 
+import de.burger.forensics.domain.validation.ConditionValidationReport;
+
 import java.nio.file.Path;
 import java.util.Objects;
 
@@ -14,7 +16,8 @@ public record BtmGenerationResult(
         int parsedFileCount,
         int failedFileCount,
         int cacheHitCount,
-        int cacheMissCount
+        int cacheMissCount,
+        ConditionValidationReport validationReport
 ) {
 
     public BtmGenerationResult {
@@ -26,6 +29,7 @@ public record BtmGenerationResult(
         requireNonNegative(failedFileCount, "failedFileCount");
         requireNonNegative(cacheHitCount, "cacheHitCount");
         requireNonNegative(cacheMissCount, "cacheMissCount");
+        Objects.requireNonNull(validationReport, "validationReport");
     }
 
     private static void requireNonNegative(int value, String fieldName) {

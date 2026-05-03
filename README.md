@@ -117,6 +117,7 @@ Minimal `pom.xml` configuration:
     <configuration>
         <cacheEnabled>false</cacheEnabled>
         <strictParsing>false</strictParsing>
+        <strictConditionValidation>false</strictConditionValidation>
         <outputFile>${project.build.directory}/forensics/generated.btm</outputFile>
     </configuration>
 </plugin>
@@ -324,9 +325,11 @@ The verified configuration split is:
   - `helperFqn`
   - `includes`
   - `minBranchesPerMethod`
+  - `strictConditionValidation`
 - Task `generateBtmRules`
   - `includeEntryExit`
   - `minBranchesPerMethod`
+  - `strictConditionValidation`
   - single-template inputs such as `templateId`, `className`, `methodName`, `methodDesc`
 
 `minBranchesPerMethod` exists on both the extension and the task. The plugin copies the extension value into the task as a convention, and the task can override it explicitly.
@@ -341,6 +344,7 @@ btmGen {
     helperFqn.set("de.burger.forensics.infrastructure.rt.RtTraceHelper")
     includes.set("com.example,org.acme")
     minBranchesPerMethod.set(2)
+    strictConditionValidation.set(false)
 }
 
 tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateBtmTask>("generateBtmRules") {
@@ -367,6 +371,7 @@ Supported Maven parameters use the `forensics.*` user-property prefix:
 - `profilingEnabled`
 - `profileReportFile`
 - `strictParsing`
+- `strictConditionValidation`
 - `dependencyAwareInvalidation`
 - `includePackages`
 - `excludePackages`
@@ -662,6 +667,9 @@ About `forensics.aspect.enabled`:
 
 - Package filtering matches nothing:
   `includes` is a comma-separated prefix filter over fully qualified class names. If no class name starts with one of those prefixes, scan mode produces no matching rules.
+
+- Condition validation warnings:
+  Generation reports suspicious simple type references such as `DeploymentType.EAR` because Byteman may not resolve source imports while loading a `.btm` file. The default is warning-only reporting. Set `strictConditionValidation=true` to fail generation on those findings. Known limitations: the validator cannot reconstruct every source import, debug local-variable table, or runtime classloader lookup, and it treats `$name` / `$1` Byteman variables as already resolved.
 
 - Blank helper FQCN does not stay blank:
   Both `GenerationRequest` and `RuleParams` normalize blank helper values back to `de.burger.forensics.infrastructure.rt.RtTraceHelper`.

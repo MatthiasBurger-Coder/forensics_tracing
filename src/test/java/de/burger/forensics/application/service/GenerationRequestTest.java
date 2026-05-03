@@ -19,10 +19,12 @@ class GenerationRequestTest {
             true,
             List.of("com.example"),
             1,
+            true,
             List.of("value")
         );
 
         assertThat(request.packagePrefixes()).containsExactly("com.example");
+        assertThat(request.strictConditionValidation()).isTrue();
         assertThat(request.trackedVariables()).containsExactly("value");
     }
 
@@ -35,6 +37,7 @@ class GenerationRequestTest {
             true,
             null,
             0,
+            false,
             null
         );
 
@@ -51,6 +54,7 @@ class GenerationRequestTest {
             true,
             List.of(),
             0,
+            false,
             List.of()
         );
 
@@ -67,6 +71,7 @@ class GenerationRequestTest {
             true,
             emptyList,
             0,
+            false,
             emptyList
         )).isInstanceOf(NullPointerException.class);
 
@@ -78,6 +83,7 @@ class GenerationRequestTest {
             true,
             emptyList,
             0,
+            false,
             emptyList
         )).isInstanceOf(NullPointerException.class);
     }

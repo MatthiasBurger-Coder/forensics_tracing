@@ -33,6 +33,7 @@ class MavenBtmGenParametersTest {
                 true,
                 null,
                 true,
+                true,
                 false,
                 "com.example, org.demo, com.example",
                 "com.skip, , org.skip",
@@ -53,6 +54,7 @@ class MavenBtmGenParametersTest {
         assertThat(request.cacheBackend()).isEqualTo(BtmGenerationDefaults.DEFAULT_CACHE_BACKEND);
         assertThat(request.profilingEnabled()).isTrue();
         assertThat(request.strictParsing()).isTrue();
+        assertThat(request.strictConditionValidation()).isTrue();
         assertThat(request.includePackages()).containsExactly("com.example", "org.demo");
         assertThat(request.excludePackages()).containsExactly("com.skip", "org.skip");
         assertThat(request.helperFqn()).isEqualTo(BtmGenerationDefaults.DEFAULT_HELPER_FQN);
@@ -76,6 +78,7 @@ class MavenBtmGenParametersTest {
                 tempDir.resolve("custom/cache/scan-cache").toFile(),
                 false,
                 tempDir.resolve("custom/profile.json").toFile(),
+                false,
                 false,
                 false,
                 "",
@@ -107,6 +110,7 @@ class MavenBtmGenParametersTest {
                 null,
                 false,
                 null,
+                false,
                 false,
                 false,
                 "",
@@ -207,6 +211,7 @@ class MavenBtmGenParametersTest {
                 null,
                 false,
                 null,
+                false,
                 false,
                 false,
                 "",

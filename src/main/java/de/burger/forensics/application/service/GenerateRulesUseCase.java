@@ -60,6 +60,7 @@ public final class GenerateRulesUseCase {
         List<ScanEvent> events = collectScanEvents(request);
         log.debug("Scanned " + events.size() + " events");
         events.forEach(context::addEvent);
+        var validationReport = ConditionValidationSupport.validate(request, context, log, events);
 
         Map<String, List<ScanEvent>> byMethod = groupEventsByMethod(events);
         populateMethodContexts(context, byMethod);
@@ -69,7 +70,7 @@ public final class GenerateRulesUseCase {
 
         log.debug("Finished rule generation at " + clock.now() + " with " + rendered.size() + " rules");
         context.markFinished();
-        return new RuleGenerationResult(rendered, context);
+        return new RuleGenerationResult(rendered, context, validationReport);
     }
 
     private List<ScanEvent> collectScanEvents(GenerationRequest request) {

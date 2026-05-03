@@ -34,6 +34,7 @@ public class BtmGenExtension {
     private final Property<@NotNull Boolean> profilingEnabled;
     private final Property<@NotNull File> profileReportFile;
     private final Property<@NotNull Boolean> strictParsing;
+    private final Property<@NotNull Boolean> strictConditionValidation;
     private final Property<@NotNull Boolean> dependencyAwareInvalidation;
 
     @Inject
@@ -52,6 +53,7 @@ public class BtmGenExtension {
         this.profilingEnabled = objects.property(Boolean.class);
         this.profileReportFile = objects.property(File.class);
         this.strictParsing = objects.property(Boolean.class);
+        this.strictConditionValidation = objects.property(Boolean.class);
         this.dependencyAwareInvalidation = objects.property(Boolean.class);
         this.sourceRoot.convention(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
@@ -65,6 +67,7 @@ public class BtmGenExtension {
         this.profilingEnabled.convention(false);
         this.profileReportFile.convention(new File("build/forensics/scan-profile.json"));
         this.strictParsing.convention(false);
+        this.strictConditionValidation.convention(false);
         this.dependencyAwareInvalidation.convention(false);
     }
 
@@ -136,6 +139,10 @@ public class BtmGenExtension {
 
     public Property<@NotNull Boolean> getStrictParsing() {
         return strictParsing;
+    }
+
+    public Property<@NotNull Boolean> getStrictConditionValidation() {
+        return strictConditionValidation;
     }
 
     public Property<@NotNull Boolean> getDependencyAwareInvalidation() {

@@ -55,6 +55,9 @@ public class BtmGenMojo extends AbstractMojo {
     @Parameter(property = "forensics.strictParsing", defaultValue = "false")
     private boolean strictParsing;
 
+    @Parameter(property = "forensics.strictConditionValidation", defaultValue = "false")
+    private boolean strictConditionValidation;
+
     @Parameter(property = "forensics.dependencyAwareInvalidation", defaultValue = "false")
     private boolean dependencyAwareInvalidation;
 
@@ -104,6 +107,7 @@ public class BtmGenMojo extends AbstractMojo {
                 profilingEnabled,
                 profileReportFile,
                 strictParsing,
+                strictConditionValidation,
                 dependencyAwareInvalidation,
                 includePackages,
                 excludePackages,
