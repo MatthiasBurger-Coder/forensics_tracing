@@ -2,8 +2,10 @@ package de.burger.forensics.domain.validation;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Immutable report for non-fatal condition validation findings.
@@ -26,6 +28,25 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues) {
 
     public int issueCount() {
         return issues.size();
+    }
+
+    public int uniqueSymbolCount() {
+        return uniqueSymbols().size();
+    }
+
+    public Set<String> uniqueSymbols() {
+        LinkedHashSet<String> symbols = new LinkedHashSet<>();
+        issues.forEach(issue -> symbols.add(issue.symbol()));
+        return Set.copyOf(symbols);
+    }
+
+    public String summaryMessage(String detailTarget) {
+        String details = detailTarget == null || detailTarget.isBlank()
+                ? "validation report"
+                : detailTarget;
+        return "Suspicious unresolved type references: " + issueCount()
+                + " occurrences, " + uniqueSymbolCount()
+                + " unique names. Details: " + details;
     }
 
     public ConditionValidationReport merge(ConditionValidationReport other) {

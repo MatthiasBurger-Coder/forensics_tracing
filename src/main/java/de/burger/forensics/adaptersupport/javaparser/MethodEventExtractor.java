@@ -1,6 +1,7 @@
 package de.burger.forensics.adaptersupport.javaparser;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -42,7 +43,7 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
         String signature = declaration.getSignature().asString();
         String returnType = declaration.getType().asString();
 
-        MethodScanContext context = new MethodScanContext(declaration, parameterIndexes(declaration), localVariableNames(declaration));
+        MethodScanContext context = methodContext(declaration);
 
         declaration.findAll(IfStmt.class).forEach(ifStmt -> {
             IfStmt current = ifStmt;
@@ -102,6 +103,41 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy)
             }
         }
         return indexes;
+    }
+
+    MethodScanContext methodContext(MethodDeclaration declaration) {
+        return new MethodScanContext(
+                declaration,
+                parameterIndexes(declaration),
+                localVariableNames(declaration),
+                typeImports(declaration),
+                staticMemberImports(declaration));
+    }
+
+    Map<String, String> typeImports(MethodDeclaration declaration) {
+        return declaration.findCompilationUnit()
+                .map(cu -> cu.getImports().stream()
+                        .filter(importDeclaration -> !importDeclaration.isStatic())
+                        .filter(importDeclaration -> !importDeclaration.isAsterisk())
+                        .collect(Collectors.toMap(
+                                importDeclaration -> importDeclaration.getName().getIdentifier(),
+                                ImportDeclaration::getNameAsString,
+                                (left, right) -> left,
+                                LinkedHashMap::new)))
+                .orElseGet(LinkedHashMap::new);
+    }
+
+    Map<String, String> staticMemberImports(MethodDeclaration declaration) {
+        return declaration.findCompilationUnit()
+                .map(cu -> cu.getImports().stream()
+                        .filter(ImportDeclaration::isStatic)
+                        .filter(importDeclaration -> !importDeclaration.isAsterisk())
+                        .collect(Collectors.toMap(
+                                importDeclaration -> importDeclaration.getName().getIdentifier(),
+                                ImportDeclaration::getNameAsString,
+                                (left, right) -> left,
+                                LinkedHashMap::new)))
+                .orElseGet(LinkedHashMap::new);
     }
 
     Set<String> localVariableNames(MethodDeclaration declaration) {

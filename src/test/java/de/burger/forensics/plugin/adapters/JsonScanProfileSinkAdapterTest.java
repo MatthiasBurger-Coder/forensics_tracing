@@ -5,6 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import de.burger.forensics.domain.model.cache.ScanPhase;
 import de.burger.forensics.domain.model.cache.ScanProfile;
+import de.burger.forensics.domain.model.RuleTemplate;
+import de.burger.forensics.domain.model.SourceLocation;
+import de.burger.forensics.domain.validation.ConditionValidationIssue;
+import de.burger.forensics.domain.validation.ConditionValidationReport;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -52,6 +56,54 @@ class JsonScanProfileSinkAdapterTest {
                 .contains("\"CACHE_READ\": 10")
                 .contains("\"RULE_RENDERING\": 20");
         assertThat(json.indexOf("\"CACHE_READ\"")).isLessThan(json.indexOf("\"RULE_RENDERING\""));
+    }
+
+    @Test
+    void writesConditionValidationIssues(@TempDir Path tempDir) throws Exception {
+        Path report = tempDir.resolve("scan-profile.json");
+        JsonScanProfileSinkAdapter sink = new JsonScanProfileSinkAdapter(report);
+        ConditionValidationReport validationReport = new ConditionValidationReport(java.util.List.of(
+                new ConditionValidationIssue(
+                        new SourceLocation("com.example.Sample", "run", 42),
+                        "DeploymentType.EAR != null",
+                        "DeploymentType",
+                        RuleTemplate.IF_TRUE)
+        ));
+
+        sink.publish(ScanProfile.empty(), validationReport);
+
+        String json = Files.readString(report);
+        assertThat(json)
+                .contains("\"conditionValidation\"")
+                .contains("\"issueCount\": 1")
+                .contains("\"uniqueSymbolCount\": 1")
+                .contains("\"symbol\":\"DeploymentType\"")
+                .contains("\"className\":\"com.example.Sample\"")
+                .contains("\"methodName\":\"run\"")
+                .contains("\"line\":42")
+                .contains("\"template\":\"IF_TRUE\"")
+                .contains("\"expressionPreview\":\"DeploymentType.EAR != null\"");
+    }
+
+    @Test
+    void writesLegacyValidationIssuesWithoutTemplate(@TempDir Path tempDir) throws Exception {
+        Path report = tempDir.resolve("scan-profile.json");
+        JsonScanProfileSinkAdapter sink = new JsonScanProfileSinkAdapter(report);
+        ConditionValidationReport validationReport = new ConditionValidationReport(java.util.List.of(
+                new ConditionValidationIssue(
+                        new SourceLocation(null, null, 7),
+                        "\"Quoted\"",
+                        "QuotedSymbol")
+        ));
+
+        sink.publish(ScanProfile.empty(), validationReport);
+
+        String json = Files.readString(report);
+        assertThat(json)
+                .contains("\"className\":\"\"")
+                .contains("\"methodName\":\"\"")
+                .contains("\"template\":\"\"")
+                .contains("\"expressionPreview\":\"\\\"Quoted\\\"\"");
     }
 
     @Test

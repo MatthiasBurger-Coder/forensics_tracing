@@ -30,10 +30,7 @@ class DefaultConditionRenderingStrategyTest {
     @MethodSource("renderConditionCases")
     void rendersExpectedConditions(String source, String expected) {
         MethodDeclaration declaration = parseMethod(source);
-        MethodScanContext context = new MethodScanContext(
-            declaration,
-            helperExtractor.parameterIndexes(declaration),
-            helperExtractor.localVariableNames(declaration));
+        MethodScanContext context = helperExtractor.methodContext(declaration);
         Expression condition = declaration.findFirst(IfStmt.class).orElseThrow().getCondition();
 
         String rendered = strategy.renderCondition(condition, context);
@@ -85,7 +82,53 @@ class DefaultConditionRenderingStrategyTest {
                         return INSTANCE;
                     }
                 }
-                """, "$CLASS.INSTANCE == null")
+                """, "$CLASS.INSTANCE == null"),
+            Arguments.of("""
+                import org.example.DeploymentType;
+                import org.example.DeploymentTypeMarker;
+                class Sample {
+                    boolean check(Object deploymentUnit) {
+                        if (DeploymentTypeMarker.isType(DeploymentType.EAR, deploymentUnit)) {
+                            return true;
+                        }
+                        return false;
+                    }
+                }
+                """, "org.example.DeploymentTypeMarker.isType(org.example.DeploymentType.EAR, $1)"),
+            Arguments.of("""
+                import static org.example.ModelDescriptionConstants.OUTCOME;
+                class Sample {
+                    boolean check(Object result) {
+                        if (OUTCOME.equals(result)) {
+                            return true;
+                        }
+                        return false;
+                    }
+                }
+                """, "org.example.ModelDescriptionConstants.OUTCOME.equals($1)"),
+            Arguments.of("""
+                import static org.example.DeploymentTypeMarker.isType;
+                class Sample {
+                    boolean check(Object deploymentUnit) {
+                        if (isType(deploymentUnit)) {
+                            return true;
+                        }
+                        return false;
+                    }
+                }
+                """, "org.example.DeploymentTypeMarker.isType($1)"),
+            Arguments.of("""
+                import org.example.DeploymentType;
+                class Sample {
+                    boolean check(Object value) {
+                        Object DeploymentType = value;
+                        if (DeploymentType == value) {
+                            return true;
+                        }
+                        return false;
+                    }
+                }
+                """, "$DeploymentType == $1")
         );
     }
 
