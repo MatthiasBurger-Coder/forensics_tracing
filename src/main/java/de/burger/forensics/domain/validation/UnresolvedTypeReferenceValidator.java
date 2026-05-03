@@ -116,43 +116,68 @@ public final class UnresolvedTypeReferenceValidator {
 
     private static String maskLiterals(String expression) {
         StringBuilder out = new StringBuilder(expression.length());
-        boolean inString = false;
-        boolean inChar = false;
-        boolean escaped = false;
+        LiteralMaskState state = LiteralMaskState.outside();
         for (int i = 0; i < expression.length(); i++) {
             char current = expression.charAt(i);
-            if (inString) {
-                out.append(' ');
-                if (escaped) {
-                    escaped = false;
-                } else if (current == '\\') {
-                    escaped = true;
-                } else if (current == '"') {
-                    inString = false;
-                }
-                continue;
-            }
-            if (inChar) {
-                out.append(' ');
-                if (escaped) {
-                    escaped = false;
-                } else if (current == '\\') {
-                    escaped = true;
-                } else if (current == '\'') {
-                    inChar = false;
-                }
-                continue;
-            }
-            if (current == '"') {
-                inString = true;
-                out.append(' ');
-            } else if (current == '\'') {
-                inChar = true;
-                out.append(' ');
-            } else {
-                out.append(current);
-            }
+            out.append(state.mask(current));
+            state = state.next(current);
         }
         return out.toString();
+    }
+
+    private enum LiteralType {
+        NONE,
+        STRING,
+        CHARACTER
+    }
+
+    private record LiteralMaskState(LiteralType type, boolean escaped) {
+
+        static LiteralMaskState outside() {
+            return new LiteralMaskState(LiteralType.NONE, false);
+        }
+
+        char mask(char current) {
+            return insideLiteral() || opensLiteral(current) ? ' ' : current;
+        }
+
+        LiteralMaskState next(char current) {
+            if (!insideLiteral()) {
+                return openLiteral(current);
+            }
+            if (escaped) {
+                return new LiteralMaskState(type, false);
+            }
+            if (current == '\\') {
+                return new LiteralMaskState(type, true);
+            }
+            if (closesLiteral(current)) {
+                return outside();
+            }
+            return this;
+        }
+
+        private boolean insideLiteral() {
+            return type != LiteralType.NONE;
+        }
+
+        private static boolean opensLiteral(char current) {
+            return current == '"' || current == '\'';
+        }
+
+        private static LiteralMaskState openLiteral(char current) {
+            if (current == '"') {
+                return new LiteralMaskState(LiteralType.STRING, false);
+            }
+            if (current == '\'') {
+                return new LiteralMaskState(LiteralType.CHARACTER, false);
+            }
+            return outside();
+        }
+
+        private boolean closesLiteral(char current) {
+            return (type == LiteralType.STRING && current == '"')
+                    || (type == LiteralType.CHARACTER && current == '\'');
+        }
     }
 }

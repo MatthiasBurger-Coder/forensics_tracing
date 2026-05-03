@@ -7,6 +7,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public abstract class AbstractBytemanStrategy {
+    protected static final String AT_EXIT = "AT EXIT";
+    private static final String UNKNOWN_METHOD_LABEL = "<method>";
+
     protected AbstractBytemanStrategy() {}
 
     protected static String safeId(String id) {
@@ -17,9 +20,6 @@ public abstract class AbstractBytemanStrategy {
     }
     protected static String atLineOrEntry(int line) {
         return line > 0 ? "AT LINE " + line : "AT ENTRY";
-    }
-    protected static String atExit() {
-        return "AT EXIT";
     }
     protected static String or(String fallback, String value) {
         return (fallback != null && !fallback.isBlank()) ? fallback : value;
@@ -34,7 +34,9 @@ public abstract class AbstractBytemanStrategy {
     }
     protected static String targetLabel(RuleParams params) {
         String className = (params.className() == null || params.className().isBlank()) ? "<unknown>" : params.className();
-        String methodName = (params.methodName() == null || params.methodName().isBlank()) ? "<method>" : params.methodName();
+        String methodName = (params.methodName() == null || params.methodName().isBlank())
+                ? UNKNOWN_METHOD_LABEL
+                : params.methodName();
         return className + "#" + methodName;
     }
     protected static String optionalLabel(String value, String fallback) {
@@ -57,7 +59,9 @@ public abstract class AbstractBytemanStrategy {
         }
 
         String className = (params.className() == null || params.className().isBlank()) ? "<unknown>" : params.className();
-        String methodName = (params.methodName() == null || params.methodName().isBlank()) ? "<method>" : params.methodName();
+        String methodName = (params.methodName() == null || params.methodName().isBlank())
+                ? UNKNOWN_METHOD_LABEL
+                : params.methodName();
         throw new IllegalArgumentException(
                 templateId + " rule requires a valid source line for " + className + "#" + methodName
         );
@@ -127,7 +131,7 @@ public abstract class AbstractBytemanStrategy {
             return false;
         }
 
-        String method = (methodName == null || methodName.isBlank()) ? "<method>" : methodName;
+        String method = (methodName == null || methodName.isBlank()) ? UNKNOWN_METHOD_LABEL : methodName;
         return value.chars().filter(ch -> ch == '#').count() == 1 && value.endsWith("#" + method);
     }
 

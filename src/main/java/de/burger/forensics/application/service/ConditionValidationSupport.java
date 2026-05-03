@@ -21,9 +21,8 @@ final class ConditionValidationSupport {
                                               LogPort log,
                                               List<ScanEvent> events) {
         ConditionValidationReport report = VALIDATOR.validate(events);
-        report.issues().forEach(issue -> {
-            context.addWarning(new WarningEntry(issue.message(), "condition-validation"));
-        });
+        report.issues().forEach(issue ->
+                context.addWarning(new WarningEntry(issue.message(), "condition-validation")));
         if (report.hasIssues()) {
             log.warn(report.summaryMessage("scan profile report"));
         }

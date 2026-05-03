@@ -12,7 +12,7 @@ public final class ConditionValidationException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
-    private final ConditionValidationReport report;
+    private final transient ConditionValidationReport report;
 
     public ConditionValidationException(ConditionValidationReport report) {
         super(message(report));

@@ -5,6 +5,7 @@ import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.SourceLocation;
 import de.burger.forensics.domain.model.entry.MethodEntry;
+import de.burger.forensics.domain.model.entry.WarningEntry;
 import de.burger.forensics.domain.port.out.ClockPort;
 import de.burger.forensics.domain.port.out.CodeScanPort;
 import de.burger.forensics.domain.port.out.LogPort;
@@ -197,7 +198,7 @@ class GenerateRulesUseCaseTest {
             .extracting(issue -> issue.symbol())
             .containsExactly("DeploymentTypeMarker", "DeploymentType");
         assertThat(result.context().getWarnings())
-            .extracting(warning -> warning.source())
+            .extracting(WarningEntry::source)
             .containsExactly("condition-validation", "condition-validation");
     }
 
@@ -219,7 +220,9 @@ class GenerateRulesUseCaseTest {
             List.of()
         );
 
-        assertThatThrownBy(() -> useCase(events).generate(request))
+        GenerateRulesUseCase useCase = useCase(events);
+
+        assertThatThrownBy(() -> useCase.generate(request))
             .isInstanceOf(ConditionValidationException.class)
             .hasMessageContaining("Condition validation failed with 2 unresolved type reference warning(s)");
     }

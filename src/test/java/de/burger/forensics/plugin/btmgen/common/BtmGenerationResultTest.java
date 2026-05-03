@@ -12,6 +12,7 @@ class BtmGenerationResultTest {
 
     private static final Path OUTPUT_FILE = Path.of("build", "forensics", "rules.btm");
     private static final Path PROFILE_REPORT_FILE = Path.of("build", "forensics", "scan-profile.json");
+    private static final ConditionValidationReport EMPTY_VALIDATION_REPORT = ConditionValidationReport.empty();
 
     @Test
     void resultKeepsGeneratedCounts() {
@@ -24,7 +25,7 @@ class BtmGenerationResultTest {
                 1,
                 4,
                 3,
-                ConditionValidationReport.empty()
+                EMPTY_VALIDATION_REPORT
         );
 
         assertEquals(OUTPUT_FILE, result.outputFile());
@@ -40,39 +41,12 @@ class BtmGenerationResultTest {
 
     @Test
     void resultRejectsMissingPaths() {
-        assertThrows(NullPointerException.class, () -> new BtmGenerationResult(
-                null,
-                PROFILE_REPORT_FILE,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                ConditionValidationReport.empty()
-        ));
-        assertThrows(NullPointerException.class, () -> new BtmGenerationResult(
-                OUTPUT_FILE,
-                null,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                ConditionValidationReport.empty()
-        ));
-        assertThrows(NullPointerException.class, () -> new BtmGenerationResult(
-                OUTPUT_FILE,
-                PROFILE_REPORT_FILE,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                null
-        ));
+        assertThrows(NullPointerException.class,
+                () -> resultWithPathsAndValidation(null, PROFILE_REPORT_FILE, EMPTY_VALIDATION_REPORT));
+        assertThrows(NullPointerException.class,
+                () -> resultWithPathsAndValidation(OUTPUT_FILE, null, EMPTY_VALIDATION_REPORT));
+        assertThrows(NullPointerException.class,
+                () -> resultWithPathsAndValidation(OUTPUT_FILE, PROFILE_REPORT_FILE, null));
     }
 
     @Test
@@ -89,20 +63,42 @@ class BtmGenerationResultTest {
         negativeCounters.forEach((fieldName, counters) -> {
             IllegalArgumentException exception = assertThrows(
                     IllegalArgumentException.class,
-                    () -> new BtmGenerationResult(
-                            OUTPUT_FILE,
-                            PROFILE_REPORT_FILE,
-                            counters[0],
-                            counters[1],
-                            counters[2],
-                            counters[3],
-                            counters[4],
-                            counters[5],
-                            ConditionValidationReport.empty()
-                    )
+                    () -> resultWithCounters(counters)
             );
 
             assertEquals(fieldName + " must not be negative", exception.getMessage());
         });
+    }
+
+    private static BtmGenerationResult resultWithPathsAndValidation(
+            Path outputFile,
+            Path profileReportFile,
+            ConditionValidationReport validationReport
+    ) {
+        return new BtmGenerationResult(
+                outputFile,
+                profileReportFile,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                validationReport
+        );
+    }
+
+    private static BtmGenerationResult resultWithCounters(int[] counters) {
+        return new BtmGenerationResult(
+                OUTPUT_FILE,
+                PROFILE_REPORT_FILE,
+                counters[0],
+                counters[1],
+                counters[2],
+                counters[3],
+                counters[4],
+                counters[5],
+                EMPTY_VALIDATION_REPORT
+        );
     }
 }
