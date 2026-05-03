@@ -131,7 +131,7 @@ public abstract class AbstractBytemanStrategy {
             return false;
         }
 
-        String method = (methodName == null || methodName.isBlank()) ? "<method>" : methodName;
+        String method = (methodName == null || methodName.isBlank()) ? UNKNOWN_METHOD_LABEL : methodName;
         return value.chars().filter(ch -> ch == '#').count() == 1 && value.endsWith("#" + method);
     }
 
