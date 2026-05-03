@@ -9,7 +9,7 @@ abstract class AbstractIfRuleStrategy extends AbstractBytemanStrategy implements
     @Override
     public final String render(RuleParams params) {
         String ruleId = safeId(params.id());
-        int sourceLine = requireSourceLine(params, id());
+        String location = atLineOrEntry(params.sourceLine());
         String condition = sanitizeCondition(params.condition());
         condition = resolveClassPlaceholder(params.className(), condition);
         condition = qualifyStaticNullCheck(params.className(), condition);
@@ -20,7 +20,7 @@ abstract class AbstractIfRuleStrategy extends AbstractBytemanStrategy implements
             CLASS %s
             METHOD %s
             HELPER %s
-            AT LINE %d
+            %s
             IF %s
             DO
                 onBranch(%s.class, "%s", "%s");
@@ -30,7 +30,7 @@ abstract class AbstractIfRuleStrategy extends AbstractBytemanStrategy implements
                 params.className(),
                 methodSig(params.methodName(), params.methodDesc()),
                 params.helperFqn(),
-                sourceLine,
+                location,
                 guardedExpr,
                 params.className(), params.methodName(), id()
         );

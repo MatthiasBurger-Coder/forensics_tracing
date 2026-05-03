@@ -4,7 +4,6 @@ import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class IfRuleStrategyTest {
 
@@ -120,18 +119,18 @@ class IfRuleStrategyTest {
     }
 
     @Test
-    void failsExplicitlyWhenSourceLineIsMissing() {
+    void fallsBackToEntryWhenSourceLineIsMissing() {
         RuleParams ifTrueParams = params("rule-8", "$1 > 0");
         RuleParams ifFalseParams = params("rule-9", "$1 <= 0");
         IfTrueRuleStrategy ifTrueStrategy = new IfTrueRuleStrategy();
         IfFalseRuleStrategy ifFalseStrategy = new IfFalseRuleStrategy();
 
-        assertThatThrownBy(() -> ifTrueStrategy.render(ifTrueParams))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("IF_TRUE rule requires a valid source line");
-        assertThatThrownBy(() -> ifFalseStrategy.render(ifFalseParams))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("IF_FALSE rule requires a valid source line");
+        assertThat(ifTrueStrategy.render(ifTrueParams))
+                .contains("AT ENTRY")
+                .doesNotContain("AT LINE");
+        assertThat(ifFalseStrategy.render(ifFalseParams))
+                .contains("AT ENTRY")
+                .doesNotContain("AT LINE");
     }
 
     private static RuleParams params(String id, String condition) {
