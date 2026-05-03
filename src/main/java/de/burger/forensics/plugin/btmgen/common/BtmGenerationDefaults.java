@@ -18,6 +18,7 @@ public final class BtmGenerationDefaults {
     public static final boolean DEFAULT_CACHE_ENABLED = false;
     public static final boolean DEFAULT_PROFILING_ENABLED = false;
     public static final boolean DEFAULT_STRICT_PARSING = false;
+    public static final boolean DEFAULT_STRICT_CONDITION_VALIDATION = false;
     public static final boolean DEFAULT_DEPENDENCY_AWARE_INVALIDATION = false;
     public static final boolean DEFAULT_INCLUDE_ENTRY_EXIT = true;
     public static final boolean DEFAULT_INCLUDE_TIMESTAMP_HEADER = false;

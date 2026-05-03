@@ -60,6 +60,7 @@ public final class GenerateRulesUseCase {
         List<ScanEvent> events = collectScanEvents(request);
         log.debug("Scanned " + events.size() + " events");
         events.forEach(context::addEvent);
+        var validationReport = ConditionValidationSupport.validate(request, context, log, events);
 
         Map<String, List<ScanEvent>> byMethod = groupEventsByMethod(events);
         populateMethodContexts(context, byMethod);
@@ -69,7 +70,7 @@ public final class GenerateRulesUseCase {
 
         log.debug("Finished rule generation at " + clock.now() + " with " + rendered.size() + " rules");
         context.markFinished();
-        return new RuleGenerationResult(rendered, context);
+        return new RuleGenerationResult(rendered, context, validationReport);
     }
 
     private List<ScanEvent> collectScanEvents(GenerationRequest request) {
@@ -270,17 +271,26 @@ public final class GenerateRulesUseCase {
             ? SafeMode.wrap(base, helperFqcn, ruleId)
             : base;
         String renderedCondition = effective.toBytemanIf();
-        return new Rule(ruleId, event.location(), renderedCondition, positive, helperFqcn, overrideType, event.signature());
+        return new Rule(
+            ruleId,
+            event.location(),
+            renderedCondition,
+            positive,
+            helperFqcn,
+            overrideType,
+            event.signature(),
+            event.returnType()
+        );
     }
 
     private Rule entryRule(SourceLocation location, String methodSignature, String helperFqcn) {
         RuleId ruleId = RuleIdFactory.from(location, RuleTemplate.METHOD_ENTER);
-        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_ENTER, methodSignature);
+        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_ENTER, methodSignature, null);
     }
 
     private Rule exitRule(SourceLocation location, String methodSignature, String helperFqcn) {
         RuleId ruleId = RuleIdFactory.from(location, RuleTemplate.METHOD_EXIT);
-        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_EXIT, methodSignature);
+        return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_EXIT, methodSignature, null);
     }
 
     private boolean matchesPrefixes(SourceLocation location, List<String> prefixes) {

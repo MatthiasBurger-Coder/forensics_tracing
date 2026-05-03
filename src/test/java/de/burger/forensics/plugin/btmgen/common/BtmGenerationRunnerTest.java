@@ -73,6 +73,7 @@ class BtmGenerationRunnerTest {
         assertEquals(1, result.parsedFileCount());
         assertEquals(1, result.cacheMissCount());
         assertEquals(0, result.cacheHitCount());
+        assertFalse(result.validationReport().hasIssues());
         assertTrue(result.generatedRuleCount() > 0);
         assertTrue(Files.readString(outputFile).contains("com.example.Sample#run"));
         assertTrue(Files.readString(profileReport).contains("\"JAVA_PARSER_PARSE\""));
@@ -109,6 +110,60 @@ class BtmGenerationRunnerTest {
         BtmGenerationException exception = assertThrows(BtmGenerationException.class, () -> runner.generate(request));
 
         assertEquals("Dependency-aware cache invalidation is not implemented yet.", exception.getMessage());
+    }
+
+    @Test
+    void runnerReportsUnresolvedTypeReferencesWithoutFailingByDefault(@TempDir Path tempDir) throws IOException {
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Files.writeString(srcDir.resolve("Sample.java"), """
+                package com.example;
+                import org.acme.DeploymentType;
+                public class Sample {
+                  public boolean run(Object deploymentUnit) {
+                    if (DeploymentType.EAR != null) { }
+                    return true;
+                  }
+                }
+                """);
+        BtmGenerationRequest request = BtmGenerationRequest.builder()
+                .sourceRoot(tempDir.resolve("src/main/java"))
+                .outputFile(tempDir.resolve("build/forensics/validation.btm"))
+                .minBranchesPerMethod(0)
+                .build();
+
+        BtmGenerationResult result = new BtmGenerationRunner().generate(request);
+
+        assertTrue(result.validationReport().hasIssues());
+        assertEquals(List.of("DeploymentType"),
+                result.validationReport().issues().stream().map(issue -> issue.symbol()).toList());
+    }
+
+    @Test
+    void runnerFailsForUnresolvedTypeReferencesWhenStrictValidationIsEnabled(@TempDir Path tempDir) throws IOException {
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Files.writeString(srcDir.resolve("Sample.java"), """
+                package com.example;
+                import org.acme.DeploymentType;
+                public class Sample {
+                  public boolean run(Object deploymentUnit) {
+                    if (DeploymentType.EAR != null) { }
+                    return true;
+                  }
+                }
+                """);
+        BtmGenerationRequest request = BtmGenerationRequest.builder()
+                .sourceRoot(tempDir.resolve("src/main/java"))
+                .outputFile(tempDir.resolve("build/forensics/validation.btm"))
+                .minBranchesPerMethod(0)
+                .strictConditionValidation(true)
+                .build();
+
+        BtmGenerationException exception = assertThrows(BtmGenerationException.class,
+                () -> new BtmGenerationRunner().generate(request));
+
+        assertTrue(exception.getMessage().contains("Condition validation failed with 1 unresolved type reference warning(s)"));
     }
 
     @Test

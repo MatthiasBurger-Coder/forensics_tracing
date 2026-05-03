@@ -15,8 +15,24 @@ public abstract class AbstractBytemanStrategy {
     protected static String ifClause(String cond) {
         return (cond != null && !cond.isBlank()) ? "IF " + cond : "IF true";
     }
+    protected static String atLineOrEntry(int line) {
+        return line > 0 ? "AT LINE " + line : "AT ENTRY";
+    }
+    protected static String atExit() {
+        return "AT EXIT";
+    }
     protected static String or(String fallback, String value) {
         return (fallback != null && !fallback.isBlank()) ? fallback : value;
+    }
+    protected static String ruleTarget(RuleParams params) {
+        String displayName = params.displayName();
+        if (displayName != null && !displayName.isBlank()) {
+            return displayName;
+        }
+
+        String className = (params.className() == null || params.className().isBlank()) ? "<unknown>" : params.className();
+        String methodName = (params.methodName() == null || params.methodName().isBlank()) ? "<method>" : params.methodName();
+        return className + "#" + methodName;
     }
     protected static String esc(String s) {
         if (s == null) {

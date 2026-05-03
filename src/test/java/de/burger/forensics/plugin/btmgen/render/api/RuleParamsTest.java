@@ -17,7 +17,8 @@ class RuleParamsTest {
                 null,
                 null,
                 "  ",
-                27
+                27,
+                "boolean"
         );
         RuleParams nullHelper = new RuleParams(
                 "rule-2",
@@ -28,13 +29,16 @@ class RuleParamsTest {
                 null,
                 null,
                 null,
-                28
+                28,
+                null
         );
 
         assertThat(blankHelper.helperFqn()).isEqualTo(RuleParams.DEFAULT_HELPER_FQN);
         assertThat(blankHelper.sourceLine()).isEqualTo(27);
+        assertThat(blankHelper.returnType()).isEqualTo("boolean");
         assertThat(nullHelper.helperFqn()).isEqualTo(RuleParams.DEFAULT_HELPER_FQN);
         assertThat(nullHelper.sourceLine()).isEqualTo(28);
+        assertThat(nullHelper.returnType()).isNull();
     }
 
     @Test

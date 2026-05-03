@@ -21,8 +21,20 @@ class AbstractBytemanStrategyTest {
     void fallbackHelpersHandleNullAndBlankInputs() {
         assertThat(probe.ifClauseValue(null)).isEqualTo("IF true");
         assertThat(probe.ifClauseValue("flag")).isEqualTo("IF flag");
+        assertThat(probe.atLineOrEntryValue(42)).isEqualTo("AT LINE 42");
+        assertThat(probe.atLineOrEntryValue(0)).isEqualTo("AT ENTRY");
+        assertThat(probe.atLineOrEntryValue(-1)).isEqualTo("AT ENTRY");
+        assertThat(probe.atExitValue()).isEqualTo("AT EXIT");
         assertThat(probe.orValue("label", "fallback")).isEqualTo("label");
         assertThat(probe.orValue("  ", "fallback")).isEqualTo("fallback");
+        assertThat(probe.ruleTargetValue(params("com.example.Foo#work")))
+                .isEqualTo("com.example.Foo#work");
+        assertThat(probe.ruleTargetValue(params(" ")))
+                .isEqualTo("com.example.Foo#work");
+        assertThat(probe.ruleTargetValue(params(null, null, null)))
+                .isEqualTo("<unknown>#<method>");
+        assertThat(probe.ruleTargetValue(params(null, " ", " ")))
+                .isEqualTo("<unknown>#<method>");
         assertThat(probe.methodSigValue("work", null)).isEqualTo("work");
         assertThat(probe.methodSigValue("work", "(I)V")).isEqualTo("work(I)V");
     }
@@ -71,7 +83,8 @@ class AbstractBytemanStrategyTest {
                 null,
                 null,
                 RuleParams.DEFAULT_HELPER_FQN,
-                23
+                23,
+                null
         );
         RuleParams withoutLine = new RuleParams(
                 "rule-2",
@@ -82,7 +95,8 @@ class AbstractBytemanStrategyTest {
                 null,
                 null,
                 RuleParams.DEFAULT_HELPER_FQN,
-                RuleParams.UNKNOWN_SOURCE_LINE
+                RuleParams.UNKNOWN_SOURCE_LINE,
+                null
         );
 
         assertThat(probe.requireSourceLineValue(withLine, "IF_TRUE")).isEqualTo(23);
@@ -100,8 +114,20 @@ class AbstractBytemanStrategyTest {
             return ifClause(condition);
         }
 
+        private String atLineOrEntryValue(int line) {
+            return atLineOrEntry(line);
+        }
+
+        private String atExitValue() {
+            return atExit();
+        }
+
         private String orValue(String fallback, String value) {
             return or(fallback, value);
+        }
+
+        private String ruleTargetValue(RuleParams params) {
+            return ruleTarget(params);
         }
 
         private String escValue(String value) {
@@ -131,5 +157,22 @@ class AbstractBytemanStrategyTest {
         private String guardedConditionValue(String ruleId, String expression, String evaluation) {
             return guardedCondition(ruleId, expression, evaluation);
         }
+    }
+
+    private static RuleParams params(String displayName) {
+        return params(displayName, "com.example.Foo", "work");
+    }
+
+    private static RuleParams params(String displayName, String className, String methodName) {
+        return new RuleParams(
+                "rule-target",
+                className,
+                methodName,
+                "()V",
+                displayName,
+                null,
+                null,
+                RuleParams.DEFAULT_HELPER_FQN
+        );
     }
 }

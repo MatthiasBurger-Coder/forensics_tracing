@@ -25,6 +25,7 @@ record MavenBtmGenParameters(
         boolean profilingEnabled,
         File profileReportFile,
         boolean strictParsing,
+        boolean strictConditionValidation,
         boolean dependencyAwareInvalidation,
         String includePackages,
         String excludePackages,
@@ -57,6 +58,7 @@ record MavenBtmGenParameters(
                 .cacheBackend(blankToDefault(cacheBackend, BtmGenerationDefaults.DEFAULT_CACHE_BACKEND))
                 .profilingEnabled(profilingEnabled)
                 .strictParsing(strictParsing)
+                .strictConditionValidation(strictConditionValidation)
                 .dependencyAwareInvalidation(dependencyAwareInvalidation)
                 .includePackages(csv(includePackages))
                 .excludePackages(csv(excludePackages))

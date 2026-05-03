@@ -95,6 +95,7 @@ class BtmGenPluginTest {
             || task.getSourceRoot().get().getAsFile().toPath().endsWith("src/main/java"));
         assertTrue(task.getOutputFile().get().getAsFile().toPath().endsWith("forensics\\forensics.btm")
             || task.getOutputFile().get().getAsFile().toPath().endsWith("forensics/forensics.btm"));
+        assertFalse(task.getStrictConditionValidation().get());
     }
 
     @Test
@@ -107,6 +108,7 @@ class BtmGenPluginTest {
         File outputFile = project.file("custom-out/generated.btm");
         extension.getSourceRoot().set(sourceRoot);
         extension.getOutputFile().set(outputFile);
+        extension.getStrictConditionValidation().set(true);
 
         GenerateBtmTask task = (GenerateBtmTask) project.getTasks().getByName("generateBtmRules");
         var buildTask = project.getTasks().getByName("build");
@@ -114,6 +116,7 @@ class BtmGenPluginTest {
         assertEquals(sourceRoot, task.getSourceRoot().get().getAsFile());
         assertEquals(outputFile, task.getOutputFile().get().getAsFile());
         assertEquals(outputFile.getParentFile(), task.getOutputDir().get().getAsFile());
+        assertTrue(task.getStrictConditionValidation().get());
         assertTrue(buildTask.getTaskDependencies().getDependencies(buildTask).contains(task));
     }
 

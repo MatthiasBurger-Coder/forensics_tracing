@@ -9,13 +9,15 @@ public record Rule(RuleId id,
                    boolean positive,
                    String helperFqn,
                    RuleTemplate type,
-                   String methodSignature) {
+                   String methodSignature,
+                   String returnType) {
     public Rule(RuleId id,
                 SourceLocation location,
                 String condition,
                 boolean positive,
                 String helperFqn,
                 RuleTemplate type) {
-        this(id, location, condition, positive, helperFqn, type, null);
+        this(id, location, condition, positive, helperFqn, type, null, null);
     }
+
 }

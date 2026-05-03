@@ -60,11 +60,20 @@ class DefaultStrategyFactoryTest {
     }
 
     @Test
-    void usesReturnPlaceholderForBooleanReturnExpressions() {
+    void usesTrueGuardForBooleanReturnExpressions() {
         ConditionStrategy strategy = factory.from("return isEnabled();", RuleTemplate.RETURN, "boolean");
 
         assertThat(strategy).isInstanceOf(GenericUnsafeStrategy.class);
-        assertThat(strategy.toBytemanIf()).isEqualTo("$!");
+        assertThat(strategy.toBytemanIf()).isEqualTo("true");
+    }
+
+    @Test
+    void usesTrueGuardForBooleanLiteralReturnExpressions() {
+        ConditionStrategy trueStrategy = factory.from("return true;", RuleTemplate.RETURN, "boolean");
+        ConditionStrategy falseStrategy = factory.from("return false;", RuleTemplate.RETURN, "boolean");
+
+        assertThat(trueStrategy.toBytemanIf()).isEqualTo("true");
+        assertThat(falseStrategy.toBytemanIf()).isEqualTo("true");
     }
 
     @Test

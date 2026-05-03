@@ -107,6 +107,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Input @Optional public abstract Property<@NotNull Boolean> getProfilingEnabled();
     @LocalState @Optional public abstract RegularFileProperty getProfileReportFile();
     @Input @Optional public abstract Property<@NotNull Boolean> getStrictParsing();
+    @Input @Optional public abstract Property<@NotNull Boolean> getStrictConditionValidation();
     @Input @Optional public abstract Property<@NotNull Boolean> getDependencyAwareInvalidation();
 
     /** Injected via plugin apply() */
@@ -132,6 +133,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getProfilingEnabled().convention(ext.getProfilingEnabled());
         getProfileReportFile().set(getProjectLayout().file(ext.getProfileReportFile()));
         getStrictParsing().convention(ext.getStrictParsing());
+        getStrictConditionValidation().convention(ext.getStrictConditionValidation());
         getDependencyAwareInvalidation().convention(ext.getDependencyAwareInvalidation());
         registry = ext.getRegistry() == null ? StrategyRegistries.defaultRegistry() : ext.getRegistry();
         getRegistryFingerprint().set(registryFingerprint(registry));
@@ -159,6 +161,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .cacheBackend(getCacheBackend().getOrElse("h2"))
                 .profilingEnabled(getProfilingEnabled().getOrElse(false))
                 .strictParsing(getStrictParsing().getOrElse(false))
+                .strictConditionValidation(getStrictConditionValidation().getOrElse(false))
                 .dependencyAwareInvalidation(getDependencyAwareInvalidation().getOrElse(false))
                 .includePackages(packagePrefixes())
                 .helperFqn(resolveHelperFqn())
@@ -202,6 +205,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
         conventionIfMissing(getProfilingEnabled(), false);
         conventionIfMissing(getProfileReportFile(), layout.getBuildDirectory().file("forensics/scan-profile.json"));
         conventionIfMissing(getStrictParsing(), false);
+        conventionIfMissing(getStrictConditionValidation(), false);
         conventionIfMissing(getDependencyAwareInvalidation(), false);
     }
 

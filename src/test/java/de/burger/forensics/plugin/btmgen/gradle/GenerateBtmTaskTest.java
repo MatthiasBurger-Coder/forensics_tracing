@@ -347,6 +347,9 @@ class GenerateBtmTaskTest {
                     switch (2) { case 2 -> {} }
                     throw new IllegalStateException();
                   }
+                  public boolean gamma() {
+                    return false;
+                  }
                 }
                 """);
 
@@ -355,6 +358,7 @@ class GenerateBtmTaskTest {
         var scanExtension = newExtension(project);
         scanExtension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
         scanExtension.getOutputFile().set(scanOutput.toFile());
+        scanExtension.getMinBranchesPerMethod().set(0);
         scanTask.setExtension(scanExtension);
 
         scanTask.generate();
@@ -362,6 +366,16 @@ class GenerateBtmTaskTest {
         assertTrue(Files.exists(scanOutput));
         String scanContent = Files.readString(scanOutput);
         assertFalse(scanContent.contains("helper()."));
+        assertFalse(scanContent.contains("ENABLE_LOG"));
+        assertFalse(scanContent.contains("IF $!"));
+        assertFalse(scanContent.contains("#alpha#alpha"));
+        assertFalse(scanContent.contains("#beta#beta"));
+        assertFalse(scanContent.contains("#gamma#gamma"));
+        assertTrue(scanContent.contains("com.example.Sample#alpha"));
+        assertTrue(scanContent.contains("AT LINE 4"));
+        assertTrue(scanContent.contains("AT LINE 5"));
+        assertTrue(scanContent.contains("AT LINE 9"));
+        assertTrue(scanContent.contains("AT LINE 10"));
         assertTrue(scanContent.contains("onEnter("));
         assertTrue(scanContent.contains("onExit("));
         assertTrue(scanContent.contains("onBranch("));
@@ -809,7 +823,11 @@ class GenerateBtmTaskTest {
         assertEquals(List.of(4, 9),
                 strategies.get("IF_FALSE").calls.stream().map(RuleParams::sourceLine).toList());
         assertEquals(2, strategies.get("SWITCH").calls.size());
+        assertEquals(List.of(5, 10),
+                strategies.get("SWITCH").calls.stream().map(RuleParams::sourceLine).toList());
         assertEquals(2, strategies.get("SWITCH_CASE").calls.size());
+        assertEquals(List.of(5, 10),
+                strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::sourceLine).toList());
         assertEquals(List.of("1", "2"),
                 strategies.get("SWITCH_CASE").calls.stream().map(RuleParams::displayName).toList());
 

@@ -18,6 +18,7 @@ import java.util.Objects;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 class GenerateRulesUseCaseTest {
@@ -43,6 +44,7 @@ class GenerateRulesUseCaseTest {
             true,
             List.of("com.example"),
             0,
+            false,
             List.of()
         );
 
@@ -82,6 +84,7 @@ class GenerateRulesUseCaseTest {
             false,
             List.of("com.example"),
             2,
+            false,
             List.of()
         );
 
@@ -106,6 +109,7 @@ class GenerateRulesUseCaseTest {
             true,
             List.of("com.example"),
             0,
+            false,
             List.of()
         );
 
@@ -134,6 +138,7 @@ class GenerateRulesUseCaseTest {
             false,
             List.of("com.example"),
             0,
+            false,
             List.of()
         );
 
@@ -142,6 +147,57 @@ class GenerateRulesUseCaseTest {
         assertThat(result.renderedRules())
             .containsExactly("IF_TRUE|supported|x > 1")
             .doesNotContain("JDBC_EXECUTE|supported|ignored", "THREAD_LIFECYCLE|ignored|ignored");
+    }
+
+    @Test
+    void generateReportsUnresolvedSimpleTypeReferencesWithoutFailingByDefault() {
+        List<ScanEvent> events = List.of(
+            event("com.example.Foo", "usesImportedType", 10, "(Object deploymentUnit)", RuleTemplate.IF_TRUE,
+                "DeploymentTypeMarker.isType(DeploymentType.EAR, $1)", "java", "boolean")
+        );
+
+        GenerationRequest request = new GenerationRequest(
+            Path.of("/tmp/project"),
+            GenerationRequest.DEFAULT_HELPER_FQCN,
+            false,
+            false,
+            List.of("com.example"),
+            0,
+            false,
+            List.of()
+        );
+
+        RuleGenerationResult result = useCase(events).generate(request);
+
+        assertThat(result.validationReport().issues())
+            .extracting(issue -> issue.symbol())
+            .containsExactly("DeploymentTypeMarker", "DeploymentType");
+        assertThat(result.context().getWarnings())
+            .extracting(warning -> warning.source())
+            .containsExactly("condition-validation", "condition-validation");
+    }
+
+    @Test
+    void generateFailsForUnresolvedSimpleTypeReferencesWhenStrictValidationIsEnabled() {
+        List<ScanEvent> events = List.of(
+            event("com.example.Foo", "usesImportedType", 10, "(Object deploymentUnit)", RuleTemplate.IF_TRUE,
+                "DeploymentTypeMarker.isType(DeploymentType.EAR, $1)", "java", "boolean")
+        );
+
+        GenerationRequest request = new GenerationRequest(
+            Path.of("/tmp/project"),
+            GenerationRequest.DEFAULT_HELPER_FQCN,
+            false,
+            false,
+            List.of("com.example"),
+            0,
+            true,
+            List.of()
+        );
+
+        assertThatThrownBy(() -> useCase(events).generate(request))
+            .isInstanceOf(ConditionValidationException.class)
+            .hasMessageContaining("Condition validation failed with 2 unresolved type reference warning(s)");
     }
 
     private static GenerateRulesUseCase useCase(List<ScanEvent> events) {

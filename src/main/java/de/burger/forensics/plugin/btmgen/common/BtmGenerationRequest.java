@@ -17,6 +17,7 @@ public record BtmGenerationRequest(
         String cacheBackend,
         boolean profilingEnabled,
         boolean strictParsing,
+        boolean strictConditionValidation,
         boolean dependencyAwareInvalidation,
         List<String> includePackages,
         List<String> excludePackages,
@@ -55,6 +56,7 @@ public record BtmGenerationRequest(
         private String cacheBackend = BtmGenerationDefaults.DEFAULT_CACHE_BACKEND;
         private boolean profilingEnabled = BtmGenerationDefaults.DEFAULT_PROFILING_ENABLED;
         private boolean strictParsing = BtmGenerationDefaults.DEFAULT_STRICT_PARSING;
+        private boolean strictConditionValidation = BtmGenerationDefaults.DEFAULT_STRICT_CONDITION_VALIDATION;
         private boolean dependencyAwareInvalidation = BtmGenerationDefaults.DEFAULT_DEPENDENCY_AWARE_INVALIDATION;
         private List<String> includePackages = List.of();
         private List<String> excludePackages = List.of();
@@ -106,6 +108,11 @@ public record BtmGenerationRequest(
 
         public Builder strictParsing(boolean strictParsing) {
             this.strictParsing = strictParsing;
+            return this;
+        }
+
+        public Builder strictConditionValidation(boolean strictConditionValidation) {
+            this.strictConditionValidation = strictConditionValidation;
             return this;
         }
 
@@ -164,6 +171,7 @@ public record BtmGenerationRequest(
                     cacheBackend,
                     profilingEnabled,
                     strictParsing,
+                    strictConditionValidation,
                     dependencyAwareInvalidation,
                     includePackages,
                     excludePackages,
