@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 class JavaParserScannerTest {
 
@@ -187,6 +188,32 @@ class JavaParserScannerTest {
         List<ScanEvent> events = scanner.scan(tempDir).toList();
 
         assertThat(events).isEmpty();
+    }
+
+    @Test
+    void continuesWhenSymbolSolverSeesRecursiveTypes(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve("Sample.java"), """
+            package example;
+
+            class A extends B {
+                int a;
+            }
+
+            class B extends A {
+                int b;
+            }
+
+            class Sample extends A {
+                void run() {
+                    if (a > 0) {
+                        System.out.println(a);
+                    }
+                }
+            }
+            """);
+
+        assertThatCode(() -> scanner.scan(tempDir).toList())
+            .doesNotThrowAnyException();
     }
 
     @Test

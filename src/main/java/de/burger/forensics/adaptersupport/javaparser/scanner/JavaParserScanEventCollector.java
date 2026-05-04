@@ -21,8 +21,8 @@ public final class JavaParserScanEventCollector {
     static List<ScanEvent> collectSafely(JavaParser parser, Path file, MethodEventExtractor methodEventExtractor) {
         try {
             return collect(parser, file, methodEventExtractor);
-        } catch (IOException | RuntimeException ignored) {
-            // Ignore parsing issues to keep scanning resilient.
+        } catch (IOException | RuntimeException | StackOverflowError ignored) {
+            // Ignore parsing and symbol-resolution issues to keep scanning resilient.
             return List.of();
         }
     }

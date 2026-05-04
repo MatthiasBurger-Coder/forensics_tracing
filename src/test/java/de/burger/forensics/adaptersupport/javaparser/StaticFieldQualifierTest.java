@@ -6,11 +6,13 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.resolution.declarations.ResolvedValueDeclaration;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 class StaticFieldQualifierTest {
 
@@ -96,15 +98,18 @@ class StaticFieldQualifierTest {
         MethodDeclaration declaration = parseMethod("""
             enum Sample {
                 ITEM;
+                int value = 0;
                 static int VALUE = 1;
                 boolean check() {
-                    return VALUE > 0;
+                    return VALUE > value;
                 }
             }
             """);
         NameExpr staticField = declaration.findFirst(NameExpr.class, name -> name.getNameAsString().equals("VALUE")).orElseThrow();
+        NameExpr instanceField = declaration.findFirst(NameExpr.class, name -> name.getNameAsString().equals("value")).orElseThrow();
 
         assertThat(qualifier.declaresStaticField(staticField, "VALUE")).isTrue();
+        assertThat(qualifier.declaresStaticField(instanceField, "value")).isFalse();
         assertThat(qualifier.declaresStaticField(staticField, "")).isFalse();
         NameExpr missing = StaticJavaParser.parseExpression("missing").asNameExpr();
         assertThat(qualifier.resolvesToStaticField(missing)).isFalse();
@@ -117,7 +122,27 @@ class StaticFieldQualifierTest {
         assertThat(qualifier.qualifyStaticFieldAccess(name, Set.of())).isFalse();
     }
 
+    @Test
+    void treatsStackOverflowDuringResolutionAsNonStaticField() {
+        NameExpr name = new StackOverflowNameExpr("VALUE");
+
+        assertThatCode(() -> assertThat(qualifier.resolvesToStaticField(name)).isFalse())
+            .doesNotThrowAnyException();
+    }
+
     private static MethodDeclaration parseMethod(String source) {
         return StaticJavaParser.parse(source).findFirst(MethodDeclaration.class).orElseThrow();
+    }
+
+    private static final class StackOverflowNameExpr extends NameExpr {
+
+        private StackOverflowNameExpr(String name) {
+            super(name);
+        }
+
+        @Override
+        public ResolvedValueDeclaration resolve() {
+            throw new StackOverflowError("simulated JavaParser recursion");
+        }
     }
 }

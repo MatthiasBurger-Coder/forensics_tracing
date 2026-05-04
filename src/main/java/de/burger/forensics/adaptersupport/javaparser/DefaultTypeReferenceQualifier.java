@@ -136,16 +136,13 @@ public final class DefaultTypeReferenceQualifier implements TypeReferenceQualifi
                 && context.hasAmbiguousWildcardStaticCandidate(methodCall.getNameAsString())) {
             return java.util.Optional.empty();
         }
-        try {
+        return JavaParserResolutionGuard.resolve(() -> {
             var resolved = methodCall.resolve();
             if (resolved.isStatic()) {
-                String declaringType = resolved.declaringType().getQualifiedName();
-                return externalTypeName(declaringType, context);
+                return resolved.declaringType().getQualifiedName();
             }
-        } catch (RuntimeException ignored) {
-            // Unresolved or ambiguous method calls stay visible for validation diagnostics.
-        }
-        return java.util.Optional.empty();
+            return null;
+        }).flatMap(declaringType -> externalTypeName(declaringType, context));
     }
 
     private static Map<Range, String> resolvedFieldScopes(Expression expression, MethodScanContext context) {
@@ -160,12 +157,8 @@ public final class DefaultTypeReferenceQualifier implements TypeReferenceQualifi
                 && context.hasAmbiguousWildcardTypeCandidate(scope.getNameAsString())) {
             return java.util.Optional.empty();
         }
-        try {
-            return externalTypeName(declaringTypeName(fieldAccess.resolve()), context);
-        } catch (RuntimeException ignored) {
-            // Unresolved or ambiguous field accesses stay visible for validation diagnostics.
-        }
-        return java.util.Optional.empty();
+        return JavaParserResolutionGuard.resolve(() -> declaringTypeName(fieldAccess.resolve()))
+                .flatMap(declaringType -> externalTypeName(declaringType, context));
     }
 
     private static Map<Range, String> resolvedStaticValues(Expression expression, MethodScanContext context) {
@@ -179,13 +172,12 @@ public final class DefaultTypeReferenceQualifier implements TypeReferenceQualifi
         if (context.hasAmbiguousWildcardStaticCandidate(name.getNameAsString())) {
             return java.util.Optional.empty();
         }
-        try {
+        return JavaParserResolutionGuard.resolve(() -> {
             ResolvedValueDeclaration resolved = name.resolve();
             return externalTypeName(declaringTypeName(resolved), context)
-                    .map(declaringType -> declaringType + "." + resolved.getName());
-        } catch (RuntimeException ignored) {
-            return java.util.Optional.empty();
-        }
+                    .map(declaringType -> declaringType + "." + resolved.getName())
+                    .orElse(null);
+        });
     }
 
     private static String declaringTypeName(ResolvedValueDeclaration resolved) {

@@ -25,7 +25,7 @@ public final class InstanceFieldNormalizer {
     Set<Range> identifyInstanceFieldRanges(Node scope, Set<String> localVariables) {
         Set<Range> ranges = new LinkedHashSet<>();
         scope.walk(NameExpr.class, name -> {
-            if (resolvesToInstanceField(name) || isLikelyInstanceField(name, name.getNameAsString(), localVariables)) {
+            if (isLikelyInstanceField(name, name.getNameAsString(), localVariables) || resolvesToInstanceField(name)) {
                 name.getRange().ifPresent(ranges::add);
             }
         });
@@ -40,12 +40,10 @@ public final class InstanceFieldNormalizer {
     }
 
     boolean resolvesToInstanceField(NameExpr name) {
-        try {
+        return JavaParserResolutionGuard.resolve(() -> {
             var resolved = name.resolve();
             return resolved.isField() && !resolved.asField().isStatic();
-        } catch (RuntimeException ignored) {
-            return false;
-        }
+        }).orElse(false);
     }
 
     boolean isLikelyInstanceField(NameExpr name, String identifier, Set<String> localVariables) {
