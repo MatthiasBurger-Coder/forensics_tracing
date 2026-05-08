@@ -13,11 +13,11 @@ public record ConditionDiagnostic(String symbol,
                                   SourceContext sourceContext) {
 
     public ConditionDiagnostic {
-        symbol = Objects.requireNonNull(symbol, "symbol");
+        Objects.requireNonNull(symbol, "symbol");
         expressionPreview = Objects.requireNonNullElse(expressionPreview, "");
-        resolutionStatus = Objects.requireNonNull(resolutionStatus, "resolutionStatus");
+        Objects.requireNonNull(resolutionStatus, "resolutionStatus");
         reason = Objects.requireNonNullElse(reason, "");
-        location = Objects.requireNonNull(location, "location");
+        Objects.requireNonNull(location, "location");
         sourceContext = Objects.requireNonNullElse(sourceContext, SourceContext.empty());
     }
 }

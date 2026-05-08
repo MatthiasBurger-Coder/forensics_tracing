@@ -29,9 +29,9 @@ public record DefaultConditionRenderingStrategy(
     }
 
     public DefaultConditionRenderingStrategy {
-        instanceFieldNormalizer = Objects.requireNonNull(instanceFieldNormalizer, "instanceFieldNormalizer");
-        staticFieldQualifier = Objects.requireNonNull(staticFieldQualifier, "staticFieldQualifier");
-        typeReferenceQualifier = Objects.requireNonNull(typeReferenceQualifier, "typeReferenceQualifier");
+        Objects.requireNonNull(instanceFieldNormalizer, "instanceFieldNormalizer");
+        Objects.requireNonNull(staticFieldQualifier, "staticFieldQualifier");
+        Objects.requireNonNull(typeReferenceQualifier, "typeReferenceQualifier");
     }
 
     @Override

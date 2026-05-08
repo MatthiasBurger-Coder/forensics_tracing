@@ -15,13 +15,15 @@ import java.util.Set;
 public record ConditionValidationReport(List<ConditionValidationIssue> issues,
                                         List<ConditionValidationIssue> suppressedIssues) {
 
+    private static final String ISSUES_FIELD = "issues";
+
     public ConditionValidationReport(List<ConditionValidationIssue> issues) {
         this(issues, List.of());
     }
 
     public ConditionValidationReport {
         LinkedHashMap<IssueKey, ConditionValidationIssue> unique = new LinkedHashMap<>();
-        Objects.requireNonNull(issues, "issues").forEach(issue -> unique.putIfAbsent(issueKey(issue), issue));
+        Objects.requireNonNull(issues, ISSUES_FIELD).forEach(issue -> unique.putIfAbsent(issueKey(issue), issue));
         issues = List.copyOf(unique.values());
         LinkedHashMap<IssueKey, ConditionValidationIssue> suppressed = new LinkedHashMap<>();
         Objects.requireNonNull(suppressedIssues, "suppressedIssues")
@@ -97,34 +99,6 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues,
                 issue.sourceContext());
     }
 
-    private static String packageName(ConditionValidationIssue issue) {
-        String sourcePackage = issue.sourceContext().packageName();
-        if (!sourcePackage.isBlank()) {
-            return sourcePackage;
-        }
-        String fqcn = stringValue(issue.location().fqcn());
-        int lastDot = fqcn.lastIndexOf('.');
-        return lastDot < 0 ? "" : fqcn.substring(0, lastDot);
-    }
-
-    private static String className(ConditionValidationIssue issue) {
-        String sourceClass = issue.sourceContext().simpleClassName();
-        if (!sourceClass.isBlank()) {
-            return sourceClass;
-        }
-        String fqcn = stringValue(issue.location().fqcn());
-        int lastDot = fqcn.lastIndexOf('.');
-        return lastDot < 0 ? fqcn : fqcn.substring(lastDot + 1);
-    }
-
-    private static String methodName(ConditionValidationIssue issue) {
-        String sourceMethod = issue.sourceContext().methodName();
-        if (!sourceMethod.isBlank()) {
-            return sourceMethod;
-        }
-        return stringValue(issue.location().method());
-    }
-
     private static String stringValue(String value) {
         return value == null ? "" : value;
     }
@@ -150,7 +124,7 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues,
         public SymbolGroup {
             Objects.requireNonNull(symbol, "symbol");
             packages = List.copyOf(Objects.requireNonNull(packages, "packages"));
-            issues = List.copyOf(Objects.requireNonNull(issues, "issues"));
+            issues = List.copyOf(Objects.requireNonNull(issues, ISSUES_FIELD));
         }
 
         public int occurrenceCount() {
@@ -205,7 +179,7 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues,
     public record MethodGroup(String methodName, List<ConditionValidationIssue> issues) {
         public MethodGroup {
             Objects.requireNonNull(methodName, "methodName");
-            issues = List.copyOf(Objects.requireNonNull(issues, "issues"));
+            issues = List.copyOf(Objects.requireNonNull(issues, ISSUES_FIELD));
         }
 
         public int occurrenceCount() {
@@ -235,6 +209,16 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues,
                             .toList(),
                     issues);
         }
+
+        private static String packageName(ConditionValidationIssue issue) {
+            String sourcePackage = issue.sourceContext().packageName();
+            if (!sourcePackage.isBlank()) {
+                return sourcePackage;
+            }
+            String fqcn = stringValue(issue.location().fqcn());
+            int lastDot = fqcn.lastIndexOf('.');
+            return lastDot < 0 ? "" : fqcn.substring(0, lastDot);
+        }
     }
 
     private static final class PackageGroupBuilder {
@@ -256,6 +240,16 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues,
                             .map(ClassGroupBuilder::build)
                             .toList());
         }
+
+        private static String className(ConditionValidationIssue issue) {
+            String sourceClass = issue.sourceContext().simpleClassName();
+            if (!sourceClass.isBlank()) {
+                return sourceClass;
+            }
+            String fqcn = stringValue(issue.location().fqcn());
+            int lastDot = fqcn.lastIndexOf('.');
+            return lastDot < 0 ? fqcn : fqcn.substring(lastDot + 1);
+        }
     }
 
     private static final class ClassGroupBuilder {
@@ -276,6 +270,14 @@ public record ConditionValidationReport(List<ConditionValidationIssue> issues,
                     methods.values().stream()
                             .map(MethodGroupBuilder::build)
                             .toList());
+        }
+
+        private static String methodName(ConditionValidationIssue issue) {
+            String sourceMethod = issue.sourceContext().methodName();
+            if (!sourceMethod.isBlank()) {
+                return sourceMethod;
+            }
+            return stringValue(issue.location().method());
         }
     }
 

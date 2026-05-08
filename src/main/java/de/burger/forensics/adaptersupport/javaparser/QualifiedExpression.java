@@ -10,6 +10,6 @@ import java.util.Objects;
 public record QualifiedExpression(Expression expression) {
 
     public QualifiedExpression {
-        expression = Objects.requireNonNull(expression, "expression");
+        Objects.requireNonNull(expression, "expression");
     }
 }

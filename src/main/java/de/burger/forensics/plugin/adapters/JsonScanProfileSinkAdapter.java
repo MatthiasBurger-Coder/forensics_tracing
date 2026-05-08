@@ -19,6 +19,8 @@ import java.util.Objects;
  */
 public final class JsonScanProfileSinkAdapter implements ScanProfileSinkPort {
 
+    private static final String JSON_STRING_LINE_SUFFIX = "\",\n";
+
     private final Path reportFile;
 
     public JsonScanProfileSinkAdapter(Path reportFile) {
@@ -126,7 +128,7 @@ public final class JsonScanProfileSinkAdapter implements ScanProfileSinkPort {
     private String validationGroupJson(ConditionValidationReport.SymbolGroup group) {
         StringBuilder json = new StringBuilder();
         json.append("      {\n");
-        json.append("        \"symbol\":\"").append(escape(group.symbol())).append("\",\n");
+        json.append("        \"symbol\":\"").append(escape(group.symbol())).append(JSON_STRING_LINE_SUFFIX);
         json.append("        \"totalOccurrences\": ").append(group.occurrenceCount()).append(",\n");
         json.append("        \"packageCount\": ").append(group.packageCount()).append(",\n");
         json.append("        \"classCount\": ").append(group.classCount()).append(",\n");
@@ -149,7 +151,7 @@ public final class JsonScanProfileSinkAdapter implements ScanProfileSinkPort {
     private String packageGroupJson(ConditionValidationReport.PackageGroup group) {
         StringBuilder json = new StringBuilder();
         json.append("          {\n");
-        json.append("            \"packageName\":\"").append(escape(group.packageName())).append("\",\n");
+        json.append("            \"packageName\":\"").append(escape(group.packageName())).append(JSON_STRING_LINE_SUFFIX);
         json.append("            \"classes\": [");
         if (!group.classes().isEmpty()) {
             json.append('\n');
@@ -168,7 +170,7 @@ public final class JsonScanProfileSinkAdapter implements ScanProfileSinkPort {
     private String classGroupJson(ConditionValidationReport.ClassGroup group) {
         StringBuilder json = new StringBuilder();
         json.append("              {\n");
-        json.append("                \"className\":\"").append(escape(group.className())).append("\",\n");
+        json.append("                \"className\":\"").append(escape(group.className())).append(JSON_STRING_LINE_SUFFIX);
         json.append("                \"methods\": [");
         if (!group.methods().isEmpty()) {
             json.append('\n');
@@ -187,7 +189,7 @@ public final class JsonScanProfileSinkAdapter implements ScanProfileSinkPort {
     private String methodGroupJson(ConditionValidationReport.MethodGroup group) {
         StringBuilder json = new StringBuilder();
         json.append("                  {\n");
-        json.append("                    \"methodName\":\"").append(escape(group.methodName())).append("\",\n");
+        json.append("                    \"methodName\":\"").append(escape(group.methodName())).append(JSON_STRING_LINE_SUFFIX);
         json.append("                    \"totalOccurrences\": ").append(group.occurrenceCount()).append(",\n");
         json.append("                    \"locations\": [");
         if (!group.issues().isEmpty()) {

@@ -9,6 +9,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.nodeTypes.NodeWithName;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -264,7 +265,7 @@ public record MethodEventExtractor(ConditionRenderingStrategy renderingStrategy,
     private String packageName(MethodDeclaration declaration) {
         return declaration.findCompilationUnit()
                 .flatMap(compilationUnit -> compilationUnit.getPackageDeclaration()
-                        .map(packageDeclaration -> packageDeclaration.getNameAsString()))
+                        .map(NodeWithName::getNameAsString))
                 .orElse("");
     }
 

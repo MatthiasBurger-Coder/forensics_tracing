@@ -6,6 +6,7 @@ import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithName;
 import com.github.javaparser.ast.stmt.CatchClause;
 
 import java.util.LinkedHashSet;
@@ -125,7 +126,7 @@ public final class StaticFieldQualifier {
         String typeName = String.join(".", parts);
         String packageName = name.findCompilationUnit()
                 .flatMap(compilationUnit -> compilationUnit.getPackageDeclaration()
-                        .map(packageDeclaration -> packageDeclaration.getNameAsString()))
+                        .map(NodeWithName::getNameAsString))
                 .orElse("");
         return Optional.of(packageName.isBlank() ? typeName : packageName + "." + typeName);
     }

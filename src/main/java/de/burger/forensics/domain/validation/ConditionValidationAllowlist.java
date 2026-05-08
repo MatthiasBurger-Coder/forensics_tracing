@@ -44,7 +44,7 @@ public record ConditionValidationAllowlist(List<Entry> entries) {
         public Entry {
             symbol = requiredText(symbol, "symbol");
             reason = requiredText(reason, "reason");
-            scope = Objects.requireNonNull(scope, "scope");
+            Objects.requireNonNull(scope, "scope");
             packageName = Objects.requireNonNullElse(packageName, "").trim();
             if (scope == Scope.PACKAGE && packageName.isBlank()) {
                 throw new IllegalArgumentException("Allowlist packageName must not be blank for package scope.");
