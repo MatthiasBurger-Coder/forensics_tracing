@@ -13,11 +13,15 @@ class BtmGenerationDefaultsTest {
         assertEquals(Path.of("forensics", "forensics.btm"), BtmGenerationDefaults.defaultOutputFile());
         assertEquals(Path.of("forensics", "scan-profile.json"), BtmGenerationDefaults.defaultProfileReportFile());
         assertEquals(Path.of("forensics", "cache", "scan-cache"), BtmGenerationDefaults.defaultCacheDatabaseFile());
+        assertEquals(Path.of("forensics", "analysis-store"), BtmGenerationDefaults.defaultAnalysisStoreDirectory());
+        assertEquals(Path.of("forensics", "manifest.json"), BtmGenerationDefaults.defaultManifestFile());
+        assertEquals(Path.of("forensics", "checksums.sha256"), BtmGenerationDefaults.defaultChecksumsFile());
     }
 
     @Test
     void defaultsExposeDisabledOptionalFeatures() {
         assertFalse(BtmGenerationDefaults.DEFAULT_CACHE_ENABLED);
+        assertFalse(BtmGenerationDefaults.DEFAULT_ANALYSIS_STORE_ENABLED);
         assertFalse(BtmGenerationDefaults.DEFAULT_PROFILING_ENABLED);
         assertFalse(BtmGenerationDefaults.DEFAULT_STRICT_PARSING);
         assertFalse(BtmGenerationDefaults.DEFAULT_STRICT_CONDITION_VALIDATION);
@@ -28,5 +32,6 @@ class BtmGenerationDefaultsTest {
         assertEquals("METHOD_ENTER", BtmGenerationDefaults.DEFAULT_TEMPLATE_ID);
         assertEquals("de.burger.forensics.infrastructure.rt.RtTraceHelper", BtmGenerationDefaults.DEFAULT_HELPER_FQN);
         assertEquals(2, BtmGenerationDefaults.DEFAULT_MIN_BRANCHES_PER_METHOD);
+        assertEquals("KEEP_ON_SUCCESS", BtmGenerationDefaults.defaultCleanupPolicy());
     }
 }

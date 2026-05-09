@@ -4,7 +4,10 @@ import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BtmGenExtensionTest {
 
@@ -16,5 +19,17 @@ class BtmGenExtensionTest {
         extension.setRegistry(null);
 
         assertEquals(StrategyRegistries.defaultRegistry().ids(), extension.getRegistry().ids());
+    }
+
+    @Test
+    void analysisStoreDefaultsAreConfigured() {
+        var project = ProjectBuilder.builder().build();
+        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+
+        assertTrue(extension.getAnalysisStoreEnabled().get());
+        assertEquals(new File("build/forensics/analysis-store"), extension.getAnalysisStoreDirectory().get());
+        assertEquals("KEEP_ON_SUCCESS", extension.getCleanupPolicy().get());
+        assertEquals(new File("build/forensics/manifest.json"), extension.getManifestFile().get());
+        assertEquals(new File("build/forensics/checksums.sha256"), extension.getChecksumsFile().get());
     }
 }

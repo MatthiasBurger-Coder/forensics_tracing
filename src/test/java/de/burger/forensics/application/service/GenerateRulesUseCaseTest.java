@@ -51,6 +51,8 @@ class GenerateRulesUseCaseTest {
 
         RuleGenerationResult result = useCase(events).generate(request);
 
+        assertThat(result.rules()).isNotEmpty();
+        assertThat(result.rules()).hasSize(result.renderedRules().size());
         assertThat(result.renderedRules()).anyMatch(rule -> rule.contains("METHOD_ENTER|doWork"));
         assertThat(result.renderedRules()).noneMatch(rule -> rule.contains("METHOD_EXIT|doWork"));
         assertThat(result.renderedRules()).anyMatch(rule -> rule.contains("IF_TRUE|doWork|com.example.SafeEval.eval"));

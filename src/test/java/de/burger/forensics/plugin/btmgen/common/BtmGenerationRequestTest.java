@@ -20,8 +20,10 @@ class BtmGenerationRequestTest {
                 .sourceRoots(sourceRoots)
                 .outputFile(Path.of("out/rules.btm"))
                 .cacheDatabaseFile(Path.of("cache/scan-cache"))
+                .analysisStoreDirectory(Path.of("forensics/analysis-store"))
                 .profileReportFile(Path.of("profile/report.json"))
                 .cacheEnabled(true)
+                .analysisStoreEnabled(true)
                 .cacheBackend("h2")
                 .profilingEnabled(true)
                 .strictParsing(true)
@@ -33,6 +35,11 @@ class BtmGenerationRequestTest {
                 .includeEntryExit(false)
                 .minBranchesPerMethod(3)
                 .includeTimestampHeader(true)
+                .cleanupPolicy("KEEP_ALWAYS")
+                .projectKey("demo")
+                .pluginVersion("1.0")
+                .manifestFile(Path.of("forensics/manifest.json"))
+                .checksumsFile(Path.of("forensics/checksums.sha256"))
                 .templateRequest(new BtmTemplateRequest("CUSTOM", "com.example.Foo", "bar", "(I)V"))
                 .build();
 
@@ -47,6 +54,7 @@ class BtmGenerationRequestTest {
         assertThrows(UnsupportedOperationException.class, () -> addIncludePackage(request));
         assertThrows(UnsupportedOperationException.class, () -> addExcludePackage(request));
         assertTrue(request.cacheEnabled());
+        assertTrue(request.analysisStoreEnabled());
         assertEquals("h2", request.cacheBackend());
         assertTrue(request.profilingEnabled());
         assertTrue(request.strictParsing());
@@ -56,6 +64,11 @@ class BtmGenerationRequestTest {
         assertFalse(request.includeEntryExit());
         assertEquals(3, request.minBranchesPerMethod());
         assertTrue(request.includeTimestampHeader());
+        assertEquals("KEEP_ALWAYS", request.cleanupPolicy());
+        assertEquals("demo", request.projectKey());
+        assertEquals("1.0", request.pluginVersion());
+        assertEquals(Path.of("forensics/manifest.json"), request.manifestFile());
+        assertEquals(Path.of("forensics/checksums.sha256"), request.checksumsFile());
         assertTrue(request.templateRequest().isPresent());
     }
 
@@ -68,8 +81,10 @@ class BtmGenerationRequestTest {
         assertEquals(List.of(Path.of("src/main/java")), request.sourceRoots());
         assertEquals(BtmGenerationDefaults.defaultOutputFile(), request.outputFile());
         assertEquals(BtmGenerationDefaults.defaultCacheDatabaseFile(), request.cacheDatabaseFile());
+        assertEquals(BtmGenerationDefaults.defaultAnalysisStoreDirectory(), request.analysisStoreDirectory());
         assertEquals(BtmGenerationDefaults.defaultProfileReportFile(), request.profileReportFile());
         assertFalse(request.cacheEnabled());
+        assertFalse(request.analysisStoreEnabled());
         assertEquals(BtmGenerationDefaults.DEFAULT_CACHE_BACKEND, request.cacheBackend());
         assertFalse(request.profilingEnabled());
         assertFalse(request.strictParsing());
@@ -81,6 +96,11 @@ class BtmGenerationRequestTest {
         assertTrue(request.includeEntryExit());
         assertEquals(BtmGenerationDefaults.DEFAULT_MIN_BRANCHES_PER_METHOD, request.minBranchesPerMethod());
         assertFalse(request.includeTimestampHeader());
+        assertEquals(BtmGenerationDefaults.defaultCleanupPolicy(), request.cleanupPolicy());
+        assertEquals("UNKNOWN", request.projectKey());
+        assertEquals("UNKNOWN", request.pluginVersion());
+        assertEquals(BtmGenerationDefaults.defaultManifestFile(), request.manifestFile());
+        assertEquals(BtmGenerationDefaults.defaultChecksumsFile(), request.checksumsFile());
         assertTrue(request.templateRequest().isEmpty());
     }
 
@@ -91,6 +111,17 @@ class BtmGenerationRequestTest {
                 .minBranchesPerMethod(-1);
 
         assertThrows(IllegalArgumentException.class, builder::build);
+    }
+
+    @Test
+    void builderCanClearTemplateRequest() {
+        BtmGenerationRequest request = BtmGenerationRequest.builder()
+                .sourceRoot(Path.of("src/main/java"))
+                .templateRequest(new BtmTemplateRequest("CUSTOM", "com.example.Foo", "bar", "(I)V"))
+                .noTemplateRequest()
+                .build();
+
+        assertTrue(request.templateRequest().isEmpty());
     }
 
     private static void addSourceRoot(BtmGenerationRequest request) {

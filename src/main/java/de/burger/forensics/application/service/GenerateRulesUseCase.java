@@ -70,7 +70,7 @@ public final class GenerateRulesUseCase {
 
         log.debug("Finished rule generation at " + clock.now() + " with " + rendered.size() + " rules");
         context.markFinished();
-        return new RuleGenerationResult(rendered, context, validationReport);
+        return new RuleGenerationResult(filtered, rendered, context, validationReport);
     }
 
     private List<ScanEvent> collectScanEvents(GenerationRequest request) {
