@@ -28,7 +28,8 @@ public final class ProcessJoernCommandExecutor implements JoernCommandExecutor {
             boolean completed = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
             if (!completed) {
                 process.destroyForcibly();
-                return new JoernCommandResult(-1, read(process.getInputStream()), "Command timed out.");
+                process.waitFor();
+                return new JoernCommandResult(-1, "", "Command timed out.");
             }
             return new JoernCommandResult(
                     process.exitValue(),
