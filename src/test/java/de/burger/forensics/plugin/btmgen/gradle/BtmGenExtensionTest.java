@@ -32,4 +32,20 @@ class BtmGenExtensionTest {
         assertEquals(new File("build/forensics/manifest.json"), extension.getManifestFile().get());
         assertEquals(new File("build/forensics/checksums.sha256"), extension.getChecksumsFile().get());
     }
+
+    @Test
+    void joernDefaultsAreConfiguredAsDisabled() {
+        var project = ProjectBuilder.builder().build();
+        var extension = project.getObjects().newInstance(BtmGenExtension.class);
+
+        assertTrue(!extension.getJoernEnabled().get());
+        assertEquals(new File("joern"), extension.getJoernExecutable().get());
+        assertEquals(new File("joern-parse"), extension.getJoernParseExecutable().get());
+        assertEquals(new File("joern-slice"), extension.getJoernSliceExecutable().get());
+        assertEquals(new File("build/forensics/joern/workspace"), extension.getJoernWorkspaceDirectory().get());
+        assertEquals(new File("build/forensics/joern"), extension.getJoernOutputDirectory().get());
+        assertEquals("", extension.getJoernMaxHeap().get());
+        assertEquals(300, extension.getJoernTimeoutSeconds().get());
+        assertTrue(extension.getJoernFailOnError().get());
+    }
 }

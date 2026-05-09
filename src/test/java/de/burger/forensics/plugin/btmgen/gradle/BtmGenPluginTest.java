@@ -92,9 +92,15 @@ class BtmGenPluginTest {
         project.getPlugins().apply("de.burger.forensics.btmgen");
 
         GenerateBtmTask task = (GenerateBtmTask) project.getTasks().getByName("generateBtmRules");
+        var analyzeTask = project.getTasks().getByName("analyzeForensicsSemantics");
+        var importTask = project.getTasks().getByName("importForensicsSemantics");
+        var aggregateTask = project.getTasks().getByName("forensicsAnalyze");
 
         assertEquals("forensics", task.getGroup());
         assertEquals("Generates Byteman (.btm) rules by scanning Java sources.", task.getDescription());
+        assertEquals("forensics", analyzeTask.getGroup());
+        assertEquals("forensics", importTask.getGroup());
+        assertEquals("forensics", aggregateTask.getGroup());
         assertTrue(task.getSourceRoot().get().getAsFile().toPath().endsWith("src\\main\\java")
             || task.getSourceRoot().get().getAsFile().toPath().endsWith("src/main/java"));
         assertTrue(task.getOutputFile().get().getAsFile().toPath().endsWith("forensics\\forensics.btm")
@@ -116,12 +122,19 @@ class BtmGenPluginTest {
 
         GenerateBtmTask task = (GenerateBtmTask) project.getTasks().getByName("generateBtmRules");
         var buildTask = project.getTasks().getByName("build");
+        var aggregateTask = project.getTasks().getByName("forensicsAnalyze");
+        var analyzeTask = project.getTasks().getByName("analyzeForensicsSemantics");
+        var importTask = project.getTasks().getByName("importForensicsSemantics");
 
         assertEquals(sourceRoot, task.getSourceRoot().get().getAsFile());
         assertEquals(outputFile, task.getOutputFile().get().getAsFile());
         assertEquals(outputFile.getParentFile(), task.getOutputDir().get().getAsFile());
         assertTrue(task.getStrictConditionValidation().get());
         assertTrue(buildTask.getTaskDependencies().getDependencies(buildTask).contains(task));
+        assertTrue(aggregateTask.getTaskDependencies().getDependencies(aggregateTask).contains(task));
+        assertTrue(aggregateTask.getTaskDependencies().getDependencies(aggregateTask).contains(importTask));
+        assertTrue(importTask.getTaskDependencies().getDependencies(importTask).contains(analyzeTask));
+        assertFalse(buildTask.getTaskDependencies().getDependencies(buildTask).contains(analyzeTask));
     }
 
     @Test

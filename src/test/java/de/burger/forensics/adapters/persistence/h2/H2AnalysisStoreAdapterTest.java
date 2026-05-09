@@ -14,6 +14,15 @@ import de.burger.forensics.domain.model.analysis.BuildIdentity;
 import de.burger.forensics.domain.model.analysis.SourceFileSnapshot;
 import de.burger.forensics.domain.model.analysis.SourceFingerprint;
 import de.burger.forensics.domain.model.entry.MethodEntry;
+import de.burger.forensics.domain.model.semantic.CallRelation;
+import de.burger.forensics.domain.model.semantic.ControlFlowRelation;
+import de.burger.forensics.domain.model.semantic.DataFlowPath;
+import de.burger.forensics.domain.model.semantic.DataFlowStep;
+import de.burger.forensics.domain.model.semantic.SemanticAnalysisResult;
+import de.burger.forensics.domain.model.semantic.SemanticAnchor;
+import de.burger.forensics.domain.model.semantic.SemanticEdge;
+import de.burger.forensics.domain.model.semantic.SemanticMethod;
+import de.burger.forensics.domain.model.semantic.SemanticNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -85,6 +94,39 @@ class H2AnalysisStoreAdapterTest {
         assertThat(status(database)).isEqualTo("COMPLETED");
     }
 
+    @Test
+    void storesSemanticImportGraphAndAnchorsIdempotently() throws SQLException {
+        Path database = tempDir.resolve("semantic-store");
+        AnalysisRunId runId = new AnalysisRunId("run-semantic");
+        H2AnalysisStoreAdapter adapter = new H2AnalysisStoreAdapter(database);
+        SemanticAnalysisResult result = semanticResult();
+
+        adapter.initializeSchema();
+        adapter.createAnalysisRun(identity(runId));
+        adapter.createSemanticImportRun(runId, result);
+        adapter.storeSemanticGraph(runId, result);
+        adapter.storeSemanticAnchors(runId, result.anchors());
+        adapter.storeArtifactChecksums(runId, result.artifacts());
+        adapter.updateSemanticImportStatus(runId, result.semanticFingerprint(), "COMPLETED");
+
+        adapter.createSemanticImportRun(runId, result);
+        adapter.storeSemanticGraph(runId, result);
+        adapter.storeSemanticAnchors(runId, result.anchors());
+        adapter.updateSemanticImportStatus(runId, result.semanticFingerprint(), "COMPLETED");
+        adapter.close();
+
+        assertThat(rowCount(database, "joern_import_run")).isEqualTo(1);
+        assertThat(rowCount(database, "joern_node")).isEqualTo(1);
+        assertThat(rowCount(database, "joern_edge")).isEqualTo(1);
+        assertThat(rowCount(database, "joern_method")).isEqualTo(1);
+        assertThat(rowCount(database, "joern_call_relation")).isEqualTo(1);
+        assertThat(rowCount(database, "joern_control_flow_relation")).isEqualTo(1);
+        assertThat(rowCount(database, "joern_data_flow_path")).isEqualTo(1);
+        assertThat(rowCount(database, "joern_data_flow_step")).isEqualTo(1);
+        assertThat(rowCount(database, "semantic_anchor")).isEqualTo(1);
+        assertThat(semanticStatus(database)).isEqualTo("COMPLETED");
+    }
+
     private static BuildIdentity identity(AnalysisRunId runId) {
         return new BuildIdentity(
                 "demo",
@@ -97,6 +139,30 @@ class H2AnalysisStoreAdapterTest {
                 "test",
                 AnalysisSchemaVersion.CURRENT,
                 Instant.EPOCH);
+    }
+
+    private static SemanticAnalysisResult semanticResult() {
+        return new SemanticAnalysisResult(
+                "joern 1.0",
+                "sha256:semantic",
+                List.of(new ArtifactChecksum("joern/cpg.bin", "joern-cpg", "abc", 3L)),
+                List.of(new SemanticNode("n1", "CALL", "Demo.java", "demo.Demo", "run", "void run()", 12, "call()")),
+                List.of(new SemanticEdge("e1", "n1", "n2", "CALL")),
+                List.of(new SemanticMethod("m1", "Demo.java", "demo.Demo", "run", "void run()", 12)),
+                List.of(new CallRelation("m1", "m2", "n1")),
+                List.of(new ControlFlowRelation("n1", "n2", "NEXT")),
+                List.of(new DataFlowPath("p1", "n1", "n2", List.of(new DataFlowStep("n1", 0, "SOURCE")))),
+                List.of(new SemanticAnchor(
+                        "demo.Demo#run:12:METHOD_ENTER",
+                        "n1",
+                        "Demo.java",
+                        "demo.Demo",
+                        "run",
+                        "void run()",
+                        12,
+                        "call()",
+                        0.95d,
+                        "FQCN_METHOD_LINE_CODE")));
     }
 
     private static long rowCount(Path databasePath, String tableName) throws SQLException {
@@ -112,6 +178,15 @@ class H2AnalysisStoreAdapterTest {
         try (Connection connection = connect(databasePath);
              Statement statement = connection.createStatement();
              ResultSet resultSet = statement.executeQuery("SELECT status FROM analysis_run")) {
+            assertThat(resultSet.next()).isTrue();
+            return resultSet.getString("status");
+        }
+    }
+
+    private static String semanticStatus(Path databasePath) throws SQLException {
+        try (Connection connection = connect(databasePath);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("SELECT status FROM joern_import_run")) {
             assertThat(resultSet.next()).isTrue();
             return resultSet.getString("status");
         }

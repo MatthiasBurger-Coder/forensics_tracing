@@ -35,6 +35,32 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
             task.getSourceRoot().finalizeValueOnRead();
             task.getOutputFile().finalizeValueOnRead();
         });
+        TaskProvider<@NotNull AnalyzeForensicsSemanticsTask> semanticTaskProvider = project.getTasks().register(
+                "analyzeForensicsSemantics",
+                AnalyzeForensicsSemanticsTask.class,
+                task -> {
+                    task.setGroup(FORENSICS_GROUP);
+                    task.setDescription("Runs optional Joern semantic enrichment for the generated forensics package.");
+                    task.setExtension(ext);
+                    task.mustRunAfter(taskProvider);
+                }
+        );
+        TaskProvider<@NotNull ImportForensicsSemanticsTask> importTaskProvider = project.getTasks().register(
+                "importForensicsSemantics",
+                ImportForensicsSemanticsTask.class,
+                task -> {
+                    task.setGroup(FORENSICS_GROUP);
+                    task.setDescription("Verifies imported Joern semantic enrichment artifacts.");
+                    task.setExtension(ext);
+                    task.dependsOn(semanticTaskProvider);
+                }
+        );
+        project.getTasks().register("forensicsAnalyze", task -> {
+            task.setGroup(FORENSICS_GROUP);
+            task.setDescription("Generates BTM rules and runs explicit Joern semantic enrichment.");
+            task.dependsOn(taskProvider);
+            task.dependsOn(importTaskProvider);
+        });
 
         project.getPlugins().withType(JavaPlugin.class, ignored -> attachRuntimeHelper(project));
         project.getTasks().register("cleanForensicsAnalysisStore", Delete.class, task -> {
@@ -43,6 +69,8 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
             task.delete(project.provider(() -> project.file(ext.getAnalysisStoreDirectory().get())));
             task.delete(project.provider(() -> project.file(ext.getManifestFile().get())));
             task.delete(project.provider(() -> project.file(ext.getChecksumsFile().get())));
+            task.delete(project.provider(() -> project.file(ext.getJoernOutputDirectory().get())));
+            task.delete(project.provider(() -> project.file(ext.getJoernWorkspaceDirectory().get())));
         });
         configureSubprojectRuntimeHelpers(project, ext);
 
