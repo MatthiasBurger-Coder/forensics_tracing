@@ -45,8 +45,9 @@ class MavenReactorAggregationTest {
         mojo.execute();
 
         String btm = Files.readString(outputFile);
-        assertThat(btm).contains("ModuleAService", "ModuleBService");
-        assertThat(btm).doesNotContain("module-empty");
+        assertThat(btm)
+                .contains("ModuleAService", "ModuleBService")
+                .doesNotContain("module-empty");
     }
 
     @Test

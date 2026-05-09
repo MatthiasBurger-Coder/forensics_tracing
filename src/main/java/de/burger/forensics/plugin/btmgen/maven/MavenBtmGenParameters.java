@@ -45,6 +45,7 @@ record MavenBtmGenParameters(
 
     private static final String NO_SOURCE_ROOTS_MESSAGE =
             "No existing Maven source roots were found. Configure forensics.sourceRoot or add compile source roots.";
+    private static final String UNKNOWN_PROJECT_VALUE = "UNKNOWN";
 
     MavenBtmGenParameters {
         Objects.requireNonNull(project, "project");
@@ -131,12 +132,12 @@ record MavenBtmGenParameters(
     }
 
     private static String defaultProjectKey(MavenProject project) {
-        String groupId = blankToDefault(project.getGroupId(), "UNKNOWN");
-        String artifactId = blankToDefault(project.getArtifactId(), "UNKNOWN");
+        String groupId = blankToDefault(project.getGroupId(), UNKNOWN_PROJECT_VALUE);
+        String artifactId = blankToDefault(project.getArtifactId(), UNKNOWN_PROJECT_VALUE);
         return groupId + ":" + artifactId;
     }
 
     private static String defaultPluginVersion(MavenProject project) {
-        return blankToDefault(project.getVersion(), "UNKNOWN");
+        return blankToDefault(project.getVersion(), UNKNOWN_PROJECT_VALUE);
     }
 }

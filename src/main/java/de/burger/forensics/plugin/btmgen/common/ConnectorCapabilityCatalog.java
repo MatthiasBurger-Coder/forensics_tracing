@@ -55,8 +55,4 @@ public final class ConnectorCapabilityCatalog {
     private static ConnectorCapabilityDescriptor mavenGap(ConnectorCapability capability, String notes) {
         return new ConnectorCapabilityDescriptor(capability, true, false, notes);
     }
-
-    private static ConnectorCapabilityDescriptor gradleGap(ConnectorCapability capability, String notes) {
-        return new ConnectorCapabilityDescriptor(capability, false, true, notes);
-    }
 }
