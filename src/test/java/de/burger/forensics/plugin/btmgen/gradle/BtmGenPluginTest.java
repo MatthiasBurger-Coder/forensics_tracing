@@ -16,24 +16,15 @@ class BtmGenPluginTest {
     private static final String RUNTIME_HELPER_ATTACHED_MARKER = "de.burger.forensics.btmgen.runtimeHelperAttached";
 
     @Test
-    void registersActivityPumlTask() {
+    void doesNotRegisterPlantUmlGenerationTasks() {
         Project project = ProjectBuilder.builder().build();
         project.getPlugins().apply("de.burger.forensics.btmgen");
 
-        var task = project.getTasks().findByName("generateActivityPumlFromBtm");
-        assertNotNull(task, "generateActivityPumlFromBtm task should be registered");
-        assertEquals("forensics", task.getGroup());
-        assertEquals("Converts a Byteman (.btm) file into renderable PlantUML activity diagrams.", task.getDescription());
-    }
-
-    @Test
-    void registersTraceActivityPumlTask() {
-        Project project = ProjectBuilder.builder().build();
-        project.getPlugins().apply("de.burger.forensics.btmgen");
-
-        var task = project.getTasks().findByName("generateActivityPumlFromTrace");
-        assertNotNull(task, "generateActivityPumlFromTrace task should be registered");
-        assertEquals("forensics", task.getGroup());
+        assertNull(project.getTasks().findByName("generateActivityPumlFromBtm"));
+        assertNull(project.getTasks().findByName("generateActivityPumlFromTrace"));
+        assertNull(project.getTasks().findByName("generatePuml"));
+        assertNull(project.getTasks().findByName("generatePlantUml"));
+        assertNull(project.getTasks().findByName("generateDiagrams"));
     }
 
     @Test
@@ -80,6 +71,19 @@ class BtmGenPluginTest {
         assertNull(subproject.getConfigurations().findByName("runtimeOnly"));
         assertNull(subproject.getConfigurations().findByName("testRuntimeOnly"));
         assertFalse(subproject.getExtensions().getExtraProperties().has(RUNTIME_HELPER_ATTACHED_MARKER));
+    }
+
+    @Test
+    void doesNotAttachRuntimeHelperToJavaSubprojectWhenMonorepoScanningIsDisabled() {
+        Project rootProject = ProjectBuilder.builder().build();
+        Project subproject = ProjectBuilder.builder().withParent(rootProject).withName("module-a").build();
+
+        rootProject.getPlugins().apply("de.burger.forensics.btmgen");
+        subproject.getPlugins().apply("java-library");
+
+        assertFalse(subproject.getExtensions().getExtraProperties().has(RUNTIME_HELPER_ATTACHED_MARKER));
+        assertEquals(0L, fileDependencyCount(subproject, "runtimeOnly"));
+        assertEquals(0L, fileDependencyCount(subproject, "testRuntimeOnly"));
     }
 
     @Test
@@ -131,6 +135,41 @@ class BtmGenPluginTest {
     }
 
     @Test
+    void attachRuntimeHelperSkipsProjectsAlreadyMarkedAsAttached() throws Exception {
+        Project project = ProjectBuilder.builder().build();
+        project.getPlugins().apply("java");
+        project.getExtensions().getExtraProperties().set(RUNTIME_HELPER_ATTACHED_MARKER, true);
+
+        invokeAttachRuntimeHelper(project);
+
+        assertEquals(0L, fileDependencyCount(project, "runtimeOnly"));
+        assertEquals(0L, fileDependencyCount(project, "testRuntimeOnly"));
+    }
+
+    @Test
+    void attachRuntimeHelperLeavesProjectUnmarkedWhenRuntimeConfigurationsAreMissing() throws Exception {
+        Project project = ProjectBuilder.builder().build();
+
+        invokeAttachRuntimeHelper(project);
+
+        assertNull(project.getConfigurations().findByName("runtimeOnly"));
+        assertNull(project.getConfigurations().findByName("testRuntimeOnly"));
+        assertFalse(project.getExtensions().getExtraProperties().has(RUNTIME_HELPER_ATTACHED_MARKER));
+    }
+
+    @Test
+    void attachRuntimeHelperMarksProjectWhenOnlyRuntimeConfigurationExists() throws Exception {
+        Project project = ProjectBuilder.builder().build();
+        project.getConfigurations().create("runtimeOnly");
+
+        invokeAttachRuntimeHelper(project);
+
+        assertEquals(1L, fileDependencyCount(project, "runtimeOnly"));
+        assertNull(project.getConfigurations().findByName("testRuntimeOnly"));
+        assertTrue(project.getExtensions().getExtraProperties().has(RUNTIME_HELPER_ATTACHED_MARKER));
+    }
+
+    @Test
     void addDependencyIfPresentSkipsMissingConfigurations() throws Exception {
         Project project = ProjectBuilder.builder().build();
         BtmGenPlugin plugin = new BtmGenPlugin();
@@ -147,6 +186,12 @@ class BtmGenPluginTest {
         Optional<File> runtimeArtifact = PluginRuntimeLocator.locateFor(BtmGenPlugin.class);
         assertTrue(runtimeArtifact.isPresent(), "Expected plugin runtime artifact to be locatable");
         return runtimeArtifact.get();
+    }
+
+    private static void invokeAttachRuntimeHelper(Project project) throws Exception {
+        Method method = BtmGenPlugin.class.getDeclaredMethod("attachRuntimeHelper", Project.class);
+        method.setAccessible(true);
+        method.invoke(new BtmGenPlugin(), project);
     }
 
     private static long fileDependencyCount(Project project, String configurationName) {
