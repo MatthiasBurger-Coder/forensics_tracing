@@ -52,5 +52,11 @@ public class HexagonRulesTest {
     static final ArchRule domain_does_not_use_tracing =
             noClasses().that().resideInAPackage("..domain..")
                     .should().dependOnClassesThat().resideInAnyPackage("..infrastructure.rt..");
+
+    @ArchTest
+    static final ArchRule domain_and_application_do_not_depend_on_storage_or_joern_cli =
+            noClasses().that().resideInAnyPackage("..domain..", "..application..")
+                    .should().dependOnClassesThat()
+                    .resideInAnyPackage("java.sql..", "org.h2..", "..adapters.joern..", "..adapters.persistence.h2..");
 }
 

@@ -25,10 +25,11 @@ class H2SchemaInitializerTest {
 
         new H2SchemaInitializer(database).initialize();
 
-        assertThat(schemaVersion(database)).isEqualTo(3);
+        assertThat(schemaVersion(database)).isEqualTo(4);
         assertThat(tableNames(database))
                 .contains("cache_source_file", "cache_scan_event", "analysis_run", "source_file",
-                        "scan_method", "scan_event", "btm_rule", "artifact_checksum");
+                        "scan_method", "scan_event", "btm_rule", "artifact_checksum",
+                        "joern_import_run", "joern_node", "joern_edge", "semantic_anchor");
     }
 
     private static Set<String> tableNames(Path databasePath) throws SQLException {

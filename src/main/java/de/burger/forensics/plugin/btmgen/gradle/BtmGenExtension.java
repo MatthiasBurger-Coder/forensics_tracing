@@ -42,6 +42,15 @@ public class BtmGenExtension {
     private final Property<@NotNull Boolean> strictParsing;
     private final Property<@NotNull Boolean> strictConditionValidation;
     private final Property<@NotNull Boolean> dependencyAwareInvalidation;
+    private final Property<@NotNull Boolean> joernEnabled;
+    private final Property<@NotNull File> joernExecutable;
+    private final Property<@NotNull File> joernParseExecutable;
+    private final Property<@NotNull File> joernSliceExecutable;
+    private final Property<@NotNull File> joernWorkspaceDirectory;
+    private final Property<@NotNull File> joernOutputDirectory;
+    private final Property<@NotNull String> joernMaxHeap;
+    private final Property<@NotNull Integer> joernTimeoutSeconds;
+    private final Property<@NotNull Boolean> joernFailOnError;
 
     @Inject
     public BtmGenExtension(ObjectFactory objects) {
@@ -67,6 +76,15 @@ public class BtmGenExtension {
         this.strictParsing = objects.property(Boolean.class);
         this.strictConditionValidation = objects.property(Boolean.class);
         this.dependencyAwareInvalidation = objects.property(Boolean.class);
+        this.joernEnabled = objects.property(Boolean.class);
+        this.joernExecutable = objects.property(File.class);
+        this.joernParseExecutable = objects.property(File.class);
+        this.joernSliceExecutable = objects.property(File.class);
+        this.joernWorkspaceDirectory = objects.property(File.class);
+        this.joernOutputDirectory = objects.property(File.class);
+        this.joernMaxHeap = objects.property(String.class);
+        this.joernTimeoutSeconds = objects.property(Integer.class);
+        this.joernFailOnError = objects.property(Boolean.class);
         this.sourceRoot.convention(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
         this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
@@ -86,6 +104,15 @@ public class BtmGenExtension {
         this.strictParsing.convention(false);
         this.strictConditionValidation.convention(false);
         this.dependencyAwareInvalidation.convention(false);
+        this.joernEnabled.convention(false);
+        this.joernExecutable.convention(new File("joern"));
+        this.joernParseExecutable.convention(new File("joern-parse"));
+        this.joernSliceExecutable.convention(new File("joern-slice"));
+        this.joernWorkspaceDirectory.convention(new File("build/forensics/joern/workspace"));
+        this.joernOutputDirectory.convention(new File("build/forensics/joern"));
+        this.joernMaxHeap.convention("");
+        this.joernTimeoutSeconds.convention(300);
+        this.joernFailOnError.convention(true);
     }
 
     public StrategyRegistry getRegistry() {
@@ -188,5 +215,41 @@ public class BtmGenExtension {
 
     public Property<@NotNull Boolean> getDependencyAwareInvalidation() {
         return dependencyAwareInvalidation;
+    }
+
+    public Property<@NotNull Boolean> getJoernEnabled() {
+        return joernEnabled;
+    }
+
+    public Property<@NotNull File> getJoernExecutable() {
+        return joernExecutable;
+    }
+
+    public Property<@NotNull File> getJoernParseExecutable() {
+        return joernParseExecutable;
+    }
+
+    public Property<@NotNull File> getJoernSliceExecutable() {
+        return joernSliceExecutable;
+    }
+
+    public Property<@NotNull File> getJoernWorkspaceDirectory() {
+        return joernWorkspaceDirectory;
+    }
+
+    public Property<@NotNull File> getJoernOutputDirectory() {
+        return joernOutputDirectory;
+    }
+
+    public Property<@NotNull String> getJoernMaxHeap() {
+        return joernMaxHeap;
+    }
+
+    public Property<@NotNull Integer> getJoernTimeoutSeconds() {
+        return joernTimeoutSeconds;
+    }
+
+    public Property<@NotNull Boolean> getJoernFailOnError() {
+        return joernFailOnError;
     }
 }

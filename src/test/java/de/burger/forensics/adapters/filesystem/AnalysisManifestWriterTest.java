@@ -6,6 +6,7 @@ import de.burger.forensics.domain.model.analysis.ArtifactChecksum;
 import de.burger.forensics.domain.model.analysis.BuildId;
 import de.burger.forensics.domain.model.analysis.BuildIdentity;
 import de.burger.forensics.domain.model.analysis.SourceFingerprint;
+import de.burger.forensics.domain.model.semantic.SemanticAnalysisResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -46,7 +47,26 @@ class AnalysisManifestWriterTest {
         assertThat(json).contains("\"schemaVersion\": \"1\"");
         assertThat(json).contains("\"projectKey\": \"demo\\\"project\\\\with\\b\\f\\n\\r\\tcontrols\"");
         assertThat(json).contains("\"analysisRunId\": \"run-1\"");
+        assertThat(json).contains("\"joernEnabled\": false");
         assertThat(json).contains("\"path\": \"forensics.btm\"");
+    }
+
+    @Test
+    void writesJoernManifestSectionWhenSemanticResultIsPresent() throws IOException {
+        Path manifest = tempDir.resolve("manifest-with-joern.json");
+        SemanticAnalysisResult semanticResult = SemanticAnalysisResult.empty("joern 1.0", "sha256:semantic");
+
+        new AnalysisManifestWriter().write(
+                manifest,
+                identity(),
+                List.of(new ArtifactChecksum("forensics.btm", "byteman-rules", "abc", 12L)),
+                semanticResult);
+
+        String json = Files.readString(manifest);
+        assertThat(json).contains("\"joernEnabled\": true");
+        assertThat(json).contains("\"joernVersion\": \"joern 1.0\"");
+        assertThat(json).contains("\"joernFingerprint\": \"sha256:semantic\"");
+        assertThat(json).contains("\"joernArtifacts\": [");
     }
 
     @Test

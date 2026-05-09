@@ -2,6 +2,7 @@ package de.burger.forensics.adapters.filesystem;
 
 import de.burger.forensics.domain.model.analysis.ArtifactChecksum;
 import de.burger.forensics.domain.model.analysis.BuildIdentity;
+import de.burger.forensics.domain.model.semantic.SemanticAnalysisResult;
 import de.burger.forensics.domain.port.out.AnalysisManifestPort;
 
 import java.io.IOException;
@@ -20,6 +21,15 @@ public final class AnalysisManifestWriter implements AnalysisManifestPort {
 
     @Override
     public void write(Path manifestFile, BuildIdentity identity, List<ArtifactChecksum> artifacts) {
+        write(manifestFile, identity, artifacts, null);
+    }
+
+    public void write(
+            Path manifestFile,
+            BuildIdentity identity,
+            List<ArtifactChecksum> artifacts,
+            SemanticAnalysisResult semanticResult
+    ) {
         Objects.requireNonNull(manifestFile, "Manifest file must not be null.");
         Objects.requireNonNull(identity, "Build identity must not be null.");
         Objects.requireNonNull(artifacts, "Artifacts must not be null.");
@@ -28,13 +38,17 @@ public final class AnalysisManifestWriter implements AnalysisManifestPort {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            Files.writeString(manifestFile, manifest(identity, artifacts), StandardCharsets.UTF_8);
+            Files.writeString(manifestFile, manifest(identity, artifacts, semanticResult), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to write analysis manifest " + manifestFile + ".", e);
         }
     }
 
-    private static String manifest(BuildIdentity identity, List<ArtifactChecksum> artifacts) {
+    private static String manifest(
+            BuildIdentity identity,
+            List<ArtifactChecksum> artifacts,
+            SemanticAnalysisResult semanticResult
+    ) {
         return """
                 {
                   "schemaVersion": "%s",
@@ -44,6 +58,7 @@ public final class AnalysisManifestWriter implements AnalysisManifestPort {
                   "sourceFingerprint": "%s",
                   "btmRulesFingerprint": "%s",
                   "pluginVersion": "%s",
+                  "joernEnabled": %s%s,
                   "createdAt": "%s",
                   "artifacts": [
                 %s
@@ -57,8 +72,26 @@ public final class AnalysisManifestWriter implements AnalysisManifestPort {
                 escape(identity.sourceFingerprint().value()),
                 escape(identity.btmRulesFingerprint()),
                 escape(identity.pluginVersion()),
+                semanticResult == null ? "false" : "true",
+                semanticJson(semanticResult),
                 escape(identity.createdAt().toString()),
                 artifactJson(artifacts));
+    }
+
+    private static String semanticJson(SemanticAnalysisResult semanticResult) {
+        if (semanticResult == null) {
+            return "";
+        }
+        return """
+                ,
+                  "joernVersion": "%s",
+                  "joernFingerprint": "%s",
+                  "joernArtifacts": [
+                %s
+                  ]""".formatted(
+                escape(semanticResult.providerVersion()),
+                escape(semanticResult.semanticFingerprint()),
+                artifactJson(semanticResult.artifacts()));
     }
 
     private static String artifactJson(List<ArtifactChecksum> artifacts) {

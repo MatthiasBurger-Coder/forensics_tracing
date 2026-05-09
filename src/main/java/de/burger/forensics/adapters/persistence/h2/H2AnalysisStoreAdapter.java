@@ -11,7 +11,17 @@ import de.burger.forensics.domain.model.analysis.ArtifactChecksum;
 import de.burger.forensics.domain.model.analysis.BuildIdentity;
 import de.burger.forensics.domain.model.analysis.SourceFileSnapshot;
 import de.burger.forensics.domain.model.entry.MethodEntry;
+import de.burger.forensics.domain.model.semantic.CallRelation;
+import de.burger.forensics.domain.model.semantic.ControlFlowRelation;
+import de.burger.forensics.domain.model.semantic.DataFlowPath;
+import de.burger.forensics.domain.model.semantic.DataFlowStep;
+import de.burger.forensics.domain.model.semantic.SemanticAnalysisResult;
+import de.burger.forensics.domain.model.semantic.SemanticAnchor;
+import de.burger.forensics.domain.model.semantic.SemanticEdge;
+import de.burger.forensics.domain.model.semantic.SemanticMethod;
+import de.burger.forensics.domain.model.semantic.SemanticNode;
 import de.burger.forensics.domain.port.out.AnalysisStorePort;
+import de.burger.forensics.domain.port.out.SemanticAnalysisStorePort;
 
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -26,7 +36,7 @@ import java.util.Objects;
 /**
  * H2-backed storage adapter for persisted forensics analysis snapshots.
  */
-public final class H2AnalysisStoreAdapter implements AnalysisStorePort {
+public final class H2AnalysisStoreAdapter implements AnalysisStorePort, SemanticAnalysisStorePort {
 
     private final Path databasePath;
     private final SqlTransactionRunner transactions;
@@ -261,8 +271,324 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort {
     }
 
     @Override
+    public void createSemanticImportRun(AnalysisRunId analysisRunId, SemanticAnalysisResult result) {
+        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(result, "Semantic analysis result must not be null.");
+        transactions.run("create semantic import run", connection -> {
+            deleteSemanticData(connection, analysisRunId);
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO joern_import_run (
+                        analysis_run_id,
+                        joern_fingerprint,
+                        joern_version,
+                        status,
+                        started_at
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """)) {
+                statement.setString(1, analysisRunId.value());
+                statement.setString(2, result.semanticFingerprint());
+                statement.setString(3, result.providerVersion());
+                statement.setString(4, "STARTED");
+                statement.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
+                statement.executeUpdate();
+            }
+        });
+    }
+
+    @Override
+    public void storeSemanticGraph(AnalysisRunId analysisRunId, SemanticAnalysisResult result) {
+        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(result, "Semantic analysis result must not be null.");
+        transactions.run("store semantic graph", connection -> {
+            insertSemanticNodes(connection, analysisRunId, result.nodes());
+            insertSemanticEdges(connection, analysisRunId, result.edges());
+            insertSemanticMethods(connection, analysisRunId, result.methods());
+            insertCallRelations(connection, analysisRunId, result.callRelations());
+            insertControlFlowRelations(connection, analysisRunId, result.controlFlowRelations());
+            insertDataFlowPaths(connection, analysisRunId, result.dataFlowPaths());
+        });
+    }
+
+    @Override
+    public void storeSemanticAnchors(AnalysisRunId analysisRunId, List<SemanticAnchor> anchors) {
+        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(anchors, "Semantic anchors must not be null.");
+        transactions.run("store semantic anchors", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO semantic_anchor (
+                        analysis_run_id,
+                        scan_event_key,
+                        semantic_node_id,
+                        relative_path,
+                        fqcn,
+                        method_name,
+                        signature,
+                        line_number,
+                        normalized_code,
+                        confidence,
+                        match_strategy
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """)) {
+                for (SemanticAnchor anchor : anchors) {
+                    statement.setString(1, analysisRunId.value());
+                    statement.setString(2, anchor.scanEventKey());
+                    statement.setString(3, anchor.semanticNodeId());
+                    statement.setString(4, anchor.relativePath());
+                    setNullableString(statement, 5, anchor.fqcn());
+                    statement.setString(6, anchor.methodName());
+                    setNullableString(statement, 7, anchor.signature());
+                    statement.setInt(8, anchor.lineNumber());
+                    setNullableString(statement, 9, anchor.normalizedCode());
+                    statement.setDouble(10, anchor.confidence());
+                    statement.setString(11, anchor.matchStrategy());
+                    statement.addBatch();
+                }
+                statement.executeBatch();
+            }
+        });
+    }
+
+    @Override
+    public void updateSemanticImportStatus(
+            AnalysisRunId analysisRunId,
+            String semanticFingerprint,
+            String status
+    ) {
+        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        if (semanticFingerprint == null || semanticFingerprint.isBlank()) {
+            throw new IllegalArgumentException("Semantic fingerprint must not be blank.");
+        }
+        if (status == null || status.isBlank()) {
+            throw new IllegalArgumentException("Semantic import status must not be blank.");
+        }
+        transactions.run("update semantic import status", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement("""
+                    UPDATE joern_import_run
+                    SET status = ?,
+                        completed_at = ?
+                    WHERE analysis_run_id = ?
+                      AND joern_fingerprint = ?
+                    """)) {
+                statement.setString(1, status);
+                statement.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+                statement.setString(3, analysisRunId.value());
+                statement.setString(4, semanticFingerprint);
+                statement.executeUpdate();
+            }
+        });
+    }
+
+    @Override
     public void close() {
         // Connections are scoped per transaction.
+    }
+
+    private static void deleteSemanticData(Connection connection, AnalysisRunId analysisRunId) throws SQLException {
+        List<String> statements = List.of(
+                "DELETE FROM semantic_anchor WHERE analysis_run_id = ?",
+                "DELETE FROM joern_data_flow_step WHERE analysis_run_id = ?",
+                "DELETE FROM joern_data_flow_path WHERE analysis_run_id = ?",
+                "DELETE FROM joern_control_flow_relation WHERE analysis_run_id = ?",
+                "DELETE FROM joern_call_relation WHERE analysis_run_id = ?",
+                "DELETE FROM joern_method WHERE analysis_run_id = ?",
+                "DELETE FROM joern_edge WHERE analysis_run_id = ?",
+                "DELETE FROM joern_node WHERE analysis_run_id = ?",
+                "DELETE FROM joern_import_run WHERE analysis_run_id = ?");
+        for (String sql : statements) {
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setString(1, analysisRunId.value());
+                statement.executeUpdate();
+            }
+        }
+    }
+
+    private static void insertSemanticNodes(
+            Connection connection,
+            AnalysisRunId analysisRunId,
+            List<SemanticNode> nodes
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO joern_node (
+                    analysis_run_id,
+                    node_id,
+                    node_type,
+                    relative_path,
+                    fqcn,
+                    method_name,
+                    signature,
+                    line_number,
+                    normalized_code
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            for (SemanticNode node : nodes) {
+                statement.setString(1, analysisRunId.value());
+                statement.setString(2, node.nodeId());
+                statement.setString(3, node.nodeType());
+                statement.setString(4, node.relativePath());
+                setNullableString(statement, 5, node.fqcn());
+                statement.setString(6, node.methodName());
+                setNullableString(statement, 7, node.signature());
+                statement.setInt(8, node.lineNumber());
+                setNullableString(statement, 9, node.normalizedCode());
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private static void insertSemanticEdges(
+            Connection connection,
+            AnalysisRunId analysisRunId,
+            List<SemanticEdge> edges
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO joern_edge (
+                    analysis_run_id,
+                    edge_id,
+                    source_node_id,
+                    target_node_id,
+                    edge_type
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """)) {
+            for (SemanticEdge edge : edges) {
+                statement.setString(1, analysisRunId.value());
+                statement.setString(2, edge.edgeId());
+                statement.setString(3, edge.sourceNodeId());
+                statement.setString(4, edge.targetNodeId());
+                statement.setString(5, edge.edgeType());
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private static void insertSemanticMethods(
+            Connection connection,
+            AnalysisRunId analysisRunId,
+            List<SemanticMethod> methods
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO joern_method (
+                    analysis_run_id,
+                    method_id,
+                    relative_path,
+                    fqcn,
+                    method_name,
+                    signature,
+                    line_number
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            for (SemanticMethod method : methods) {
+                statement.setString(1, analysisRunId.value());
+                statement.setString(2, method.methodId());
+                statement.setString(3, method.relativePath());
+                statement.setString(4, method.fqcn());
+                statement.setString(5, method.methodName());
+                setNullableString(statement, 6, method.signature());
+                statement.setInt(7, method.lineNumber());
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private static void insertCallRelations(
+            Connection connection,
+            AnalysisRunId analysisRunId,
+            List<CallRelation> relations
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO joern_call_relation (
+                    analysis_run_id,
+                    caller_method_id,
+                    callee_method_id,
+                    call_node_id
+                )
+                VALUES (?, ?, ?, ?)
+                """)) {
+            for (CallRelation relation : relations) {
+                statement.setString(1, analysisRunId.value());
+                statement.setString(2, relation.callerMethodId());
+                statement.setString(3, relation.calleeMethodId());
+                statement.setString(4, relation.callNodeId());
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private static void insertControlFlowRelations(
+            Connection connection,
+            AnalysisRunId analysisRunId,
+            List<ControlFlowRelation> relations
+    ) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO joern_control_flow_relation (
+                    analysis_run_id,
+                    source_node_id,
+                    target_node_id,
+                    relation_type
+                )
+                VALUES (?, ?, ?, ?)
+                """)) {
+            for (ControlFlowRelation relation : relations) {
+                statement.setString(1, analysisRunId.value());
+                statement.setString(2, relation.sourceNodeId());
+                statement.setString(3, relation.targetNodeId());
+                statement.setString(4, relation.relationType());
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
+    }
+
+    private static void insertDataFlowPaths(
+            Connection connection,
+            AnalysisRunId analysisRunId,
+            List<DataFlowPath> paths
+    ) throws SQLException {
+        try (PreparedStatement pathStatement = connection.prepareStatement("""
+                INSERT INTO joern_data_flow_path (
+                    analysis_run_id,
+                    path_id,
+                    source_node_id,
+                    target_node_id
+                )
+                VALUES (?, ?, ?, ?)
+                """);
+             PreparedStatement stepStatement = connection.prepareStatement("""
+                INSERT INTO joern_data_flow_step (
+                    analysis_run_id,
+                    path_id,
+                    node_id,
+                    step_order,
+                    step_kind
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """)) {
+            for (DataFlowPath path : paths) {
+                pathStatement.setString(1, analysisRunId.value());
+                pathStatement.setString(2, path.pathId());
+                pathStatement.setString(3, path.sourceNodeId());
+                pathStatement.setString(4, path.targetNodeId());
+                pathStatement.addBatch();
+                for (DataFlowStep step : path.steps()) {
+                    stepStatement.setString(1, analysisRunId.value());
+                    stepStatement.setString(2, path.pathId());
+                    stepStatement.setString(3, step.nodeId());
+                    stepStatement.setInt(4, step.orderIndex());
+                    stepStatement.setString(5, step.kind());
+                    stepStatement.addBatch();
+                }
+            }
+            pathStatement.executeBatch();
+            stepStatement.executeBatch();
+        }
     }
 
     private static void deleteExistingRun(Connection connection, AnalysisRunId analysisRunId) throws SQLException {

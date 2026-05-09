@@ -227,8 +227,37 @@ btmGen {
 
 Supported cleanup policies are `DELETE_ON_SUCCESS`, `KEEP_ON_SUCCESS`, `KEEP_ON_FAILURE`, and `KEEP_ALWAYS`.
 Set `analysisStoreEnabled=false` to keep the previous Gradle behavior of writing only the `.btm` file.
-Run `./gradlew cleanForensicsAnalysisStore` to delete the generated analysis store, manifest, and checksum file without wiring that cleanup into the normal `clean` lifecycle.
-Joern import, gRPC publishing, server upload, replay, and LLM context generation are not implemented by this feature.
+Run `./gradlew cleanForensicsAnalysisStore` to delete the generated analysis store, manifest, checksum file, and Joern work directories without wiring that cleanup into the normal `clean` lifecycle.
+gRPC publishing, server upload, replay, and LLM context generation are not implemented by this feature.
+
+### Joern Semantic Enrichment
+
+Joern enrichment is optional and disabled by default. It is not part of the normal `build` lifecycle.
+Run the explicit aggregate task when a generated analysis package should be enriched with Joern artifacts and H2 semantic tables:
+
+```bash
+./gradlew forensicsAnalyze
+```
+
+The aggregate task runs `generateBtmRules`, `analyzeForensicsSemantics`, and `importForensicsSemantics`.
+`analyzeForensicsSemantics` fails with a clear message unless `btmGen.joernEnabled=true`.
+Joern is invoked as an external CLI; it is not added as a Java dependency.
+
+```kotlin
+btmGen {
+    joernEnabled.set(true)
+    joernExecutable.set(file("/opt/joern/joern"))
+    joernParseExecutable.set(file("/opt/joern/joern-parse"))
+    joernSliceExecutable.set(file("/opt/joern/joern-slice"))
+    joernWorkspaceDirectory.set(file("build/forensics/joern/workspace"))
+    joernOutputDirectory.set(file("build/forensics/joern"))
+    joernTimeoutSeconds.set(300)
+    joernFailOnError.set(true)
+}
+```
+
+When enabled, the package additionally contains `build/forensics/joern/cpg.bin`, `callgraph.json`, `controlflow.json`, `dataflow.json`, and `slices.json`.
+The H2 store receives `joern_import_run`, graph, relation, data-flow, and `semantic_anchor` rows, and the manifest/checksum files include the Joern artifacts.
 
 ### Step 5: Inspect the generated file
 
@@ -470,6 +499,21 @@ Property behavior:
 - `cleanupPolicy`
   - default: `KEEP_ON_SUCCESS`
   - controls whether the H2 analysis store directory is retained after task execution
+- `joernEnabled`
+  - default: `false`
+  - enables explicit Joern semantic enrichment tasks; Joern still does not run during normal `build`
+- `joernExecutable`, `joernParseExecutable`, `joernSliceExecutable`
+  - defaults: `joern`, `joern-parse`, `joern-slice`
+  - external CLI executables used by `analyzeForensicsSemantics`
+- `joernWorkspaceDirectory`
+  - default: `build/forensics/joern/workspace`
+- `joernOutputDirectory`
+  - default: `build/forensics/joern`
+- `joernTimeoutSeconds`
+  - default: `300`
+- `joernFailOnError`
+  - default: `true`
+  - when `false`, failed Joern commands are tolerated and available artifacts are parsed
 - `outputFile`
   - default: `build/forensics/forensics.btm`
   - the task writes exactly one `.btm` file there by default
