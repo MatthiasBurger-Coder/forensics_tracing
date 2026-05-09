@@ -23,6 +23,10 @@ import java.util.Objects;
  */
 public final class JoernOutputParser {
 
+    private static final String FIELD_SIGNATURE = "signature";
+    private static final String FIELD_SOURCE = "source";
+    private static final String FIELD_TARGET = "target";
+
     public SemanticAnalysisResult parse(
             JoernArtifactPaths paths,
             List<ArtifactChecksum> artifacts,
@@ -54,7 +58,7 @@ public final class JoernOutputParser {
                 JsonField.text(object, "file"),
                 JsonField.optionalText(object, "fqcn"),
                 JsonField.text(object, "method"),
-                JsonField.optionalText(object, "signature"),
+                JsonField.optionalText(object, FIELD_SIGNATURE),
                 JsonField.integer(object, "line"),
                 JsonField.optionalText(object, "code"));
     }
@@ -62,8 +66,8 @@ public final class JoernOutputParser {
     private SemanticEdge edge(String object) {
         return new SemanticEdge(
                 JsonField.text(object, "id"),
-                JsonField.text(object, "source"),
-                JsonField.text(object, "target"),
+                JsonField.text(object, FIELD_SOURCE),
+                JsonField.text(object, FIELD_TARGET),
                 JsonField.text(object, "type"));
     }
 
@@ -73,7 +77,7 @@ public final class JoernOutputParser {
                 JsonField.text(object, "file"),
                 JsonField.text(object, "fqcn"),
                 JsonField.text(object, "name"),
-                JsonField.optionalText(object, "signature"),
+                JsonField.optionalText(object, FIELD_SIGNATURE),
                 JsonField.integer(object, "line"));
     }
 
@@ -86,16 +90,16 @@ public final class JoernOutputParser {
 
     private ControlFlowRelation controlFlow(String object) {
         return new ControlFlowRelation(
-                JsonField.text(object, "source"),
-                JsonField.text(object, "target"),
+                JsonField.text(object, FIELD_SOURCE),
+                JsonField.text(object, FIELD_TARGET),
                 JsonField.text(object, "type"));
     }
 
     private DataFlowPath dataFlowPath(String object) {
         return new DataFlowPath(
                 JsonField.text(object, "id"),
-                JsonField.text(object, "source"),
-                JsonField.text(object, "target"),
+                JsonField.text(object, FIELD_SOURCE),
+                JsonField.text(object, FIELD_TARGET),
                 JsonArray.objects(object, "steps").stream()
                         .map(step -> new DataFlowStep(
                                 JsonField.text(step, "node"),
@@ -111,7 +115,7 @@ public final class JoernOutputParser {
                 JsonField.text(object, "file"),
                 JsonField.optionalText(object, "fqcn"),
                 JsonField.text(object, "method"),
-                JsonField.optionalText(object, "signature"),
+                JsonField.optionalText(object, FIELD_SIGNATURE),
                 JsonField.integer(object, "line"),
                 JsonField.optionalText(object, "code"),
                 JsonField.decimal(object, "confidence"),
@@ -150,17 +154,15 @@ public final class JoernOutputParser {
         private static List<String> splitObjects(String arrayBody) {
             java.util.ArrayList<String> objects = new java.util.ArrayList<>();
             int cursor = 0;
-            while (cursor < arrayBody.length()) {
-                int openBrace = arrayBody.indexOf('{', cursor);
-                if (openBrace < 0) {
-                    break;
-                }
+            int openBrace = arrayBody.indexOf('{', cursor);
+            while (openBrace >= 0) {
                 int closeBrace = matching(arrayBody, openBrace, '{', '}');
                 if (closeBrace < 0) {
-                    break;
+                    return List.copyOf(objects);
                 }
                 objects.add(arrayBody.substring(openBrace, closeBrace + 1));
                 cursor = closeBrace + 1;
+                openBrace = arrayBody.indexOf('{', cursor);
             }
             return List.copyOf(objects);
         }
@@ -225,16 +227,13 @@ public final class JoernOutputParser {
                 if (escaped) {
                     builder.append(unescape(current));
                     escaped = false;
-                    continue;
-                }
-                if (current == '\\') {
+                } else if (current == '\\') {
                     escaped = true;
-                    continue;
-                }
-                if (current == '"') {
+                } else if (current == '"') {
                     return builder.toString();
+                } else {
+                    builder.append(current);
                 }
-                builder.append(current);
             }
             return null;
         }

@@ -41,12 +41,9 @@ class JoernCliSemanticAnalysisAdapterTest {
                 executor,
                 new JoernOutputParser(),
                 new ArtifactChecksumService());
+        SemanticAnalysisRequest request = request(sourceRoot);
 
-        SemanticAnalysisResult result = adapter.analyze(new SemanticAnalysisRequest(
-                identity(),
-                List.of(sourceRoot.toString()),
-                tempDir.resolve("workspace").toString(),
-                tempDir.resolve("joern").toString()));
+        SemanticAnalysisResult result = adapter.analyze(request);
 
         assertThat(executor.commands).hasSize(5);
         assertThat(result.providerVersion()).isEqualTo("joern 1.2.3");
@@ -67,12 +64,9 @@ class JoernCliSemanticAnalysisAdapterTest {
                 executor,
                 new JoernOutputParser(),
                 new ArtifactChecksumService());
+        SemanticAnalysisRequest request = request(sourceRoot);
 
-        assertThatThrownBy(() -> adapter.analyze(new SemanticAnalysisRequest(
-                identity(),
-                List.of(sourceRoot.toString()),
-                tempDir.resolve("workspace").toString(),
-                tempDir.resolve("joern").toString())))
+        assertThatThrownBy(() -> adapter.analyze(request))
                 .isInstanceOf(JoernAnalysisException.class)
                 .hasMessageContaining("joern-parse");
     }
@@ -87,12 +81,9 @@ class JoernCliSemanticAnalysisAdapterTest {
                 executor,
                 new JoernOutputParser(),
                 new ArtifactChecksumService());
+        SemanticAnalysisRequest request = request(sourceRoot);
 
-        SemanticAnalysisResult result = adapter.analyze(new SemanticAnalysisRequest(
-                identity(),
-                List.of(sourceRoot.toString()),
-                tempDir.resolve("workspace").toString(),
-                tempDir.resolve("joern").toString()));
+        SemanticAnalysisResult result = adapter.analyze(request);
 
         assertThat(result.providerVersion()).isEqualTo("joern 1.2.3");
     }
@@ -108,12 +99,9 @@ class JoernCliSemanticAnalysisAdapterTest {
                 executor,
                 new JoernOutputParser(),
                 new ArtifactChecksumService());
+        SemanticAnalysisRequest request = request(sourceRoot);
 
-        SemanticAnalysisResult result = adapter.analyze(new SemanticAnalysisRequest(
-                identity(),
-                List.of(sourceRoot.toString()),
-                tempDir.resolve("workspace").toString(),
-                tempDir.resolve("joern").toString()));
+        SemanticAnalysisResult result = adapter.analyze(request);
 
         assertThat(result.providerVersion()).isEqualTo("UNKNOWN");
         assertThat(Files.readString(tempDir.resolve("joern/slices.json"))).contains("\"anchors\":[]");
@@ -126,6 +114,14 @@ class JoernCliSemanticAnalysisAdapterTest {
                 Path.of("joern-slice"),
                 Duration.ofSeconds(30),
                 failOnError);
+    }
+
+    private SemanticAnalysisRequest request(Path sourceRoot) {
+        return new SemanticAnalysisRequest(
+                identity(),
+                List.of(sourceRoot.toString()),
+                tempDir.resolve("workspace").toString(),
+                tempDir.resolve("joern").toString());
     }
 
     private static BuildIdentity identity() {

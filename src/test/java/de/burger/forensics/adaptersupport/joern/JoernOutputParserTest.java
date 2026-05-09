@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -96,7 +98,7 @@ class JoernOutputParserTest {
                 {"nodes":[{"id":"n1","type":"CALL","file":"Demo.java","line":1}]}
                 """, StandardCharsets.UTF_8);
 
-        assertThatThrownBy(() -> new JoernOutputParser().parse(paths, List.of(), "joern", "sha256:x"))
+        assertThatThrownBy(() -> parse(paths, "joern", "sha256:x"))
                 .isInstanceOf(JoernAnalysisException.class)
                 .hasMessageContaining("method");
     }
@@ -108,13 +110,13 @@ class JoernOutputParserTest {
                 {"nodes":[{"id":"n1","type":"CALL","file":"Demo.java","method":"run","line":1.5,"code":"call()"}]}
                 """, StandardCharsets.UTF_8);
 
-        assertThatThrownBy(() -> new JoernOutputParser().parse(paths, List.of(), "joern", "sha256:x"))
+        assertThatThrownBy(() -> parse(paths, "joern", "sha256:x"))
                 .isInstanceOf(NumberFormatException.class);
 
         Files.writeString(paths.callgraph(), """
                 {"nodes":[{"id":"n1","type":"CALL","file":"Demo.java","method":"run","line":,"code":"call()"}]}
                 """, StandardCharsets.UTF_8);
-        assertThatThrownBy(() -> new JoernOutputParser().parse(paths, List.of(), "joern", "sha256:x"))
+        assertThatThrownBy(() -> parse(paths, "joern", "sha256:x"))
                 .isInstanceOf(JoernAnalysisException.class)
                 .hasMessageContaining("line");
     }
@@ -126,7 +128,7 @@ class JoernOutputParserTest {
                 {"nodes":[{"id":"n1","type":"CALL","file":"Demo.java","line":1,"code":"call()","method":run}]}
                 """, StandardCharsets.UTF_8);
 
-        assertThatThrownBy(() -> new JoernOutputParser().parse(paths, List.of(), "joern", "sha256:x"))
+        assertThatThrownBy(() -> parse(paths, "joern", "sha256:x"))
                 .isInstanceOf(JoernAnalysisException.class)
                 .hasMessageContaining("method");
     }
@@ -151,46 +153,34 @@ class JoernOutputParserTest {
                 Duration.ofSeconds(1),
                 true);
         JoernArtifactPaths paths = JoernArtifactPaths.under(tempDir);
+        Path joern = Path.of("joern");
+        Path joernParse = Path.of("joern-parse");
+        Path joernSlice = Path.of("joern-slice");
+        Duration oneSecond = Duration.ofSeconds(1);
+        Duration negativeDuration = Duration.ofSeconds(-1);
 
         assertThat(config.failOnError()).isTrue();
         assertThat(paths.all()).containsExactly(paths.cpg(), paths.callgraph(), paths.controlflow(), paths.dataflow(), paths.slices());
-        assertThatThrownBy(() -> new JoernAnalysisConfig(
-                null,
-                Path.of("joern-parse"),
-                Path.of("joern-slice"),
-                Duration.ofSeconds(1),
-                true)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new JoernAnalysisConfig(
-                Path.of("joern"),
-                null,
-                Path.of("joern-slice"),
-                Duration.ofSeconds(1),
-                true)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new JoernAnalysisConfig(
-                Path.of("joern"),
-                Path.of("joern-parse"),
-                null,
-                Duration.ofSeconds(1),
-                true)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new JoernAnalysisConfig(
-                Path.of("joern"),
-                Path.of("joern-parse"),
-                Path.of("joern-slice"),
-                Duration.ZERO,
-                true)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new JoernAnalysisConfig(
-                Path.of("joern"),
-                Path.of("joern-parse"),
-                Path.of("joern-slice"),
-                Duration.ofSeconds(-1),
-                true)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> JoernArtifactPaths.under(null))
+        assertThatThrownBy(() -> config(null, joernParse, joernSlice, oneSecond))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> config(joern, null, joernSlice, oneSecond))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> config(joern, joernParse, null, oneSecond))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> config(joern, joernParse, joernSlice, Duration.ZERO))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> config(joern, joernParse, joernSlice, negativeDuration))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> artifactPaths(null))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void processExecutorRejectsEmptyCommands() {
-        assertThatThrownBy(() -> new ProcessJoernCommandExecutor().execute(List.of(), Duration.ofSeconds(1), tempDir))
+        List<String> command = List.of();
+        Duration timeout = Duration.ofSeconds(1);
+
+        assertThatThrownBy(() -> execute(command, timeout, tempDir))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -209,10 +199,11 @@ class JoernOutputParserTest {
 
     @Test
     void processExecutorWrapsMissingCommandFailures() {
-        assertThatThrownBy(() -> new ProcessJoernCommandExecutor().execute(
-                List.of(tempDir.resolve("missing-command").toString()),
-                Duration.ofSeconds(1),
-                tempDir)).isInstanceOf(IllegalStateException.class)
+        List<String> command = List.of(tempDir.resolve("missing-command").toString());
+        Duration timeout = Duration.ofSeconds(1);
+
+        assertThatThrownBy(() -> execute(command, timeout, tempDir))
+                .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Failed to execute Joern command");
     }
 
@@ -237,9 +228,28 @@ class JoernOutputParserTest {
         return System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT).contains("win");
     }
 
+    private static SemanticAnalysisResult parse(JoernArtifactPaths paths, String providerVersion, String semanticFingerprint) {
+        return new JoernOutputParser().parse(paths, List.of(), providerVersion, semanticFingerprint);
+    }
+
+    private static JoernAnalysisConfig config(Path joernExecutable,
+                                              Path joernParseExecutable,
+                                              Path joernSliceExecutable,
+                                              Duration timeout) {
+        return new JoernAnalysisConfig(joernExecutable, joernParseExecutable, joernSliceExecutable, timeout, true);
+    }
+
+    private static JoernArtifactPaths artifactPaths(Path root) {
+        return JoernArtifactPaths.under(root);
+    }
+
+    private static JoernCommandResult execute(List<String> command, Duration timeout, Path workingDirectory) {
+        return new ProcessJoernCommandExecutor().execute(command, timeout, workingDirectory);
+    }
+
     public static final class SleepProcess {
         public static void main(String[] args) throws Exception {
-            Thread.sleep(10_000L);
+            new CountDownLatch(1).await(10L, TimeUnit.SECONDS);
         }
     }
 }

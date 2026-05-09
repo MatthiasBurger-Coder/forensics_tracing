@@ -43,8 +43,9 @@ class AnalyzeSemanticsUseCaseTest {
         RecordingStore store = new RecordingStore();
         store.failGraph = true;
         AnalyzeSemanticsUseCase useCase = new AnalyzeSemanticsUseCase(request -> result, store);
+        SemanticAnalysisRequest request = request();
 
-        assertThatThrownBy(() -> useCase.analyze(request()))
+        assertThatThrownBy(() -> useCase.analyze(request))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("store failed");
         assertThat(store.calls).containsExactly("create", "graph", "status:FAILED");
@@ -100,12 +101,13 @@ class AnalyzeSemanticsUseCaseTest {
     void useCaseRejectsNullDependenciesAndRequest() {
         SemanticAnalysisPort analysisPort = request -> result(List.of());
         RecordingStore store = new RecordingStore();
+        AnalyzeSemanticsUseCase useCase = new AnalyzeSemanticsUseCase(analysisPort, store);
 
         assertThatThrownBy(() -> new AnalyzeSemanticsUseCase(null, store))
                 .isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> new AnalyzeSemanticsUseCase(analysisPort, null))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new AnalyzeSemanticsUseCase(analysisPort, store).analyze(null))
+        assertThatThrownBy(() -> useCase.analyze(null))
                 .isInstanceOf(NullPointerException.class);
     }
 

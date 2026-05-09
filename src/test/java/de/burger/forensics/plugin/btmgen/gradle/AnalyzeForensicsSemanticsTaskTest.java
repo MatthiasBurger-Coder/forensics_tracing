@@ -116,8 +116,9 @@ class AnalyzeForensicsSemanticsTaskTest {
         task.analyze();
 
         String manifestJson = Files.readString(manifest);
-        assertThat(manifestJson).contains("\"joernEnabled\": true");
-        assertThat(manifestJson).contains("\"joernFingerprint\": \"sha256:semantic\"");
+        assertThat(manifestJson).contains(
+                "\"joernEnabled\": true",
+                "\"joernFingerprint\": \"sha256:semantic\"");
         assertThat(Files.readString(checksums)).contains("joern/cpg.bin");
         assertThat(rowCount(database, "joern_import_run")).isEqualTo(1);
         assertThat(rowCount(database, "semantic_anchor")).isEqualTo(1);

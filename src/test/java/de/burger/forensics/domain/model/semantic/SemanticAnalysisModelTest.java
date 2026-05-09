@@ -19,6 +19,8 @@ class SemanticAnalysisModelTest {
     @Test
     void requestRequiresIdentitySourcesAndDirectories() {
         BuildIdentity identity = identity();
+        List<String> emptySources = List.of();
+        List<String> blankSources = List.of(" ");
 
         SemanticAnalysisRequest request = new SemanticAnalysisRequest(
                 identity,
@@ -28,19 +30,19 @@ class SemanticAnalysisModelTest {
 
         assertThat(request.identity()).isEqualTo(identity);
         assertThat(request.sourceRoots()).containsExactly("src/main/java");
-        assertThatThrownBy(() -> new SemanticAnalysisRequest(null, List.of("src"), "work", "out"))
+        assertThatThrownBy(() -> requestWithIdentity(null))
                 .isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> new SemanticAnalysisRequest(identity, List.of(), "work", "out"))
+        assertThatThrownBy(() -> requestWithSources(emptySources))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnalysisRequest(identity, List.of(" "), "work", "out"))
+        assertThatThrownBy(() -> requestWithSources(blankSources))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnalysisRequest(identity, List.of("src"), null, "out"))
+        assertThatThrownBy(() -> requestWithWorkspace(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnalysisRequest(identity, List.of("src"), " ", "out"))
+        assertThatThrownBy(() -> requestWithWorkspace(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnalysisRequest(identity, List.of("src"), "work", null))
+        assertThatThrownBy(() -> requestWithOutputDirectory(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnalysisRequest(identity, List.of("src"), "work", " "))
+        assertThatThrownBy(() -> requestWithOutputDirectory(" "))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -61,39 +63,12 @@ class SemanticAnalysisModelTest {
 
         assertThat(result.artifacts()).containsExactly(artifact);
         assertThat(result.nodes()).containsExactly(node());
-        assertThatThrownBy(() -> new SemanticAnalysisResult(
-                null,
-                "sha256:x",
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of())).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnalysisResult(
-                " ",
-                "sha256:x",
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of())).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnalysisResult(
-                "joern",
-                null,
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> resultWithProviderVersion(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> resultWithProviderVersion(" "))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> resultWithFingerprint(null))
+                .isInstanceOf(IllegalArgumentException.class);
         assertThat(SemanticAnalysisResult.empty("UNKNOWN", "sha256:empty").nodes()).isEmpty();
     }
 
@@ -107,33 +82,33 @@ class SemanticAnalysisModelTest {
         assertThat(dataFlowStep().orderIndex()).isZero();
         assertThat(dataFlowPath().steps()).containsExactly(dataFlowStep());
 
-        assertThatThrownBy(() -> new SemanticNode(" ", "CALL", "Demo.java", "Demo", "run", null, 1, null))
+        assertThatThrownBy(() -> nodeWithId(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticNode("n1", null, "Demo.java", "Demo", "run", null, 1, null))
+        assertThatThrownBy(() -> nodeWithType(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticNode("n1", "CALL", null, "Demo", "run", null, 1, null))
+        assertThatThrownBy(() -> nodeWithFile(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticNode("n1", "CALL", "Demo.java", "Demo", " ", null, 1, null))
+        assertThatThrownBy(() -> nodeWithMethod(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticNode("n1", "CALL", "Demo.java", "Demo", "run", null, 0, null))
+        assertThatThrownBy(() -> nodeWithLine(0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticEdge(null, "n1", "n2", "CALL"))
+        assertThatThrownBy(() -> edgeWithId(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticEdge("e1", " ", "n2", "CALL"))
+        assertThatThrownBy(() -> edgeWithSource(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticEdge("e1", "n1", null, "CALL"))
+        assertThatThrownBy(() -> edgeWithTarget(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticEdge("e1", "n1", "n2", " "))
+        assertThatThrownBy(() -> edgeWithType(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticMethod(" ", "Demo.java", "Demo", "run", null, 1))
+        assertThatThrownBy(() -> methodWithId(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticMethod("m1", null, "Demo", "run", null, 1))
+        assertThatThrownBy(() -> methodWithFile(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticMethod("m1", "Demo.java", " ", "run", null, 1))
+        assertThatThrownBy(() -> methodWithClassName(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticMethod("m1", "Demo.java", "Demo", null, null, 1))
+        assertThatThrownBy(() -> methodWithName(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticMethod("m1", "Demo.java", "Demo", "run", null, 0))
+        assertThatThrownBy(() -> methodWithLine(0))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -152,46 +127,202 @@ class SemanticAnalysisModelTest {
                 0.40d,
                 "LINE_ONLY").normalizedCode()).isEmpty();
 
-        assertThatThrownBy(() -> new CallRelation(null, "m2", "n1"))
+        assertThatThrownBy(() -> callWithCaller(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CallRelation("m1", " ", "n1"))
+        assertThatThrownBy(() -> callWithCallee(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new CallRelation("m1", "m2", null))
+        assertThatThrownBy(() -> callWithNode(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ControlFlowRelation(null, "n2", "NEXT"))
+        assertThatThrownBy(() -> controlFlowWithSource(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ControlFlowRelation("n1", " ", "NEXT"))
+        assertThatThrownBy(() -> controlFlowWithTarget(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new ControlFlowRelation("n1", "n2", null))
+        assertThatThrownBy(() -> controlFlowWithType(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new DataFlowStep(null, 0, "SOURCE"))
+        assertThatThrownBy(() -> dataFlowStepWithNode(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new DataFlowStep("n1", -1, "SOURCE"))
+        assertThatThrownBy(() -> dataFlowStepWithOrder(-1))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new DataFlowStep("n1", 0, " "))
+        assertThatThrownBy(() -> dataFlowStepWithKind(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new DataFlowPath(null, "n1", "n2", List.of()))
+        assertThatThrownBy(() -> dataFlowPathWithId(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new DataFlowPath("p1", " ", "n2", List.of()))
+        assertThatThrownBy(() -> dataFlowPathWithSource(" "))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new DataFlowPath("p1", "n1", null, List.of()))
+        assertThatThrownBy(() -> dataFlowPathWithTarget(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnchor(null, "n1", "Demo.java", "Demo", "run", null, 1, null, 0.1d, "LINE_ONLY"))
+        assertThatThrownBy(() -> anchorWithEventKey(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnchor("event", null, "Demo.java", "Demo", "run", null, 1, null, 0.1d, "LINE_ONLY"))
+        assertThatThrownBy(() -> anchorWithNode(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnchor("event", "n1", null, "Demo", "run", null, 1, null, 0.1d, "LINE_ONLY"))
+        assertThatThrownBy(() -> anchorWithFile(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnchor("event", "n1", "Demo.java", "Demo", null, null, 1, null, 0.1d, "LINE_ONLY"))
+        assertThatThrownBy(() -> anchorWithMethod(null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnchor("event", "n1", "Demo.java", "Demo", "run", null, 0, null, 0.1d, "LINE_ONLY"))
+        assertThatThrownBy(() -> anchorWithLine(0))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnchor("event", "n1", "Demo.java", "Demo", "run", null, 1, null, -0.1d, "LINE_ONLY"))
+        assertThatThrownBy(() -> anchorWithConfidence(-0.1d))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnchor("event", "n1", "Demo.java", "Demo", "run", null, 1, null, 1.1d, "LINE_ONLY"))
+        assertThatThrownBy(() -> anchorWithConfidence(1.1d))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new SemanticAnchor("event", "n1", "Demo.java", "Demo", "run", null, 1, null, 0.1d, null))
+        assertThatThrownBy(() -> anchorWithStrategy(null))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private static SemanticAnalysisRequest requestWithIdentity(BuildIdentity identity) {
+        return new SemanticAnalysisRequest(identity, List.of("src"), "work", "out");
+    }
+
+    private static SemanticAnalysisRequest requestWithSources(List<String> sourceRoots) {
+        return new SemanticAnalysisRequest(identity(), sourceRoots, "work", "out");
+    }
+
+    private static SemanticAnalysisRequest requestWithWorkspace(String workspaceDirectory) {
+        return new SemanticAnalysisRequest(identity(), List.of("src"), workspaceDirectory, "out");
+    }
+
+    private static SemanticAnalysisRequest requestWithOutputDirectory(String outputDirectory) {
+        return new SemanticAnalysisRequest(identity(), List.of("src"), "work", outputDirectory);
+    }
+
+    private static SemanticAnalysisResult resultWithProviderVersion(String providerVersion) {
+        return SemanticAnalysisResult.empty(providerVersion, "sha256:x");
+    }
+
+    private static SemanticAnalysisResult resultWithFingerprint(String semanticFingerprint) {
+        return SemanticAnalysisResult.empty("joern", semanticFingerprint);
+    }
+
+    private static SemanticNode nodeWithId(String nodeId) {
+        return new SemanticNode(nodeId, "CALL", "Demo.java", "Demo", "run", null, 1, null);
+    }
+
+    private static SemanticNode nodeWithType(String nodeType) {
+        return new SemanticNode("n1", nodeType, "Demo.java", "Demo", "run", null, 1, null);
+    }
+
+    private static SemanticNode nodeWithFile(String filePath) {
+        return new SemanticNode("n1", "CALL", filePath, "Demo", "run", null, 1, null);
+    }
+
+    private static SemanticNode nodeWithMethod(String methodName) {
+        return new SemanticNode("n1", "CALL", "Demo.java", "Demo", methodName, null, 1, null);
+    }
+
+    private static SemanticNode nodeWithLine(int line) {
+        return new SemanticNode("n1", "CALL", "Demo.java", "Demo", "run", null, line, null);
+    }
+
+    private static SemanticEdge edgeWithId(String edgeId) {
+        return new SemanticEdge(edgeId, "n1", "n2", "CALL");
+    }
+
+    private static SemanticEdge edgeWithSource(String sourceNodeId) {
+        return new SemanticEdge("e1", sourceNodeId, "n2", "CALL");
+    }
+
+    private static SemanticEdge edgeWithTarget(String targetNodeId) {
+        return new SemanticEdge("e1", "n1", targetNodeId, "CALL");
+    }
+
+    private static SemanticEdge edgeWithType(String edgeType) {
+        return new SemanticEdge("e1", "n1", "n2", edgeType);
+    }
+
+    private static SemanticMethod methodWithId(String methodId) {
+        return new SemanticMethod(methodId, "Demo.java", "Demo", "run", null, 1);
+    }
+
+    private static SemanticMethod methodWithFile(String filePath) {
+        return new SemanticMethod("m1", filePath, "Demo", "run", null, 1);
+    }
+
+    private static SemanticMethod methodWithClassName(String className) {
+        return new SemanticMethod("m1", "Demo.java", className, "run", null, 1);
+    }
+
+    private static SemanticMethod methodWithName(String methodName) {
+        return new SemanticMethod("m1", "Demo.java", "Demo", methodName, null, 1);
+    }
+
+    private static SemanticMethod methodWithLine(int line) {
+        return new SemanticMethod("m1", "Demo.java", "Demo", "run", null, line);
+    }
+
+    private static CallRelation callWithCaller(String callerMethodId) {
+        return new CallRelation(callerMethodId, "m2", "n1");
+    }
+
+    private static CallRelation callWithCallee(String calleeMethodId) {
+        return new CallRelation("m1", calleeMethodId, "n1");
+    }
+
+    private static CallRelation callWithNode(String callNodeId) {
+        return new CallRelation("m1", "m2", callNodeId);
+    }
+
+    private static ControlFlowRelation controlFlowWithSource(String sourceNodeId) {
+        return new ControlFlowRelation(sourceNodeId, "n2", "NEXT");
+    }
+
+    private static ControlFlowRelation controlFlowWithTarget(String targetNodeId) {
+        return new ControlFlowRelation("n1", targetNodeId, "NEXT");
+    }
+
+    private static ControlFlowRelation controlFlowWithType(String relationType) {
+        return new ControlFlowRelation("n1", "n2", relationType);
+    }
+
+    private static DataFlowStep dataFlowStepWithNode(String nodeId) {
+        return new DataFlowStep(nodeId, 0, "SOURCE");
+    }
+
+    private static DataFlowStep dataFlowStepWithOrder(int orderIndex) {
+        return new DataFlowStep("n1", orderIndex, "SOURCE");
+    }
+
+    private static DataFlowStep dataFlowStepWithKind(String stepKind) {
+        return new DataFlowStep("n1", 0, stepKind);
+    }
+
+    private static DataFlowPath dataFlowPathWithId(String pathId) {
+        return new DataFlowPath(pathId, "n1", "n2", List.of());
+    }
+
+    private static DataFlowPath dataFlowPathWithSource(String sourceNodeId) {
+        return new DataFlowPath("p1", sourceNodeId, "n2", List.of());
+    }
+
+    private static DataFlowPath dataFlowPathWithTarget(String targetNodeId) {
+        return new DataFlowPath("p1", "n1", targetNodeId, List.of());
+    }
+
+    private static SemanticAnchor anchorWithEventKey(String scanEventKey) {
+        return new SemanticAnchor(scanEventKey, "n1", "Demo.java", "Demo", "run", null, 1, null, 0.1d, "LINE_ONLY");
+    }
+
+    private static SemanticAnchor anchorWithNode(String semanticNodeId) {
+        return new SemanticAnchor("event", semanticNodeId, "Demo.java", "Demo", "run", null, 1, null, 0.1d, "LINE_ONLY");
+    }
+
+    private static SemanticAnchor anchorWithFile(String filePath) {
+        return new SemanticAnchor("event", "n1", filePath, "Demo", "run", null, 1, null, 0.1d, "LINE_ONLY");
+    }
+
+    private static SemanticAnchor anchorWithMethod(String methodName) {
+        return new SemanticAnchor("event", "n1", "Demo.java", "Demo", methodName, null, 1, null, 0.1d, "LINE_ONLY");
+    }
+
+    private static SemanticAnchor anchorWithLine(int line) {
+        return new SemanticAnchor("event", "n1", "Demo.java", "Demo", "run", null, line, null, 0.1d, "LINE_ONLY");
+    }
+
+    private static SemanticAnchor anchorWithConfidence(double confidence) {
+        return new SemanticAnchor("event", "n1", "Demo.java", "Demo", "run", null, 1, null, confidence, "LINE_ONLY");
+    }
+
+    private static SemanticAnchor anchorWithStrategy(String matchStrategy) {
+        return new SemanticAnchor("event", "n1", "Demo.java", "Demo", "run", null, 1, null, 0.1d, matchStrategy);
     }
 
     private static BuildIdentity identity() {
