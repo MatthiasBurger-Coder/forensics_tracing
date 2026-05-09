@@ -13,7 +13,6 @@ import java.util.Optional;
 
 public final class BtmGenPlugin implements Plugin<@NotNull Project> {
     private static final String FORENSICS_GROUP = "forensics";
-    private static final String FORENSICS_DIR = "forensics";
     private static final String RUNTIME_HELPER_ATTACHED_MARKER = "de.burger.forensics.btmgen.runtimeHelperAttached";
 
     @Override
@@ -29,27 +28,6 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
                     t.setGroup(FORENSICS_GROUP);
                     t.setDescription("Generates Byteman (.btm) rules by scanning Java sources.");
                     t.setExtension(ext);
-                }
-        );
-        project.getTasks().register(
-                "generateActivityPumlFromBtm",
-                GenerateActivityPumlFromBtmTask.class,
-                t -> {
-                    t.setGroup(FORENSICS_GROUP);
-                    t.setDescription("Converts a Byteman (.btm) file into renderable PlantUML activity diagrams.");
-                    t.getInputBtm().convention(project.getLayout().getBuildDirectory().file(FORENSICS_DIR + "/forensics.btm"));
-                    t.getOutputPuml().convention(project.getLayout().getBuildDirectory().file(FORENSICS_DIR + "/forensics-activity.puml"));
-                    t.getDiagramTitle().convention("Forensics Activity from Byteman Rules");
-                }
-        );
-        project.getTasks().register(
-                "generateActivityPumlFromTrace",
-                GenerateActivityPumlFromTraceTask.class,
-                t -> {
-                    t.setGroup(FORENSICS_GROUP);
-                    t.setDescription("Converts runtime trace JSON (METHOD_EXIT/BRANCH_TAKEN) into a PlantUML activity diagram.");
-                    t.getInputTrace().convention(project.getLayout().getProjectDirectory().file("logs/trace.json"));
-                    t.getOutputPuml().convention(project.getLayout().getBuildDirectory().file(FORENSICS_DIR + "/trace-activity.puml"));
                 }
         );
         taskProvider.configure(task -> {

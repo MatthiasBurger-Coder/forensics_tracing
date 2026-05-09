@@ -11,6 +11,7 @@ import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -697,6 +698,50 @@ class GenerateBtmTaskTest {
     }
 
     @Test
+    void setExtensionHandlesParentlessOutputAndNullRegistry(@TempDir Path tempDir) throws Exception {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        var task = project.getTasks().register("generateBtmParentlessOutput", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        extension.getOutputFile().set(new File("rules.btm"));
+
+        var registryField = BtmGenExtension.class.getDeclaredField("registry");
+        registryField.setAccessible(true);
+        registryField.set(extension, null);
+
+        task.setExtension(extension);
+
+        assertEquals("rules.btm", task.getOutputFile().get().getAsFile().getName());
+        assertTrue(task.getOutputDir().get().getAsFile().toPath().endsWith("forensics"));
+        assertFalse(task.getRegistryFingerprint().get().isBlank());
+    }
+
+    @Test
+    void privateFileHelperBranchesHandleNullsFilesAndJavaBaseProjects(@TempDir Path tempDir) throws Exception {
+        Method mainSourceSetRoots = GenerateBtmTask.class.getDeclaredMethod("mainSourceSetRoots", org.gradle.api.Project.class);
+        mainSourceSetRoots.setAccessible(true);
+        Method addSourceRoot = GenerateBtmTask.class.getDeclaredMethod("addSourceRoot", Set.class, File.class);
+        addSourceRoot.setAccessible(true);
+        Method parentDirectory = GenerateBtmTask.class.getDeclaredMethod("parentDirectory", File.class);
+        parentDirectory.setAccessible(true);
+        Method isExistingSourceLocation = GenerateBtmTask.class.getDeclaredMethod("isExistingSourceLocation", Path.class);
+        isExistingSourceLocation.setAccessible(true);
+
+        var javaBaseProject = ProjectBuilder.builder().withName("java-base-only").build();
+        javaBaseProject.getPlugins().apply("java-base");
+        assertEquals(Set.of(), mainSourceSetRoots.invoke(null, javaBaseProject));
+
+        Set<Path> roots = new java.util.LinkedHashSet<>();
+        addSourceRoot.invoke(null, roots, null);
+        assertTrue(roots.isEmpty());
+
+        assertEquals(new File("."), parentDirectory.invoke(null, new File("rules.btm")));
+        assertEquals(false, isExistingSourceLocation.invoke(null, tempDir.resolve("missing")));
+        assertEquals(true, isExistingSourceLocation.invoke(null, tempDir));
+        assertEquals(true, isExistingSourceLocation.invoke(null, Files.createFile(tempDir.resolve("Sample.java"))));
+    }
+
+    @Test
     void privateHelpersCoverFallbackConfigurationBranches(@TempDir Path tempDir) throws Exception {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
         project.getPlugins().apply("java-library");
@@ -733,9 +778,10 @@ class GenerateBtmTaskTest {
         assertEquals(true, includeEntryExit.invoke(task));
         assertEquals(2, minBranches.invoke(task));
         assertEquals(false, hasMinimalInputs.invoke(task));
-        task.getClassName().set("com.example.Foo");
-        task.getMethodName().set("bar");
         task.getTemplateId().set("CUSTOM");
+        task.getClassName().set("com.example.Foo");
+        assertEquals(false, hasMinimalInputs.invoke(task));
+        task.getMethodName().set("bar");
         assertEquals(true, hasMinimalInputs.invoke(task));
 
         Files.createDirectories(tempDir.resolve("src/main/java"));
@@ -744,6 +790,9 @@ class GenerateBtmTaskTest {
         List<Path> roots = (List<Path>) resolveSourceRoots.invoke(task);
         assertEquals(2, roots.size());
         assertTrue(roots.stream().allMatch(path -> path.endsWith("src\\main\\java") || path.endsWith("src/main/java")));
+        assertEquals(List.of("com.example", "org.example"), packagePrefixes.invoke(task));
+
+        task.getIncludes().set("com.example, , org.example");
         assertEquals(List.of("com.example", "org.example"), packagePrefixes.invoke(task));
 
         task.getIncludes().set("");
