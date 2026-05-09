@@ -30,6 +30,12 @@ Confirmed existing features in `main`:
 - Maven BtmGenMojo exists.
 - Maven BtmGenMojo delegates BTM generation to BtmGenerationRunner.
 - Maven BtmGenMojo supports module-local BTM generation parameters.
+- Maven BtmGenMojo supports module-local Analysis Store parameters.
+- Maven BtmGenMojo supports module-local manifest/checksum parameters.
+- Maven BtmGenAggregateMojo exists.
+- MavenReactorSourceRootCollector exists.
+- Maven aggregate BTM generation uses MavenSession reactor projects.
+- Maven clean-analysis goal exists for generated analysis artifacts.
 - Gradle GenerateBtmTask supports source root collection, scanSubprojects, Analysis Store settings, manifest, checksums, profiling, cache settings, and deterministic output settings.
 - Gradle Joern semantic enrichment tasks exist.
 - README documents that Gradle writes the static analysis package by default.
@@ -44,24 +50,14 @@ Missing or incomplete features in `main`:
 - AGENTS.md does not yet contain the mandatory Build Tool Connector Feature Parity section.
 - QUALITY.md does not yet contain the Build Tool Connector Parity Gate.
 - Repository workflow.md does not yet contain the mandatory AGENTS.md alignment section that must be used before creating or changing workflow.md files.
-- Maven reactor aggregation is not implemented.
-- BtmGenAggregateMojo is not present.
-- MavenReactorSourceRootCollector is not present.
-- Maven BtmGenMojo has no MavenSession/ReactorProjects access.
-- Maven BtmGenMojo has no Analysis Store parameters.
-- Maven BtmGenMojo has no manifest/checksum parameters.
 - Maven BtmGenMojo has no Joern parameters.
 - Maven semantic analysis goals are not present.
 - Maven full analysis / analyze-aggregate goal is not present.
 - Shared request model does not yet cover all Gradle/Maven parity fields such as Joern configuration and reactor identity.
 - BuildToolConnectorParityTest is not present.
-- MavenReactorAggregationTest is not present.
-- MavenAnalysisStoreParityTest is not present.
 - MavenJoernConfigurationParityTest is not present.
 - MavenFullAnalysisParityTest is not present.
-- README still documents Maven as module-local and explicitly says that Maven reactor aggregation is not implemented yet.
-- README still documents Maven output as `.btm`-only plus local scanner cache state.
-- README baseline still references Gradle 9.4.0, while this workflow uses the project-requested Gradle 9.1 baseline. This conflict must be resolved before functional implementation.
+- README baseline references Gradle 9.4.0, matching the project-approved Gradle baseline for this workflow.
 ```
 
 Conclusion:
@@ -76,10 +72,8 @@ Implementation priority from this source check:
 ```text
 1. Align AGENTS.md, QUALITY.md, workflow.md, and README baseline/rules.
 2. Add executable parity guardrails before broad functional changes.
-3. Implement Maven reactor aggregation.
-4. Add Maven Analysis Store and manifest/checksum parity.
-5. Add Maven Joern/full-analysis parity.
-6. Add parity tests and final quality gate.
+3. Add Maven Joern/full-analysis parity.
+4. Add remaining parity tests and final quality gate.
 ```
 
 ## 1. Goal
@@ -221,7 +215,7 @@ Current project decision for this workflow:
 
 ```text
 JDK: 17
-Gradle: 9.1
+Gradle: 9.4.0
 JUnit: 5
 ArchUnit: enabled
 JaCoCo: enabled

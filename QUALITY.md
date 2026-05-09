@@ -106,6 +106,38 @@ When Gradle plugin metadata, task inputs, task outputs, or plugin declarations c
 ./gradlew validatePlugins --dependency-verification strict --no-daemon --console=plain --stacktrace
 ```
 
+## Build Tool Connector Parity Gate
+
+Gradle and Maven connector behavior must remain equivalent for all forensic capabilities.
+
+The quality gate must verify:
+
+```text
+- shared request model is build-tool-neutral
+- Gradle adapter maps extension/task configuration into the shared request model
+- Maven adapter maps Mojo/Reactor configuration into the shared request model
+- Gradle and Maven produce equivalent BTM output for the same Java sources
+- Gradle and Maven produce equivalent Analysis Store artifacts when enabled
+- Gradle and Maven produce equivalent manifest/checksum metadata
+- Gradle and Maven expose equivalent Joern configuration when Joern support is available
+- Maven reactor aggregation matches Gradle multi-project aggregation semantics
+```
+
+Required local verification:
+
+```bash
+./gradlew test --tests '*BtmGenerationAdapterValidationTest' --dependency-verification strict --console=plain --stacktrace
+./gradlew test --tests '*BuildToolConnectorParityTest' --dependency-verification strict --console=plain --stacktrace
+./gradlew test --tests '*MavenReactorAggregationTest' --dependency-verification strict --console=plain --stacktrace
+./gradlew test --tests '*HexagonRulesTest' --dependency-verification strict --console=plain --stacktrace
+./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage --dependency-verification strict --console=plain --stacktrace
+./gradlew validatePlugins --dependency-verification strict --no-daemon --console=plain --stacktrace
+```
+
+If Maven plugin descriptors or Maven integration behavior are changed, verification must also include a Maven fixture run from a generated test project or an integration-test fixture.
+
+Agents must not claim connector parity unless the parity tests were executed or the reason for not executing them is explicitly reported.
+
 ## Optional SonarCloud Check
 
 If `SONAR_TOKEN` or `sonar.token` is available, contributors may also run:

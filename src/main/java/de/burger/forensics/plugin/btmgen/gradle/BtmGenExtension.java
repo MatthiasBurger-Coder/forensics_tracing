@@ -24,6 +24,8 @@ public class BtmGenExtension {
     private final ConfigurableFileCollection sourceRoots;
     private final Property<@NotNull File> outputFile;
     private final Property<@NotNull String> includes;
+    private final Property<@NotNull String> excludes;
+    private final Property<@NotNull Boolean> includeTests;
     private final Property<@NotNull String> helperFqn;
     private final Property<@NotNull Integer> minBranchesPerMethod;
     private final Property<@NotNull Boolean> scanSubprojects;
@@ -58,6 +60,8 @@ public class BtmGenExtension {
         this.sourceRoots = objects.fileCollection();
         this.outputFile = objects.property(File.class);
         this.includes = objects.property(String.class);
+        this.excludes = objects.property(String.class);
+        this.includeTests = objects.property(Boolean.class);
         this.helperFqn = objects.property(String.class);
         this.minBranchesPerMethod = objects.property(Integer.class);
         this.scanSubprojects = objects.property(Boolean.class);
@@ -87,6 +91,8 @@ public class BtmGenExtension {
         this.joernFailOnError = objects.property(Boolean.class);
         this.sourceRoot.convention(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
+        this.excludes.convention("");
+        this.includeTests.convention(false);
         this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
         this.minBranchesPerMethod.convention(2);
         this.scanSubprojects.convention(false);
@@ -143,6 +149,14 @@ public class BtmGenExtension {
 
     public Property<@NotNull String> getIncludes() {
         return includes;
+    }
+
+    public Property<@NotNull String> getExcludes() {
+        return excludes;
+    }
+
+    public Property<@NotNull Boolean> getIncludeTests() {
+        return includeTests;
     }
 
     public Property<@NotNull String> getHelperFqn() {

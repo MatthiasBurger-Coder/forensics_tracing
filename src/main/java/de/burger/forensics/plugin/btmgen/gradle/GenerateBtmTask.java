@@ -74,7 +74,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
     public abstract ConfigurableFileCollection getCurrentProjectSourceSetRoots();
 
     @Internal
+    public abstract ConfigurableFileCollection getCurrentProjectTestSourceSetRoots();
+
+    @Internal
     public abstract ConfigurableFileCollection getSubprojectSourceSetRoots();
+
+    @Internal
+    public abstract ConfigurableFileCollection getSubprojectTestSourceSetRoots();
 
     @InputFiles
     @Optional
@@ -102,6 +108,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Input @Optional public abstract Property<@NotNull Integer>  getMinBranchesPerMethod();
     @Input @Optional public abstract Property<@NotNull String>  getHelperFqn();
     @Input @Optional public abstract Property<@NotNull String>  getIncludes();
+    @Input @Optional public abstract Property<@NotNull String>  getExcludes();
+    @Input @Optional public abstract Property<@NotNull Boolean> getIncludeTests();
     @Input @Optional public abstract Property<@NotNull Boolean> getScanSubprojects();
     @Input @Optional public abstract Property<@NotNull Boolean> getIncludeTimestampHeader();
     @Input @Optional public abstract Property<@NotNull String> getRegistryFingerprint();
@@ -135,6 +143,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
         }
         getHelperFqn().convention(ext.getHelperFqn());
         getIncludes().convention(ext.getIncludes());
+        getExcludes().convention(ext.getExcludes());
+        getIncludeTests().convention(ext.getIncludeTests());
         getMinBranchesPerMethod().convention(ext.getMinBranchesPerMethod());
         getScanSubprojects().convention(ext.getScanSubprojects());
         getIncludeTimestampHeader().convention(ext.getIncludeTimestampHeader());
@@ -185,6 +195,7 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .strictConditionValidation(getStrictConditionValidation().getOrElse(false))
                 .dependencyAwareInvalidation(getDependencyAwareInvalidation().getOrElse(false))
                 .includePackages(packagePrefixes())
+                .excludePackages(excludePackagePrefixes())
                 .helperFqn(resolveHelperFqn())
                 .includeEntryExit(includeEntryExit())
                 .minBranchesPerMethod(minBranches())
@@ -221,6 +232,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
         conventionIfMissing(getMinBranchesPerMethod(), 2);
         conventionIfMissing(getHelperFqn(), RuleParams.DEFAULT_HELPER_FQN);
         conventionIfMissing(getIncludes(), "");
+        conventionIfMissing(getExcludes(), "");
+        conventionIfMissing(getIncludeTests(), false);
         conventionIfMissing(getScanSubprojects(), false);
         conventionIfMissing(getIncludeTimestampHeader(), false);
         conventionIfMissing(getRegistryFingerprint(), registryFingerprint(registry));
@@ -268,11 +281,17 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
     private void configureSourceSetRoots() {
         getCurrentProjectSourceSetRoots().setFrom(mainSourceSetRoots(getProject()));
+        getCurrentProjectTestSourceSetRoots().setFrom(testSourceSetRoots(getProject()));
         List<File> subprojectRoots = getProject().getSubprojects().stream()
                 .sorted(Comparator.comparing(Project::getPath))
                 .flatMap(subproject -> mainSourceSetRoots(subproject).stream())
                 .toList();
         getSubprojectSourceSetRoots().setFrom(subprojectRoots);
+        List<File> subprojectTestRoots = getProject().getSubprojects().stream()
+                .sorted(Comparator.comparing(Project::getPath))
+                .flatMap(subproject -> testSourceSetRoots(subproject).stream())
+                .toList();
+        getSubprojectTestSourceSetRoots().setFrom(subprojectTestRoots);
     }
 
     private boolean hasMinimalInputs() {
@@ -303,8 +322,14 @@ public abstract class GenerateBtmTask extends DefaultTask {
         addSourceRoot(roots, getSourceRoot().getOrNull() == null ? null : getSourceRoot().get().getAsFile());
         sortedFiles(getSourceRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
         sortedFiles(getCurrentProjectSourceSetRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
+        if (getIncludeTests().getOrElse(false)) {
+            sortedFiles(getCurrentProjectTestSourceSetRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
+        }
         if (getScanSubprojects().getOrElse(false)) {
             sortedFiles(getSubprojectSourceSetRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
+            if (getIncludeTests().getOrElse(false)) {
+                sortedFiles(getSubprojectTestSourceSetRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
+            }
         }
         return roots.stream()
                 .filter(GenerateBtmTask::isExistingSourceLocation)
@@ -312,11 +337,18 @@ public abstract class GenerateBtmTask extends DefaultTask {
     }
 
     private List<String> packagePrefixes() {
-        String includes = getIncludes().getOrElse("");
-        if (includes.isBlank()) {
+        return packagePrefixes(getIncludes().getOrElse(""));
+    }
+
+    private List<String> excludePackagePrefixes() {
+        return packagePrefixes(getExcludes().getOrElse(""));
+    }
+
+    private static List<String> packagePrefixes(String prefixes) {
+        if (prefixes.isBlank()) {
             return Collections.emptyList();
         }
-        return Arrays.stream(includes.split(","))
+        return Arrays.stream(prefixes.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
@@ -334,6 +366,20 @@ public abstract class GenerateBtmTask extends DefaultTask {
         }
 
         return mainSourceSet.getAllJava().getSrcDirs();
+    }
+
+    private static Set<File> testSourceSetRoots(Project candidate) {
+        SourceSetContainer sourceSets = candidate.getExtensions().findByType(SourceSetContainer.class);
+        if (sourceSets == null) {
+            return Set.of();
+        }
+
+        SourceSet testSourceSet = sourceSets.findByName(SourceSet.TEST_SOURCE_SET_NAME);
+        if (testSourceSet == null) {
+            return Set.of();
+        }
+
+        return testSourceSet.getAllJava().getSrcDirs();
     }
 
     private static List<File> sortedFiles(Set<File> files) {

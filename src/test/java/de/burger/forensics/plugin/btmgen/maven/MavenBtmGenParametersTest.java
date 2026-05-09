@@ -32,6 +32,13 @@ class MavenBtmGenParametersTest {
                 null,
                 true,
                 null,
+                " ",
+                " ",
+                " ",
+                null,
+                null,
+                true,
+                null,
                 true,
                 true,
                 false,
@@ -49,8 +56,12 @@ class MavenBtmGenParametersTest {
         assertThat(request.sourceRoots()).containsExactly(mainRoot.toAbsolutePath(), testRoot.toAbsolutePath());
         assertThat(request.outputFile()).isEqualTo(tempDir.resolve("target/forensics/generated.btm").toAbsolutePath());
         assertThat(request.cacheDatabaseFile()).isEqualTo(tempDir.resolve("target/forensics/cache/scan-cache").toAbsolutePath());
+        assertThat(request.analysisStoreDirectory()).isEqualTo(tempDir.resolve("target/forensics/analysis-store").toAbsolutePath());
         assertThat(request.profileReportFile()).isEqualTo(tempDir.resolve("target/forensics/scan-profile.json").toAbsolutePath());
+        assertThat(request.manifestFile()).isEqualTo(tempDir.resolve("target/forensics/manifest.json").toAbsolutePath());
+        assertThat(request.checksumsFile()).isEqualTo(tempDir.resolve("target/forensics/checksums.sha256").toAbsolutePath());
         assertThat(request.cacheEnabled()).isTrue();
+        assertThat(request.analysisStoreEnabled()).isTrue();
         assertThat(request.cacheBackend()).isEqualTo(BtmGenerationDefaults.DEFAULT_CACHE_BACKEND);
         assertThat(request.profilingEnabled()).isTrue();
         assertThat(request.strictParsing()).isTrue();
@@ -61,6 +72,9 @@ class MavenBtmGenParametersTest {
         assertThat(request.includeEntryExit()).isFalse();
         assertThat(request.minBranchesPerMethod()).isEqualTo(3);
         assertThat(request.includeTimestampHeader()).isTrue();
+        assertThat(request.cleanupPolicy()).isEqualTo(BtmGenerationDefaults.defaultCleanupPolicy());
+        assertThat(request.projectKey()).isEqualTo("de.burger.forensics:sample");
+        assertThat(request.pluginVersion()).isEqualTo("1.0.0");
     }
 
     @Test
@@ -76,6 +90,13 @@ class MavenBtmGenParametersTest {
                 false,
                 "h2",
                 tempDir.resolve("custom/cache/scan-cache").toFile(),
+                false,
+                tempDir.resolve("custom/analysis-store").toFile(),
+                "KEEP_ALWAYS",
+                "custom-project",
+                "1.2.3",
+                tempDir.resolve("custom/manifest.json").toFile(),
+                tempDir.resolve("custom/checksums.sha256").toFile(),
                 false,
                 tempDir.resolve("custom/profile.json").toFile(),
                 false,
@@ -95,7 +116,14 @@ class MavenBtmGenParametersTest {
         assertThat(request.sourceRoots()).containsExactly(explicitRoot.toAbsolutePath());
         assertThat(request.outputFile()).isEqualTo(tempDir.resolve("custom/rules.btm").toAbsolutePath());
         assertThat(request.cacheDatabaseFile()).isEqualTo(tempDir.resolve("custom/cache/scan-cache").toAbsolutePath());
+        assertThat(request.analysisStoreDirectory()).isEqualTo(tempDir.resolve("custom/analysis-store").toAbsolutePath());
         assertThat(request.profileReportFile()).isEqualTo(tempDir.resolve("custom/profile.json").toAbsolutePath());
+        assertThat(request.manifestFile()).isEqualTo(tempDir.resolve("custom/manifest.json").toAbsolutePath());
+        assertThat(request.checksumsFile()).isEqualTo(tempDir.resolve("custom/checksums.sha256").toAbsolutePath());
+        assertThat(request.analysisStoreEnabled()).isFalse();
+        assertThat(request.cleanupPolicy()).isEqualTo("KEEP_ALWAYS");
+        assertThat(request.projectKey()).isEqualTo("custom-project");
+        assertThat(request.pluginVersion()).isEqualTo("1.2.3");
     }
 
     @Test
@@ -107,6 +135,13 @@ class MavenBtmGenParametersTest {
                 null,
                 false,
                 "h2",
+                null,
+                false,
+                null,
+                "",
+                "",
+                "",
+                null,
                 null,
                 false,
                 null,
@@ -208,6 +243,13 @@ class MavenBtmGenParametersTest {
                 null,
                 false,
                 "h2",
+                null,
+                false,
+                null,
+                "",
+                "",
+                "",
+                null,
                 null,
                 false,
                 null,

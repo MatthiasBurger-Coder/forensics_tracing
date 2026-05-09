@@ -330,6 +330,49 @@ class GenerateBtmTaskTest {
     }
 
     @Test
+    void resolveSourceRootsIncludesTestSourceSetsWhenConfigured(@TempDir Path tempDir) throws Exception {
+        Path rootDir = tempDir.resolve("root");
+        Path moduleDir = rootDir.resolve("module-a");
+        Path rootTestRoot = rootDir.resolve("src/test/java");
+        Path moduleTestRoot = moduleDir.resolve("src/test/java");
+        Files.createDirectories(rootTestRoot);
+        Files.createDirectories(moduleTestRoot);
+
+        var rootProject = ProjectBuilder.builder().withProjectDir(rootDir.toFile()).build();
+        rootProject.getPlugins().apply("java");
+        var moduleProject = ProjectBuilder.builder().withParent(rootProject).withName("module-a").withProjectDir(moduleDir.toFile()).build();
+        moduleProject.getPlugins().apply("java-library");
+        var task = rootProject.getTasks().register("generateBtmIncludeTests", GenerateBtmTask.class).get();
+        var extension = newExtension(rootProject);
+        extension.getScanSubprojects().set(true);
+        extension.getIncludeTests().set(true);
+        task.setExtension(extension);
+
+        Method resolveSourceRoots = GenerateBtmTask.class.getDeclaredMethod("resolveSourceRoots");
+        resolveSourceRoots.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        List<Path> roots = (List<Path>) resolveSourceRoots.invoke(task);
+
+        assertTrue(roots.contains(rootTestRoot.toAbsolutePath().normalize()));
+        assertTrue(roots.contains(moduleTestRoot.toAbsolutePath().normalize()));
+    }
+
+    @Test
+    void excludePackagePrefixesAreMappedFromExtension(@TempDir Path tempDir) throws Exception {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        var task = project.getTasks().register("generateBtmExcludePrefixes", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        extension.getExcludes().set("com.skip, , org.skip");
+        task.setExtension(extension);
+
+        Method excludePackagePrefixes = GenerateBtmTask.class.getDeclaredMethod("excludePackagePrefixes");
+        excludePackagePrefixes.setAccessible(true);
+
+        assertEquals(List.of("com.skip", "org.skip"), excludePackagePrefixes.invoke(task));
+    }
+
+    @Test
     void generatedScanRulesInvokeHelpersDirectly(@TempDir Path tempDir) throws IOException {
         var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
         writeHelperSampleSource(tempDir);

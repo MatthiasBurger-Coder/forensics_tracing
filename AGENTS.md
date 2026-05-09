@@ -403,6 +403,61 @@ Build-tool adapter boundaries:
 - `de.burger.forensics.plugin.btmgen.maven` may depend on Maven APIs and must not depend on Gradle APIs.
 - Maven Mojo classes must delegate to `BtmGenerationRunner`; they must not call Gradle task classes or duplicate scanner orchestration.
 
+### Build Tool Connector Feature Parity
+
+Gradle and Maven connectors are inbound adapters for the same forensic analysis capabilities.
+
+The following rule is mandatory:
+
+```text
+If a forensic capability is exposed through the Gradle connector, the Maven connector must expose the same capability.
+If a forensic capability is exposed through the Maven connector, the Gradle connector must expose the same capability.
+```
+
+Allowed differences are limited to build-tool-specific mapping and lifecycle integration:
+
+```text
+Gradle: Project, Task, Extension, Provider API, SourceSet, Gradle layout
+Maven: MavenProject, MavenSession, Mojo parameters, ReactorProjects, Maven lifecycle
+```
+
+Forbidden differences:
+
+```text
+BTM generation behavior
+Analysis Store behavior
+Joern semantic enrichment behavior
+Manifest/checksum structure
+BuildIdentity semantics
+Source root aggregation semantics
+Include/exclude semantics
+Validation behavior
+Generated artifact structure
+```
+
+Agents must not implement new Gradle-only or Maven-only forensic capabilities unless the task explicitly defines a temporary exception.
+
+Every new connector capability must be implemented in this order:
+
+1. build-tool-neutral request/result model
+2. application/core service or runner behavior
+3. Gradle adapter mapping
+4. Maven adapter mapping
+5. parity test proving equivalent behavior
+6. README/QUALITY documentation update
+
+Gradle task classes must not call Maven Mojo classes.
+Maven Mojo classes must not call Gradle task classes.
+Both adapters must delegate to shared build-tool-neutral services.
+
+Maven reactor analysis must provide the same repository-level analysis capability as Gradle multi-project analysis.
+A Maven root project with `pom` packaging must be usable as an aggregation context and must not fail only because the root POM has no source roots.
+
+If the agent finds that a capability exists only in one connector, the agent must either:
+
+- implement the missing connector mapping in the same workflow, or
+- stop and report the parity gap with the affected files, tests, and documented behavior.
+
 ### Preferred Target Package Structure
 
 When new code is added or existing code is intentionally migrated, prefer the following target structure:

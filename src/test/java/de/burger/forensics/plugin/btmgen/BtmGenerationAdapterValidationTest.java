@@ -83,6 +83,7 @@ class BtmGenerationAdapterValidationTest {
         setField(mojo, "includePackages", "com.example");
         setField(mojo, "includeEntryExit", true);
         setField(mojo, "minBranchesPerMethod", 2);
+        setField(mojo, "analysisStoreEnabled", false);
 
         mojo.execute();
     }

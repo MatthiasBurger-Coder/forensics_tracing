@@ -22,6 +22,13 @@ record MavenBtmGenParameters(
         boolean cacheEnabled,
         String cacheBackend,
         File cacheDatabaseFile,
+        boolean analysisStoreEnabled,
+        File analysisStoreDirectory,
+        String cleanupPolicy,
+        String projectKey,
+        String pluginVersion,
+        File manifestFile,
+        File checksumsFile,
         boolean profilingEnabled,
         File profileReportFile,
         boolean strictParsing,
@@ -44,8 +51,11 @@ record MavenBtmGenParameters(
     }
 
     BtmGenerationRequest toGenerationRequest() {
-        Path buildDirectory = buildDirectory(project);
-        List<Path> roots = sourceRoots();
+        return toGenerationRequest(sourceRoots());
+    }
+
+    BtmGenerationRequest toGenerationRequest(List<Path> roots) {
+        Path buildDirectory = MavenBuildDirectories.buildDirectory(project);
         if (roots.isEmpty()) {
             throw new IllegalArgumentException(NO_SOURCE_ROOTS_MESSAGE);
         }
@@ -53,8 +63,12 @@ record MavenBtmGenParameters(
                 .sourceRoots(roots)
                 .outputFile(resolveFile(outputFile, buildDirectory.resolve("forensics/generated.btm")))
                 .cacheDatabaseFile(resolveFile(cacheDatabaseFile, buildDirectory.resolve("forensics/cache/scan-cache")))
+                .analysisStoreDirectory(resolveFile(
+                        analysisStoreDirectory,
+                        buildDirectory.resolve("forensics/analysis-store")))
                 .profileReportFile(resolveFile(profileReportFile, buildDirectory.resolve("forensics/scan-profile.json")))
                 .cacheEnabled(cacheEnabled)
+                .analysisStoreEnabled(analysisStoreEnabled)
                 .cacheBackend(blankToDefault(cacheBackend, BtmGenerationDefaults.DEFAULT_CACHE_BACKEND))
                 .profilingEnabled(profilingEnabled)
                 .strictParsing(strictParsing)
@@ -66,6 +80,11 @@ record MavenBtmGenParameters(
                 .includeEntryExit(includeEntryExit)
                 .minBranchesPerMethod(minBranchesPerMethod)
                 .includeTimestampHeader(includeTimestampHeader)
+                .cleanupPolicy(blankToDefault(cleanupPolicy, BtmGenerationDefaults.defaultCleanupPolicy()))
+                .projectKey(blankToDefault(projectKey, defaultProjectKey(project)))
+                .pluginVersion(blankToDefault(pluginVersion, defaultPluginVersion(project)))
+                .manifestFile(resolveFile(manifestFile, buildDirectory.resolve("forensics/manifest.json")))
+                .checksumsFile(resolveFile(checksumsFile, buildDirectory.resolve("forensics/checksums.sha256")))
                 .build();
     }
 
@@ -96,20 +115,6 @@ record MavenBtmGenParameters(
         return configuredFile.toPath().toAbsolutePath().normalize();
     }
 
-    private static Path buildDirectory(MavenProject project) {
-        Path basedir = project.getBasedir() == null
-                ? Path.of(".").toAbsolutePath().normalize()
-                : project.getBasedir().toPath().toAbsolutePath().normalize();
-        String directory = project.getBuild() == null ? null : project.getBuild().getDirectory();
-        if (directory == null || directory.isBlank()) {
-            return basedir.resolve("target").toAbsolutePath().normalize();
-        }
-        Path candidate = Path.of(directory);
-        return candidate.isAbsolute()
-                ? candidate.normalize()
-                : basedir.resolve(candidate).toAbsolutePath().normalize();
-    }
-
     private static List<String> csv(String value) {
         if (value == null || value.isBlank()) {
             return List.of();
@@ -123,5 +128,15 @@ record MavenBtmGenParameters(
 
     private static String blankToDefault(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    private static String defaultProjectKey(MavenProject project) {
+        String groupId = blankToDefault(project.getGroupId(), "UNKNOWN");
+        String artifactId = blankToDefault(project.getArtifactId(), "UNKNOWN");
+        return groupId + ":" + artifactId;
+    }
+
+    private static String defaultPluginVersion(MavenProject project) {
+        return blankToDefault(project.getVersion(), "UNKNOWN");
     }
 }

@@ -1,0 +1,32 @@
+package de.burger.forensics.plugin.btmgen.common;
+
+/**
+ * Build-tool-neutral forensic capabilities that connector adapters must expose consistently.
+ */
+public enum ConnectorCapability {
+    BTM_GENERATION,
+    SOURCE_ROOTS,
+    MAIN_SOURCE_ROOTS,
+    TEST_SOURCE_ROOTS,
+    MULTI_MODULE_AGGREGATION,
+    INCLUDE_FILTERS,
+    EXCLUDE_FILTERS,
+    STRICT_PARSING,
+    STRICT_CONDITION_VALIDATION,
+    DEPENDENCY_AWARE_INVALIDATION,
+    SCAN_CACHE,
+    PROFILING,
+    INCLUDE_ENTRY_EXIT,
+    MIN_BRANCHES_PER_METHOD,
+    INCLUDE_TIMESTAMP_HEADER,
+    ANALYSIS_STORE,
+    CLEANUP_POLICY,
+    MANIFEST,
+    CHECKSUMS,
+    BUILD_IDENTITY,
+    JOERN_CONFIGURATION,
+    JOERN_SEMANTIC_ANALYSIS,
+    JOERN_IMPORT,
+    FULL_ANALYSIS_AGGREGATE,
+    CLEAN_GENERATED_ANALYSIS_ARTIFACTS
+}

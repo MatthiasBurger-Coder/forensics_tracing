@@ -1,11 +1,12 @@
 package de.burger.forensics.plugin.btmgen.maven;
 
+import de.burger.forensics.plugin.btmgen.common.BtmGenerationDefaults;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationException;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationRequest;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationResult;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationRunner;
-import de.burger.forensics.plugin.btmgen.common.BtmGenerationDefaults;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
@@ -15,24 +16,27 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.util.List;
 
 /**
- * Maven goal that delegates BTM generation to the shared build-tool-neutral runner.
+ * Maven reactor aggregation goal backed by the shared BTM generation runner.
  */
 @Mojo(
-        name = "btmgen",
+        name = "btmgen-aggregate",
         defaultPhase = LifecyclePhase.GENERATE_RESOURCES,
         requiresProject = true,
         requiresDependencyResolution = ResolutionScope.NONE,
+        aggregator = true,
         threadSafe = true
 )
-public class BtmGenMojo extends AbstractMojo {
+public class BtmGenAggregateMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
 
-    @Parameter(property = "forensics.sourceRoot")
-    private File sourceRoot;
+    @Parameter(defaultValue = "${session}", readonly = true, required = true)
+    private MavenSession session;
 
     @Parameter(property = "forensics.outputFile", defaultValue = "${project.build.directory}/forensics/generated.btm")
     private File outputFile;
@@ -106,12 +110,16 @@ public class BtmGenMojo extends AbstractMojo {
     @Override
     public void execute() throws MojoExecutionException {
         try {
-            BtmGenerationRequest request = parameters().toGenerationRequest();
+            List<Path> sourceRoots = new MavenReactorSourceRootCollector().collect(reactorProjects(), includeTests);
+            if (sourceRoots.isEmpty()) {
+                throw new IllegalArgumentException("No existing Maven reactor source roots were found.");
+            }
+            BtmGenerationRequest request = parameters().toGenerationRequest(sourceRoots);
             BtmGenerationResult result = new BtmGenerationRunner(
                     StrategyRegistries.defaultRegistry(),
                     new MavenLogAdapter(getLog())
             ).generate(request);
-            getLog().info("Generated " + result.generatedRuleCount() + " BTM rules.");
+            getLog().info("Generated " + result.generatedRuleCount() + " BTM rules from Maven reactor sources.");
         } catch (IllegalArgumentException | BtmGenerationException exception) {
             throw new MojoExecutionException(exception.getMessage(), exception);
         }
@@ -120,7 +128,7 @@ public class BtmGenMojo extends AbstractMojo {
     MavenBtmGenParameters parameters() {
         return new MavenBtmGenParameters(
                 project,
-                sourceRoot,
+                null,
                 outputFile,
                 cacheEnabled,
                 cacheBackend,
@@ -145,5 +153,13 @@ public class BtmGenMojo extends AbstractMojo {
                 minBranchesPerMethod,
                 includeTimestampHeader
         );
+    }
+
+    private List<MavenProject> reactorProjects() {
+        List<MavenProject> projects = session == null ? null : session.getProjects();
+        if (projects == null || projects.isEmpty()) {
+            return List.of(project);
+        }
+        return List.copyOf(projects);
     }
 }
