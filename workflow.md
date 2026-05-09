@@ -1,5 +1,87 @@
 # workflow.md — Build Tool Connector Feature Parity
 
+## 0. Source check result from current `main`
+
+This workflow was checked against the current `main` source state.
+
+Checked files and areas:
+
+```text
+AGENTS.md
+QUALITY.md
+README.md
+workflow.md
+src/main/java/de/burger/forensics/plugin/btmgen/gradle/**
+src/main/java/de/burger/forensics/plugin/btmgen/maven/**
+src/test/java/de/burger/forensics/plugin/btmgen/**
+src/test/java/de/burger/forensics/quality/**
+```
+
+Result:
+
+```text
+The workflow document exists in main, but the implementation is not complete.
+Several planned feature-parity requirements are still only described in workflow.md and are not yet implemented in production code, AGENTS.md, QUALITY.md, README.md, or parity tests.
+```
+
+Confirmed existing features in `main`:
+
+```text
+- Maven BtmGenMojo exists.
+- Maven BtmGenMojo delegates BTM generation to BtmGenerationRunner.
+- Maven BtmGenMojo supports module-local BTM generation parameters.
+- Gradle GenerateBtmTask supports source root collection, scanSubprojects, Analysis Store settings, manifest, checksums, profiling, cache settings, and deterministic output settings.
+- Gradle Joern semantic enrichment tasks exist.
+- README documents that Gradle writes the static analysis package by default.
+- README documents optional Gradle Joern enrichment.
+- BtmGenerationAdapterValidationTest verifies deterministic BTM parity for the shared runner, Gradle task, and Maven Mojo in the simple module-local case.
+- HexagonRulesTest contains general boundary rules for domain/application and storage/Joern CLI dependencies.
+```
+
+Missing or incomplete features in `main`:
+
+```text
+- AGENTS.md does not yet contain the mandatory Build Tool Connector Feature Parity section.
+- QUALITY.md does not yet contain the Build Tool Connector Parity Gate.
+- Repository workflow.md does not yet contain the mandatory AGENTS.md alignment section that must be used before creating or changing workflow.md files.
+- Maven reactor aggregation is not implemented.
+- BtmGenAggregateMojo is not present.
+- MavenReactorSourceRootCollector is not present.
+- Maven BtmGenMojo has no MavenSession/ReactorProjects access.
+- Maven BtmGenMojo has no Analysis Store parameters.
+- Maven BtmGenMojo has no manifest/checksum parameters.
+- Maven BtmGenMojo has no Joern parameters.
+- Maven semantic analysis goals are not present.
+- Maven full analysis / analyze-aggregate goal is not present.
+- Shared request model does not yet cover all Gradle/Maven parity fields such as Joern configuration and reactor identity.
+- BuildToolConnectorParityTest is not present.
+- MavenReactorAggregationTest is not present.
+- MavenAnalysisStoreParityTest is not present.
+- MavenJoernConfigurationParityTest is not present.
+- MavenFullAnalysisParityTest is not present.
+- README still documents Maven as module-local and explicitly says that Maven reactor aggregation is not implemented yet.
+- README still documents Maven output as `.btm`-only plus local scanner cache state.
+- README baseline still references Gradle 9.4.0, while this workflow uses the project-requested Gradle 9.1 baseline. This conflict must be resolved before functional implementation.
+```
+
+Conclusion:
+
+```text
+Not all planned new features are in main.
+The most important lost or not-yet-implemented items are the mandatory AGENTS.md/QUALITY.md parity rules and the actual Maven parity implementation for reactor aggregation, Analysis Store, manifest/checksums, and Joern.
+```
+
+Implementation priority from this source check:
+
+```text
+1. Align AGENTS.md, QUALITY.md, workflow.md, and README baseline/rules.
+2. Add executable parity guardrails before broad functional changes.
+3. Implement Maven reactor aggregation.
+4. Add Maven Analysis Store and manifest/checksum parity.
+5. Add Maven Joern/full-analysis parity.
+6. Add parity tests and final quality gate.
+```
+
 ## 1. Goal
 
 Ensure that the Maven plugin connector and the Gradle plugin connector expose the same forensic analysis capabilities.
@@ -98,6 +180,42 @@ Do not weaken existing quality rules, coverage thresholds, architecture tests, o
 ## 4. Technical baseline
 
 Use the project-approved baseline.
+
+## 4.1 Mandatory AGENTS.md alignment for workflow creation
+
+Every `workflow.md` must be created from the current `AGENTS.md` rules first.
+
+Mandatory workflow creation rule:
+
+```text
+Before creating or changing a workflow.md, read AGENTS.md and align the workflow with its architecture rules, stop conditions, coding conventions, quality expectations, and agent behavior requirements.
+```
+
+This applies especially to:
+
+```text
+- hexagonal architecture boundaries
+- STOP-and-report rules
+- no speculative implementation
+- regression-first workflow
+- test and quality gate expectations
+- build-tool connector parity rules
+- Java/Gradle/Maven baseline constraints
+- documentation and commit requirements
+```
+
+If `AGENTS.md` conflicts with an existing workflow draft, update the workflow or stop and report the conflict.
+
+Acceptance criteria:
+
+```text
+[ ] workflow.md explicitly follows AGENTS.md.
+[ ] Any AGENTS.md conflict is reported before implementation.
+[ ] No workflow introduces rules that weaken AGENTS.md.
+[ ] No workflow bypasses existing architecture or quality rules.
+```
+
+## 4.2 Technical baseline
 
 Current project decision for this workflow:
 
