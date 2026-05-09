@@ -1,31 +1,23 @@
-# workflow.md — Persistent Forensics Analysis Store Foundation
+# workflow.md — Persistent Analysis Store und Joern Semantic Enrichment
 
 ## 1. Ziel dieses Workflows
 
-Dieser Workflow erweitert das bestehende `forensics_tracing` Gradle-Plugin um die Grundlage für einen persistenten, versionierten **Forensics Analysis Store**.
-
-Das Plugin soll nach erfolgreichem Scan- und BTM-Generierungslauf nicht mehr nur eine `.btm`-Datei erzeugen, sondern einen vollständigen statischen Rohdaten-Snapshot vorbereiten.
-
-Zielartefakte dieses Slices:
+Dieser Workflow erweitert das bestehende `forensics_tracing` Gradle-Plugin in zwei sauber getrennten Phasen:
 
 ```text
-build/forensics/
-├── forensics.btm
-├── manifest.json
-├── checksums.sha256
-└── analysis-store/
-    └── <h2 database files>
+Phase 1: Persistent Forensics Analysis Store
+Phase 2: Joern Semantic Enrichment Flow
 ```
 
-Der spätere Joern-Import, gRPC-Push, Runtime-Trace-Stream, Replay-Kontext und LLM-Kontext sind **nicht Bestandteil dieses Workflows**. Dieser Workflow baut nur das stabile Fundament dafür.
+Das Plugin soll nach erfolgreichem Scan- und BTM-Generierungslauf nicht nur eine `.btm`-Datei erzeugen, sondern einen vollständigen, versionierten statischen Rohdaten-Snapshot bereitstellen. Dieser Snapshot wird anschließend optional durch Joern-Semantikdaten angereichert.
 
----
+Der spätere gRPC-Push, Runtime-Trace-Stream, Replay-Kontext und LLM-Kontext sind weiterhin nicht Bestandteil dieses Workflows. Dieser Workflow schafft aber die notwendigen Datenstrukturen, IDs und Artefakte, damit diese Schritte später sauber aufsetzen können.
 
 ## 2. Architekturentscheidung
 
-Die bisher temporäre H2-Scan-Datenbank wird zu einem persistenten, versionierten **Forensics Analysis Store** erweitert.
+Die bisher temporäre H2-Scan-Datenbank wird zu einem persistenten, versionierten Forensics Analysis Store erweitert.
 
-Der Analysis Store enthält in diesem Schritt:
+Dieser Store enthält zunächst die statischen Rohdaten aus dem JavaParser-basierten Scan und der BTM-Generierung:
 
 ```text
 analysis_run
@@ -36,109 +28,91 @@ btm_rule
 artifact_checksum
 ```
 
-Alle Daten werden über eine gemeinsame `BuildIdentity` verbunden.
+Anschließend wird dieser Store optional mit Joern-Daten angereichert:
 
-Diese `BuildIdentity` ist später der Vertrag zwischen:
+```text
+joern_import_run
+joern_node
+joern_edge
+joern_method
+joern_call_relation
+joern_control_flow_relation
+joern_data_flow_path
+joern_data_flow_step
+semantic_anchor
+```
+
+Alle Daten werden über eine gemeinsame `BuildIdentity` verbunden.
 
 ```text
 Gradle Plugin
 BTM-Regeln
+Joern-Semantikdaten
 Runtime-Trace-Events
 forensic_analytics Server
-Joern-Semantikdaten
 ```
 
 Wichtig:
 
 ```text
-Joern wird in diesem Workflow NICHT eingebaut.
-gRPC wird in diesem Workflow NICHT eingebaut.
-Replay / LLM / Server-Import werden in diesem Workflow NICHT eingebaut.
+Joern wird als externer Outbound-Adapter angebunden.
+Joern wird nicht als direkte Plugin-Library-Abhängigkeit eingebaut.
+gRPC wird in diesem Workflow nicht eingebaut.
+Replay / LLM / Server-Import werden in diesem Workflow nicht eingebaut.
 ```
-
----
 
 ## 3. Technische Leitplanken
 
 * Gradle 9.1 verwenden.
 * Die im Repository konfigurierte Java-Toolchain nicht ändern.
+* Joern darf eigene externe Runtime-Anforderungen haben, darf aber die Plugin-Toolchain nicht erzwingen.
 * Keine Änderung an der fachlichen BTM-Regel-Semantik.
 * Keine Coverage-Schwellen senken.
 * Keine bestehenden Tests entfernen oder deaktivieren.
-* Keine Joern-Abhängigkeiten hinzufügen.
+* Joern nicht als direkte `implementation`-Dependency des Plugins einbinden.
+* Joern über CLI, Prozessadapter oder später Containeradapter ausführen.
 * Keine gRPC-Abhängigkeiten hinzufügen.
 * Keine Server-Kommunikation implementieren.
 * Keine Runtime-Replay-Logik implementieren.
 * Source-Code-Kommentare ausschließlich auf Englisch schreiben.
 * Hexagonale Architektur einhalten.
-* Domain und Application dürfen nicht von H2, Gradle, Dateisystemdetails oder Plugin-Klassen abhängen.
+* Domain und Application dürfen nicht von H2, Gradle, Joern CLI, Dateisystemdetails oder Plugin-Klassen abhängen.
 
----
+## 4. Zielartefakte
 
-## 4. Aktueller relevanter Stand im Projekt
-
-Vorhandene zentrale Klassen:
+Standardlauf ohne Joern:
 
 ```text
-src/main/java/de/burger/forensics/domain/port/out/CodeScanPort.java
-src/main/java/de/burger/forensics/domain/port/out/RuleRenderPort.java
-src/main/java/de/burger/forensics/domain/model/ScanEvent.java
-src/main/java/de/burger/forensics/domain/model/Rule.java
-src/main/java/de/burger/forensics/domain/model/RuleId.java
-src/main/java/de/burger/forensics/domain/model/RuleIdFactory.java
-src/main/java/de/burger/forensics/application/AnalysisContext.java
-src/main/java/de/burger/forensics/application/service/GenerateRulesUseCase.java
-src/main/java/de/burger/forensics/application/service/RuleGenerationResult.java
-src/main/java/de/burger/forensics/plugin/btmgen/gradle/BtmGenExtension.java
-src/main/java/de/burger/forensics/plugin/btmgen/gradle/BtmGenPlugin.java
-src/main/java/de/burger/forensics/plugin/btmgen/gradle/GenerateBtmTask.java
-src/main/java/de/burger/forensics/plugin/btmgen/writer/BtmFileWriter.java
+build/forensics/
+├── forensics.btm
+├── manifest.json
+├── checksums.sha256
+└── analysis-store/
+    └── <h2 database files>
 ```
 
-Der bestehende Task `generateBtmRules` muss weiterhin funktionieren.
-
----
-
-## 5. Zielbild nach Abschluss dieses Workflows
-
-Nach erfolgreichem Lauf von:
-
-```bash
-./gradlew generateBtmRules
-```
-
-sollen zusätzlich zur BTM-Datei folgende Artefakte entstehen:
+Lauf mit Joern:
 
 ```text
-build/forensics/forensics.btm
-build/forensics/manifest.json
-build/forensics/checksums.sha256
-build/forensics/analysis-store/<h2 files>
+build/forensics/
+├── forensics.btm
+├── manifest.json
+├── checksums.sha256
+├── analysis-store/
+│   └── <h2 database files>
+└── joern/
+    ├── cpg.bin
+    ├── callgraph.json
+    ├── controlflow.json
+    ├── dataflow.json
+    └── slices.json
 ```
 
-Der Lauf gilt als erfolgreich, wenn:
-
-```text
-1. Source-Dateien fingerprinted wurden.
-2. ScanEvents in H2 gespeichert wurden.
-3. Methodeninformationen in H2 gespeichert wurden.
-4. BTM-Regeln mit stabilen IDs in H2 gespeichert wurden.
-5. Die BTM-Datei weiterhin korrekt erzeugt wird.
-6. Eine manifest.json geschrieben wird.
-7. Checksums für relevante Artefakte geschrieben werden.
-8. Die Cleanup-Policy steuert, ob die H2-Datenbank erhalten bleibt.
-```
-
----
-
-## 6. Nicht-Ziele
+## 5. Nicht-Ziele
 
 Nicht umsetzen:
 
 ```text
-Joern CLI Adapter
-Joern JSON Import
-joern_node / joern_edge Tabellen
 gRPC Publisher
 forensic_analytics Server API
 TraceIngestService
@@ -147,32 +121,30 @@ Replay Engine
 LLM Prompt Builder
 Graph DB Export
 Vector Store Export
+automatische Fehlerkorrektur
+automatischer Deployment-Flow
 ```
 
-Diese Themen bauen später auf diesem Store auf.
-
----
-
-## 7. STOP-Regeln für Codex
+## 6. STOP-Regeln für Codex
 
 Codex muss stoppen und berichten, wenn eine dieser Situationen eintritt:
 
 ```text
 1. Es existiert bereits eine H2-Store-Implementierung mit anderem Schema.
 2. Es existiert bereits ein Analysis-Run-Konzept mit inkompatiblen IDs.
-3. Die vorhandene GenerateRulesUseCase-Struktur wurde im Checkout wesentlich verändert.
-4. Das Projekt verwendet bereits einen anderen Datenbank-Migrationsmechanismus.
-5. Die Java-Toolchain müsste geändert werden, um den Workflow umzusetzen.
-6. Die BTM-Ausgabe würde sich fachlich ändern.
-7. Bestehende ArchUnit-Regeln würden nur durch Aufweichen erfüllbar.
-8. Neue Abhängigkeiten würden Dependency Verification blockieren und keine saubere Metadatenpflege möglich sein.
+3. Es existiert bereits ein Joern-Adapter oder SemanticAnalysisPort mit anderer Architektur.
+4. Die vorhandene GenerateRulesUseCase-Struktur wurde im Checkout wesentlich verändert.
+5. Das Projekt verwendet bereits einen anderen Datenbank-Migrationsmechanismus.
+6. Die Java-Toolchain müsste geändert werden, um Joern direkt einzubinden.
+7. Die BTM-Ausgabe würde sich fachlich ändern.
+8. Bestehende ArchUnit-Regeln würden nur durch Aufweichen erfüllbar.
+9. Neue Abhängigkeiten würden Dependency Verification blockieren und keine saubere Metadatenpflege möglich sein.
+10. Joern ist lokal nicht installiert und ein echter Integrationstest würde dadurch instabil werden.
 ```
 
 Keine stillen Architekturannahmen treffen.
 
----
-
-# 8. Slices
+# 7. Slices
 
 ## Slice 0 — Preflight und Ist-Zustand sichern
 
@@ -180,20 +152,13 @@ Keine stillen Architekturannahmen treffen.
 
 Vor Änderungen den aktuellen Zustand erfassen und sicherstellen, dass der Workflow auf dem echten Projektstand aufsetzt.
 
-### Aufgaben
-
-1. Git-Status prüfen.
-2. Aktuelle Projektstruktur prüfen.
-3. Vorhandene H2-, DB-, Store- oder Analysis-Run-Klassen suchen.
-4. Aktuelle Gradle-Tasks prüfen.
-5. Basistests ausführen.
-
 ### Befehle
 
 ```bash
 git status --short
 find src/main/java -type f | sort
 find src/test/java -type f | sort
+rg -n "H2|AnalysisStore|AnalysisRun|BuildIdentity|Joern|SemanticAnalysis|CPG|Code Property Graph" src/main src/test build.gradle.kts gradle || true
 ./gradlew clean test
 ./gradlew check
 ./gradlew validatePlugins
@@ -204,8 +169,6 @@ find src/test/java -type f | sort
 * Ausgangszustand ist bekannt.
 * Bestehende Tests laufen oder bestehende Fehler sind dokumentiert.
 * Keine Codeänderung in diesem Slice.
-
----
 
 ## Slice 1 — Domain-Modell für BuildIdentity und Analysis Run einführen
 
@@ -230,27 +193,12 @@ AnalysisStoreCleanupPolicy.java
 AnalysisSchemaVersion.java
 SourceFingerprint.java
 ArtifactChecksum.java
+SourceFileSnapshot.java
 ```
 
-### Inhalt
+### BuildIdentity
 
-`AnalysisRunId`:
-
-```text
-- String value
-- darf nicht null oder blank sein
-- Factory für random UUID
-```
-
-`BuildId`:
-
-```text
-- String value
-- darf nicht null oder blank sein
-- später deterministisch aus Fingerprints ableitbar
-```
-
-`BuildIdentity`:
+`BuildIdentity` enthält mindestens:
 
 ```text
 projectKey
@@ -265,50 +213,19 @@ schemaVersion
 createdAt
 ```
 
-In diesem Slice dürfen diese Felder teilweise mit `UNKNOWN` oder `NOT_COMPUTED` belegt werden, solange das Modell stabil ist und später erweitert werden kann.
-
-`AnalysisRunStatus`:
+Später ergänzbar:
 
 ```text
-CREATED
-SCANNING
-BTM_GENERATED
-COMPLETED
-FAILED
-```
-
-`AnalysisStoreCleanupPolicy`:
-
-```text
-DELETE_ON_SUCCESS
-KEEP_ON_SUCCESS
-KEEP_ON_FAILURE
-KEEP_ALWAYS
-```
-
-Empfohlener Default für diesen Entwicklungsschritt:
-
-```text
-KEEP_ON_SUCCESS
-```
-
-### Tests
-
-Neue Tests:
-
-```text
-src/test/java/de/burger/forensics/domain/model/analysis/AnalysisRunIdTest.java
-src/test/java/de/burger/forensics/domain/model/analysis/BuildIdentityTest.java
-src/test/java/de/burger/forensics/domain/model/analysis/ArtifactChecksumTest.java
+joernFingerprint
+joernVersion
+analysisPackageFingerprint
 ```
 
 ### Akzeptanzkriterien
 
-* Domain-Modelle enthalten keine H2-, Gradle- oder Dateisystemabhängigkeiten.
+* Domain-Modelle enthalten keine H2-, Gradle-, Joern-, CLI- oder Dateisystemabhängigkeiten.
 * Ungültige IDs werden abgelehnt.
 * Tests decken Blank-/Null-Fälle ab.
-
----
 
 ## Slice 2 — AnalysisStorePort definieren
 
@@ -322,9 +239,9 @@ Eine saubere Port-Schnittstelle für das Speichern der Analyse-Rohdaten schaffen
 src/main/java/de/burger/forensics/domain/port/out/AnalysisStorePort.java
 ```
 
-### Erwartete Verantwortung
+### Verantwortung
 
-Der Port speichert:
+Der Port speichert zunächst:
 
 ```text
 analysis_run
@@ -335,86 +252,20 @@ btm_rule
 artifact_checksum
 ```
 
-### Vorgeschlagene Schnittstelle
-
-```java
-package de.burger.forensics.domain.port.out;
-
-import de.burger.forensics.domain.model.Rule;
-import de.burger.forensics.domain.model.ScanEvent;
-import de.burger.forensics.domain.model.analysis.AnalysisRunId;
-import de.burger.forensics.domain.model.analysis.AnalysisRunStatus;
-import de.burger.forensics.domain.model.analysis.ArtifactChecksum;
-import de.burger.forensics.domain.model.analysis.BuildIdentity;
-import de.burger.forensics.domain.model.analysis.SourceFileSnapshot;
-
-import java.util.List;
-import java.util.Map;
-
-/**
- * Stores raw data produced during a forensics analysis run.
- */
-public interface AnalysisStorePort extends AutoCloseable {
-
-    void initializeSchema();
-
-    void createAnalysisRun(BuildIdentity identity);
-
-    void updateAnalysisRunStatus(AnalysisRunId analysisRunId, AnalysisRunStatus status);
-
-    void storeSourceFiles(AnalysisRunId analysisRunId, List<SourceFileSnapshot> sourceFiles);
-
-    void storeScanEvents(AnalysisRunId analysisRunId, List<ScanEvent> events);
-
-    void storeRules(AnalysisRunId analysisRunId, List<Rule> rules, Map<String, String> renderedRulesByRuleId);
-
-    void storeArtifactChecksums(AnalysisRunId analysisRunId, List<ArtifactChecksum> checksums);
-
-    @Override
-    void close();
-}
-```
-
-Falls `SourceFileSnapshot` noch nicht existiert, in `domain/model/analysis` ergänzen.
-
-### Neue Klasse
-
-```text
-SourceFileSnapshot.java
-```
-
-Felder:
-
-```text
-relativePath
-absolutePath
-sha256
-fileSize
-lastModifiedEpochMillis
-```
+Später wird derselbe Port oder ein spezialisierter `SemanticAnalysisStorePort` für Joern-Daten erweitert.
 
 ### Akzeptanzkriterien
 
 * `AnalysisStorePort` liegt im Domain-Port-Package.
 * Keine H2- oder SQL-Klassen im Port.
 * Keine Gradle-Typen im Port.
-* Keine File-I/O-Implementierung im Domain-Modell.
-
----
+* Keine Joern-Typen im Port.
 
 ## Slice 3 — H2 Analysis Store Adapter implementieren
 
 ### Ziel
 
 Den Outbound-Adapter für H2 erstellen, ohne die Domain mit H2 zu koppeln.
-
-### Dependency
-
-In `gradle/libs.versions.toml` eine H2-Abhängigkeit ergänzen.
-
-In `build.gradle.kts` die H2-Abhängigkeit als `implementation` ergänzen.
-
-Keine Joern- oder gRPC-Abhängigkeiten hinzufügen.
 
 ### Neue Packages
 
@@ -432,121 +283,25 @@ H2SchemaInitializer.java
 SqlTransactionRunner.java
 ```
 
-### Schema
+### Basisschema
 
 Minimal benötigte Tabellen:
 
-```sql
-CREATE TABLE IF NOT EXISTS analysis_run (
-    analysis_run_id VARCHAR(64) PRIMARY KEY,
-    project_key VARCHAR(255) NOT NULL,
-    build_id VARCHAR(128) NOT NULL,
-    source_fingerprint VARCHAR(128),
-    classpath_fingerprint VARCHAR(128),
-    btm_rules_fingerprint VARCHAR(128),
-    artifact_fingerprint VARCHAR(128),
-    plugin_version VARCHAR(64),
-    schema_version VARCHAR(32) NOT NULL,
-    status VARCHAR(32) NOT NULL,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS source_file (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    analysis_run_id VARCHAR(64) NOT NULL,
-    relative_path VARCHAR(2048) NOT NULL,
-    absolute_path VARCHAR(4096) NOT NULL,
-    sha256 VARCHAR(128) NOT NULL,
-    file_size BIGINT NOT NULL,
-    last_modified_epoch_millis BIGINT NOT NULL,
-    CONSTRAINT fk_source_file_run FOREIGN KEY (analysis_run_id) REFERENCES analysis_run(analysis_run_id)
-);
-
-CREATE TABLE IF NOT EXISTS scan_method (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    analysis_run_id VARCHAR(64) NOT NULL,
-    method_key VARCHAR(4096) NOT NULL,
-    fqcn VARCHAR(2048) NOT NULL,
-    method_name VARCHAR(512) NOT NULL,
-    signature VARCHAR(4096),
-    return_type VARCHAR(1024),
-    CONSTRAINT fk_scan_method_run FOREIGN KEY (analysis_run_id) REFERENCES analysis_run(analysis_run_id)
-);
-
-CREATE TABLE IF NOT EXISTS scan_event (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    analysis_run_id VARCHAR(64) NOT NULL,
-    fqcn VARCHAR(2048) NOT NULL,
-    method_name VARCHAR(512) NOT NULL,
-    signature VARCHAR(4096),
-    rule_template VARCHAR(64) NOT NULL,
-    line_number INT NOT NULL,
-    condition_text CLOB,
-    language VARCHAR(64),
-    return_type VARCHAR(1024),
-    CONSTRAINT fk_scan_event_run FOREIGN KEY (analysis_run_id) REFERENCES analysis_run(analysis_run_id)
-);
-
-CREATE TABLE IF NOT EXISTS btm_rule (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    analysis_run_id VARCHAR(64) NOT NULL,
-    rule_id VARCHAR(128) NOT NULL,
-    fqcn VARCHAR(2048) NOT NULL,
-    method_name VARCHAR(512) NOT NULL,
-    rule_template VARCHAR(64) NOT NULL,
-    line_number INT NOT NULL,
-    rendered_rule CLOB NOT NULL,
-    emitted_to_btm BOOLEAN NOT NULL,
-    CONSTRAINT fk_btm_rule_run FOREIGN KEY (analysis_run_id) REFERENCES analysis_run(analysis_run_id)
-);
-
-CREATE TABLE IF NOT EXISTS artifact_checksum (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-    analysis_run_id VARCHAR(64) NOT NULL,
-    artifact_path VARCHAR(4096) NOT NULL,
-    artifact_type VARCHAR(128) NOT NULL,
-    sha256 VARCHAR(128) NOT NULL,
-    size_bytes BIGINT NOT NULL,
-    CONSTRAINT fk_artifact_checksum_run FOREIGN KEY (analysis_run_id) REFERENCES analysis_run(analysis_run_id)
-);
-```
-
-### Hinweise
-
-* Schema-Initialisierung idempotent bauen.
-* Keine Flyway-/Liquibase-Einführung in diesem Slice.
-* SQL nur im H2-Adapter halten.
-* Transaktionen verwenden.
-* Connection sauber schließen, bevor Checksums über H2-Dateien berechnet werden.
-
-### Tests
-
-Neue Tests:
-
 ```text
-src/test/java/de/burger/forensics/adapters/h2/H2AnalysisStoreAdapterTest.java
-src/test/java/de/burger/forensics/adapters/h2/H2SchemaInitializerTest.java
-```
-
-Testfälle:
-
-```text
-- Schema kann in leerer DB initialisiert werden.
-- createAnalysisRun speichert Run.
-- storeScanEvents speichert Events.
-- storeRules speichert RuleId und gerenderte Regel.
-- Status kann aktualisiert werden.
-- Adapter kann geschlossen werden.
+analysis_run
+source_file
+scan_method
+scan_event
+btm_rule
+artifact_checksum
 ```
 
 ### Akzeptanzkriterien
 
-* H2-Abhängigkeit bleibt auf Adapterebene.
-* Domain und Application importieren keine H2-Klassen.
+* Schema-Initialisierung ist idempotent.
+* SQL bleibt im H2-Adapter.
+* H2-Verbindungen werden sauber geschlossen.
 * Tests laufen mit temporärem Verzeichnis.
-
----
 
 ## Slice 4 — Source Fingerprinting ergänzen
 
@@ -560,18 +315,7 @@ Einen stabilen `sourceFingerprint` und Datei-Fingerprints erzeugen.
 src/main/java/de/burger/forensics/application/service/SourceFingerprintService.java
 ```
 
-Alternativ, falls bereits ein passender Application-Service existiert, diesen erweitern.
-
-### Verhalten
-
-Der Service scannt Java-Dateien unter `sourceRoot` und erzeugt:
-
-```text
-List<SourceFileSnapshot>
-SourceFingerprint
-```
-
-Regeln:
+### Regeln
 
 ```text
 1. Nur reguläre `.java` Dateien berücksichtigen.
@@ -587,39 +331,15 @@ Regeln:
 * Gleicher Source-Stand erzeugt gleichen Fingerprint.
 * Geänderte Datei erzeugt anderen Fingerprint.
 * Unterschiedliche Traversal-Reihenfolge ändert Fingerprint nicht.
-* Keine Gradle-Abhängigkeit im Service.
-
-### Tests
-
-```text
-src/test/java/de/burger/forensics/application/service/SourceFingerprintServiceTest.java
-```
-
-Testfälle:
-
-```text
-- stable fingerprint for unchanged files
-- changed content changes fingerprint
-- unrelated file extension is ignored
-- relative paths use `/`
-```
-
----
+* Keine Gradle- oder Joern-Abhängigkeit im Service.
 
 ## Slice 5 — RuleGenerationResult um Domain Rules erweitern
 
 ### Ziel
 
-Die generierten Domain-Regeln verfügbar machen, damit sie zusammen mit den gerenderten BTM-Regeln gespeichert werden können.
+Die generierten Domain-Regeln verfügbar machen, damit sie zusammen mit den gerenderten BTM-Regeln gespeichert und später mit Joern-Knoten korreliert werden können.
 
 ### Änderung
-
-Aktuell:
-
-```java
-public record RuleGenerationResult(List<String> renderedRules, AnalysisContext context) {
-}
-```
 
 Ziel:
 
@@ -632,48 +352,11 @@ public record RuleGenerationResult(
 }
 ```
 
-### Anpassung in `GenerateRulesUseCase`
-
-Der Use Case erzeugt bereits intern:
-
-```text
-List<Rule> rules
-List<Rule> filtered
-List<String> rendered
-```
-
-Der Result soll die tatsächlich für die Ausgabe relevanten Regeln enthalten.
-
-Empfehlung:
-
-```text
-RuleGenerationResult(filtered, rendered, context)
-```
-
-### Wichtig
-
-Die gerenderte BTM-Datei darf sich dadurch nicht fachlich ändern.
-
-### Tests anpassen
-
-Vorhandene Tests für `GenerateRulesUseCase` und `GenerateBtmTask` anpassen.
-
-Neue/erweiterte Testfälle:
-
-```text
-- result contains rendered rules
-- result contains domain rules
-- rendered rule count remains compatible
-- existing BTM generation behavior remains stable
-```
-
 ### Akzeptanzkriterien
 
-* Bestehender API-Bruch ist im Projekt vollständig angepasst.
-* Keine Änderung an RuleIdFactory ohne zwingenden Grund.
-* BTM-Output bleibt stabil.
-
----
+* Die gerenderte BTM-Datei ändert sich fachlich nicht.
+* Die tatsächlich ausgegebenen Rules sind persistierbar.
+* Rule IDs bleiben stabil.
 
 ## Slice 6 — GenerateBtmTask mit Analysis Store verbinden
 
@@ -681,59 +364,7 @@ Neue/erweiterte Testfälle:
 
 `GenerateBtmTask` orchestriert künftig zusätzlich den Analysis Store.
 
-Der Task bleibt Inbound-Adapter und verdrahtet:
-
-```text
-JavaParserScanner
-GenerateRulesUseCase
-BytemanRuleRenderAdapter
-H2AnalysisStoreAdapter
-SourceFingerprintService
-BtmFileWriter
-ManifestWriter
-ChecksumWriter
-```
-
-### Erweiterungen in `BtmGenExtension`
-
-Neue Properties:
-
-```java
-private final Property<Boolean> analysisStoreEnabled;
-private final Property<File> analysisStoreDirectory;
-private final Property<String> cleanupPolicy;
-private final Property<String> projectKey;
-private final Property<File> manifestFile;
-private final Property<File> checksumsFile;
-```
-
-Empfohlene Defaults:
-
-```text
-analysisStoreEnabled = true
-analysisStoreDirectory = build/forensics/analysis-store
-cleanupPolicy = KEEP_ON_SUCCESS
-projectKey = project.name
-manifestFile = build/forensics/manifest.json
-checksumsFile = build/forensics/checksums.sha256
-```
-
-Da `BtmGenExtension` keinen direkten Zugriff auf `Project` haben muss, kann `projectKey` im Task über `getProject().getName()` finalisiert werden, wenn die Extension keinen Wert liefert.
-
-### Erweiterungen in `GenerateBtmTask`
-
-Neue Gradle Properties:
-
-```text
-@Input Property<Boolean> analysisStoreEnabled
-@OutputDirectory DirectoryProperty analysisStoreDirectory
-@Input Property<String> cleanupPolicy
-@Input Property<String> projectKey
-@OutputFile RegularFileProperty manifestFile
-@OutputFile RegularFileProperty checksumsFile
-```
-
-### Ablauf im Task
+### Ablauf
 
 ```text
 1. sourceRoot und outputFile auflösen.
@@ -753,40 +384,20 @@ Neue Gradle Properties:
 15. Cleanup-Policy anwenden.
 ```
 
-Bei Fehler:
-
-```text
-1. Fehler loggen.
-2. analysis_run soweit möglich auf FAILED setzen.
-3. Cleanup-Policy anwenden.
-4. Build weiterhin fehlschlagen lassen.
-```
-
 ### Akzeptanzkriterien
 
 * `generateBtmRules` schreibt weiterhin die BTM-Datei.
 * Analysis Store wird standardmäßig erzeugt.
-* Bei Fehlern wird der Build nicht verschluckt.
 * H2 Store wird sauber geschlossen.
 * `analysisStoreEnabled=false` stellt möglichst nahe am bisherigen Verhalten wieder her.
-
----
 
 ## Slice 7 — BTM Header mit BuildIdentity ergänzen
 
 ### Ziel
 
-Die erzeugte BTM-Datei muss erkennbar zu einem Analysis Run gehören.
-
-### Neue Klasse
-
-```text
-src/main/java/de/burger/forensics/plugin/btmgen/render/BtmHeaderRenderer.java
-```
+Die erzeugte BTM-Datei muss eindeutig zu einem Analysis Run gehören.
 
 ### Header-Format
-
-Am Anfang der BTM-Datei soll ein Kommentarblock stehen:
 
 ```text
 # Forensics Analysis
@@ -799,19 +410,11 @@ Am Anfang der BTM-Datei soll ein Kommentarblock stehen:
 # pluginVersion: <plugin-version>
 ```
 
-### Wichtig
-
-* Der Header darf Byteman nicht ungültig machen.
-* Keine Änderung an den eigentlichen Rule Bodies.
-* Rule IDs bleiben stabil.
-
 ### Akzeptanzkriterien
 
-* BTM-Datei enthält Header.
-* Vorhandene Rule-Tests bleiben gültig oder werden gezielt um Header-Erwartung erweitert.
-* Header enthält dieselbe `analysisRunId` wie H2 und Manifest.
-
----
+* Header ist Byteman-kompatibel.
+* Rule Bodies bleiben fachlich unverändert.
+* Header, Manifest und H2 enthalten dieselbe `analysisRunId`.
 
 ## Slice 8 — Manifest und Checksums schreiben
 
@@ -833,7 +436,7 @@ ChecksumFileWriter.java
 ArtifactChecksumService.java
 ```
 
-### manifest.json Inhalt
+### Manifest-Inhalt
 
 Minimal:
 
@@ -846,44 +449,10 @@ Minimal:
   "sourceFingerprint": "sha256:...",
   "btmRulesFingerprint": "sha256:...",
   "pluginVersion": "0.0.2-SNAPSHOT",
+  "joernEnabled": false,
   "createdAt": "2026-05-09T00:00:00Z",
-  "artifacts": [
-    {
-      "path": "forensics.btm",
-      "type": "byteman-rules",
-      "sha256": "...",
-      "sizeBytes": 1234
-    },
-    {
-      "path": "analysis-store",
-      "type": "h2-analysis-store",
-      "sha256": "...",
-      "sizeBytes": 1234
-    }
-  ]
+  "artifacts": []
 }
-```
-
-### checksums.sha256 Format
-
-```text
-<sha256>  forensics.btm
-<sha256>  manifest.json
-<sha256>  analysis-store/<file>
-```
-
-### Hinweise
-
-* Keine JSON-Bibliothek erzwingen, wenn das Projekt keine haben möchte.
-* Falls JSON manuell geschrieben wird, eigenes Escaping sauber testen.
-* Checksums erst berechnen, nachdem H2-Verbindungen geschlossen wurden.
-
-### Tests
-
-```text
-src/test/java/de/burger/forensics/adapters/filesystem/AnalysisManifestWriterTest.java
-src/test/java/de/burger/forensics/adapters/filesystem/ChecksumFileWriterTest.java
-src/test/java/de/burger/forensics/adapters/filesystem/ArtifactChecksumServiceTest.java
 ```
 
 ### Akzeptanzkriterien
@@ -893,57 +462,20 @@ src/test/java/de/burger/forensics/adapters/filesystem/ArtifactChecksumServiceTes
 * Manifest und H2 enthalten dieselbe `analysisRunId`.
 * Artifact Checksums werden auch in H2 gespeichert.
 
----
-
 ## Slice 9 — Cleanup-Policy implementieren
 
 ### Ziel
 
 Steuern, ob der Analysis Store nach dem Lauf erhalten bleibt oder gelöscht wird.
 
-### Verhalten
+### Policies
 
 ```text
-KEEP_ON_SUCCESS
-  Erfolg: Store bleibt erhalten
-  Fehler: Store kann erhalten bleiben, wenn Debugging sinnvoll ist
-
 DELETE_ON_SUCCESS
-  Erfolg: Store wird gelöscht
-  Fehler: Store bleibt erhalten
-
-KEEP_ON_FAILURE
-  Erfolg: Store wird gelöscht
-  Fehler: Store bleibt erhalten
-
-KEEP_ALWAYS
-  Erfolg: Store bleibt erhalten
-  Fehler: Store bleibt erhalten
-```
-
-### Empfehlung für Entwicklung
-
-```text
 KEEP_ON_SUCCESS
+KEEP_ON_FAILURE
+KEEP_ALWAYS
 ```
-
-### Zusätzlicher Task
-
-Optional, aber empfohlen:
-
-```text
-cleanForensicsAnalysisStore
-```
-
-Dieser Task löscht:
-
-```text
-build/forensics/analysis-store
-build/forensics/manifest.json
-build/forensics/checksums.sha256
-```
-
-Er soll nicht automatisch an `clean` gehängt werden, außer es ist bereits Projektkonvention.
 
 ### Akzeptanzkriterien
 
@@ -951,23 +483,72 @@ Er soll nicht automatisch an `clean` gehängt werden, außer es ist bereits Proj
 * Erfolg und Fehler werden unterschiedlich behandelt.
 * Keine versehentliche Löschung vor Manifest-/Checksum-Erstellung.
 
----
-
-## Slice 10 — Gradle Plugin Wiring finalisieren
+## Slice 10 — SemanticAnalysisPort einführen
 
 ### Ziel
 
-Die neuen Extension-Werte sauber in `BtmGenPlugin` und `GenerateBtmTask` verdrahten.
+Eine domänennahe Schnittstelle für externe semantische Codeanalyse schaffen, ohne Joern direkt in Domain oder Application zu koppeln.
 
-### Aufgaben
+### Neue Datei
 
-1. `BtmGenExtension` erweitern.
-2. Defaults in Extension und Task konsistent setzen.
-3. `BtmGenPlugin` setzt Task-Konventionen.
-4. `generateBtmRules` bleibt der Haupttask.
-5. Optional `cleanForensicsAnalysisStore` registrieren.
+```text
+src/main/java/de/burger/forensics/domain/port/out/SemanticAnalysisPort.java
+```
 
-### Beispielkonfiguration für Nutzer
+### Neue Domain-Modelle
+
+```text
+src/main/java/de/burger/forensics/domain/model/semantic/SemanticAnalysisRequest.java
+src/main/java/de/burger/forensics/domain/model/semantic/SemanticAnalysisResult.java
+src/main/java/de/burger/forensics/domain/model/semantic/SemanticMethod.java
+src/main/java/de/burger/forensics/domain/model/semantic/SemanticNode.java
+src/main/java/de/burger/forensics/domain/model/semantic/SemanticEdge.java
+src/main/java/de/burger/forensics/domain/model/semantic/CallRelation.java
+src/main/java/de/burger/forensics/domain/model/semantic/ControlFlowRelation.java
+src/main/java/de/burger/forensics/domain/model/semantic/DataFlowPath.java
+src/main/java/de/burger/forensics/domain/model/semantic/DataFlowStep.java
+```
+
+### Grundsatz
+
+Die Domain-Modelle dürfen keine Joern-Klassen, Joern-Package-Namen oder CLI-spezifische Details enthalten.
+
+### Akzeptanzkriterien
+
+* `SemanticAnalysisPort` liegt im Domain-Port-Package.
+* Joern bleibt austauschbarer Provider.
+* Tests decken Null-/Blank-Fälle der semantischen Modelle ab.
+
+## Slice 11 — Joern-Konfiguration in der Gradle Extension ergänzen
+
+### Ziel
+
+Joern optional und explizit konfigurierbar machen.
+
+### Neue Extension Properties
+
+```text
+joernEnabled
+joernExecutable
+joernParseExecutable
+joernSliceExecutable
+joernWorkspaceDirectory
+joernOutputDirectory
+joernMaxHeap
+joernTimeoutSeconds
+joernFailOnError
+```
+
+### Defaults
+
+```text
+joernEnabled = false
+joernWorkspaceDirectory = build/forensics/joern/workspace
+joernOutputDirectory = build/forensics/joern
+joernFailOnError = true
+```
+
+### Beispielkonfiguration
 
 ```kotlin
 btmGen {
@@ -976,159 +557,327 @@ btmGen {
 
     analysisStoreEnabled.set(true)
     analysisStoreDirectory.set(file("build/forensics/analysis-store"))
-    cleanupPolicy.set("KEEP_ON_SUCCESS")
-    projectKey.set("legacy-demo-shop")
-    manifestFile.set(file("build/forensics/manifest.json"))
-    checksumsFile.set(file("build/forensics/checksums.sha256"))
+
+    joernEnabled.set(true)
+    joernExecutable.set(file("/opt/joern/joern"))
+    joernParseExecutable.set(file("/opt/joern/joern-parse"))
+    joernSliceExecutable.set(file("/opt/joern/joern-slice"))
+    joernOutputDirectory.set(file("build/forensics/joern"))
+    joernFailOnError.set(true)
 }
 ```
 
 ### Akzeptanzkriterien
 
-* Gradle Configuration Cache wird nicht unnötig verschlechtert.
-* Keine eager Project-Auswertung, wo Provider möglich sind.
-* Task-Inputs und Outputs sind annotiert.
-* `./gradlew tasks --group forensics` zeigt sinnvolle Task-Beschreibungen.
+* Joern ist standardmäßig deaktiviert.
+* Der bestehende `generateBtmRules`-Lauf bleibt ohne Joern stabil.
+* Keine Joern-Installation ist für normale Tests erforderlich.
 
----
-
-## Slice 11 — ArchUnit und Architekturtests absichern
+## Slice 12 — Joern CLI Outbound Adapter implementieren
 
 ### Ziel
 
-Sicherstellen, dass H2 und Dateisystemadapter nicht in Domain/Application einsickern.
+Joern extern ausführen und Joern-Artefakte erzeugen.
 
-### Prüfungen
+### Neue Packages
 
-Bestehende ArchUnit-Regeln prüfen und bei Bedarf gezielt erweitern.
+```text
+src/main/java/de/burger/forensics/adapters/joern/
+```
 
-Neue Regeln, falls sinnvoll:
+### Neue Klassen
+
+```text
+JoernCliSemanticAnalysisAdapter.java
+JoernCommandExecutor.java
+JoernCommandResult.java
+JoernOutputParser.java
+JoernAnalysisException.java
+JoernAnalysisConfig.java
+JoernArtifactPaths.java
+```
+
+### Verhalten
+
+Der Adapter führt Joern als externen Prozess aus:
+
+```text
+joern-parse -> cpg.bin
+joern / joern script -> callgraph.json
+joern / joern script -> controlflow.json
+joern-slice -> dataflow.json / slices.json
+```
+
+### Akzeptanzkriterien
+
+* Joern wird nicht als direkte Java-Library eingebunden.
+* Prozessausführung ist kapselbar und testbar.
+* Timeouts werden respektiert.
+* stdout/stderr werden diagnostisch erhalten.
+* Unit-Tests verwenden FakeJoernCommandExecutor und JSON-Fixtures.
+
+## Slice 13 — Joern H2-Schema erweitern
+
+### Ziel
+
+Joern-Rohdaten und Korrelationsinformationen im Analysis Store speichern.
+
+### Neue Tabellen
+
+```text
+joern_import_run
+joern_node
+joern_edge
+joern_method
+joern_call_relation
+joern_control_flow_relation
+joern_data_flow_path
+joern_data_flow_step
+semantic_anchor
+```
+
+### Semantik
+
+`semantic_anchor` verbindet die bestehenden Rohdaten mit Joern:
+
+```text
+scan_event -> joern_node
+btm_rule   -> scan_event -> joern_node
+```
+
+### Matching-Felder
+
+Die Korrelation darf nicht nur über Zeilennummer erfolgen.
+
+```text
+relativePath
+fqcn
+methodName
+signature
+lineNumber
+normalizedCode
+```
+
+### Confidence
+
+```text
+FQCN_METHOD_LINE_CODE = 0.95
+FILE_METHOD_LINE      = 0.80
+METHOD_LINE           = 0.65
+LINE_ONLY             = 0.40
+```
+
+### Akzeptanzkriterien
+
+* Joern-Tabellen sind über `analysis_run_id` versioniert.
+* Import ist idempotent pro `analysisRunId` und `joernFingerprint`.
+* `semantic_anchor` speichert `confidence` und `match_strategy`.
+
+## Slice 14 — Joern Import Use Case ergänzen
+
+### Ziel
+
+Den Joern-Fluss als eigenen Use Case modellieren.
+
+### Neue Application-Klasse
+
+```text
+src/main/java/de/burger/forensics/application/service/AnalyzeSemanticsUseCase.java
+```
+
+### Ablauf
+
+```text
+1. BuildIdentity und AnalysisRunId laden oder entgegennehmen.
+2. SemanticAnalysisRequest erstellen.
+3. SemanticAnalysisPort.analyze(...) ausführen.
+4. Joern-Artefakte prüfen.
+5. Joern-Ergebnis in H2 speichern.
+6. semantic_anchor Matching ausführen.
+7. Manifest und Checksums aktualisieren.
+```
+
+### Akzeptanzkriterien
+
+* Use Case kennt nur Ports und Domain-Modelle.
+* Keine Joern-CLI-Klassen im Application Layer.
+* Kein Gradle API Import im Application Layer.
+
+## Slice 15 — Gradle Tasks für Joern-Fluss ergänzen
+
+### Ziel
+
+Joern als expliziten, steuerbaren Build-Schritt verfügbar machen.
+
+### Neue Tasks
+
+```text
+analyzeForensicsSemantics
+importForensicsSemantics
+forensicsAnalyze
+```
+
+### Task-Beziehungen
+
+```text
+forensicsAnalyze
+  dependsOn generateBtmRules
+  dependsOn analyzeForensicsSemantics
+  dependsOn importForensicsSemantics
+```
+
+Bevorzugt ist ein expliziter Aggregat-Task. Joern soll nicht ungefragt bei jedem normalen Build laufen.
+
+### Akzeptanzkriterien
+
+* Joern läuft nicht ungefragt bei jedem normalen Build.
+* `analyzeForensicsSemantics` benötigt `joernEnabled=true` oder bricht mit klarer Meldung ab.
+* `forensicsAnalyze` erzeugt BTM + Analysis Store + Joern Enrichment.
+
+## Slice 16 — Manifest um Joern-Artefakte erweitern
+
+### Ziel
+
+Das Manifest muss anzeigen, ob Joern verwendet wurde und welche Joern-Artefakte Bestandteil des Analyse-Snapshots sind.
+
+### Manifest-Erweiterung
+
+```json
+{
+  "joernEnabled": true,
+  "joernVersion": "...",
+  "joernFingerprint": "sha256:...",
+  "joernArtifacts": [
+    {
+      "path": "joern/cpg.bin",
+      "type": "joern-cpg",
+      "sha256": "...",
+      "sizeBytes": 1234
+    },
+    {
+      "path": "joern/callgraph.json",
+      "type": "joern-callgraph",
+      "sha256": "...",
+      "sizeBytes": 1234
+    }
+  ]
+}
+```
+
+### Akzeptanzkriterien
+
+* Manifest bleibt valides JSON.
+* Joern-Artefakte stehen auch in `checksums.sha256`.
+* Manifest, H2 und BTM Header bleiben über dieselbe `analysisRunId` verbunden.
+
+## Slice 17 — Tests für Joern Flow
+
+### Ziel
+
+Joern-Integration testbar machen, ohne echte Joern-Installation für Unit- und Standard-Integrationstests vorauszusetzen.
+
+### Tests
+
+```text
+SemanticAnalysisPortModelTest
+JoernOutputParserTest
+JoernCliSemanticAnalysisAdapterTest
+H2JoernImportStoreTest
+SemanticAnchorMatcherTest
+AnalyzeSemanticsUseCaseTest
+GenerateBtmTaskJoernDisabledTest
+ForensicsAnalyzeTaskWithFakeJoernTest
+```
+
+### Teststrategie
+
+```text
+Unit Tests:
+  FakeJoernCommandExecutor
+  JSON Fixtures
+  temporäre H2 DB
+
+Gradle TestKit:
+  joernEnabled=false als Standardfall
+  joernEnabled=true mit Fake-Adapter oder Fixture-Modus
+
+Optionaler lokaler Integrationstest:
+  nur aktiv über explizites Flag, z. B. -PwithRealJoern=true
+```
+
+### Akzeptanzkriterien
+
+* Standardtests benötigen keine echte Joern-Installation.
+* Joern JSON Fixtures werden deterministisch importiert.
+* `semantic_anchor` Matching wird nachvollziehbar getestet.
+
+## Slice 18 — ArchUnit und Architekturtests erweitern
+
+### Ziel
+
+Absichern, dass Joern und H2 Adapter bleiben.
+
+### Regeln
 
 ```text
 - domain must not depend on java.sql
 - domain must not depend on org.h2
+- domain must not depend on Joern packages
 - application must not depend on org.h2
 - application must not depend on Gradle APIs
-- h2 adapter may implement AnalysisStorePort
+- application must not depend on Joern CLI adapter classes
+- adapters.h2 may implement AnalysisStorePort
+- adapters.joern may implement SemanticAnalysisPort
 ```
 
 ### Akzeptanzkriterien
 
-* H2 bleibt im Adapter.
+* H2 bleibt im H2-Adapter.
+* Joern bleibt im Joern-Adapter.
 * Gradle bleibt im Plugin-Inbound-Adapter.
 * Domain bleibt frameworkfrei.
-* Application bleibt adapterfrei.
 
----
-
-## Slice 12 — Integrationstest mit Gradle TestKit
+## Slice 19 — Dokumentation aktualisieren
 
 ### Ziel
 
-Nachweisen, dass ein echtes Testprojekt mit dem Plugin die neuen Artefakte erzeugt.
+README/QUALITY minimal und korrekt aktualisieren.
 
-### Test erweitern oder neu anlegen
-
-```text
-src/test/java/de/burger/forensics/plugin/btmgen/gradle/GenerateBtmTaskAnalysisStoreTest.java
-```
-
-### Test-Szenario
-
-Temporäres Gradle-Projekt erzeugen mit:
-
-```text
-settings.gradle.kts
-build.gradle.kts
-src/main/java/com/example/DemoService.java
-```
-
-Dann ausführen:
-
-```bash
-./gradlew generateBtmRules
-```
-
-### Erwartete Dateien
-
-```text
-build/forensics/forensics.btm
-build/forensics/manifest.json
-build/forensics/checksums.sha256
-build/forensics/analysis-store/<h2 files>
-```
-
-### Erwartete Inhalte
-
-```text
-- BTM enthält Header mit analysisRunId.
-- Manifest enthält dieselbe analysisRunId.
-- Checksums enthalten forensics.btm.
-- H2 Store enthält mindestens einen analysis_run.
-- H2 Store enthält ScanEvents.
-- H2 Store enthält BTM Rules.
-```
-
-### Akzeptanzkriterien
-
-* Test läuft reproduzierbar.
-* Kein echter externer Server nötig.
-* Keine Joern-Installation nötig.
-
----
-
-## Slice 13 — Dokumentation aktualisieren
-
-### Ziel
-
-README/QUALITY nur minimal und korrekt aktualisieren.
-
-### README Ergänzung
-
-Kurzer Abschnitt:
+### README-Ergänzungen
 
 ```text
 Forensics Analysis Store
+Joern Semantic Enrichment
+Generated Artifacts
+How to run without Joern
+How to run with Joern
+Cleanup Policy
 ```
 
-Inhalt:
+### Nicht behaupten
 
 ```text
-- Was erzeugt generateBtmRules zusätzlich?
-- Wo liegen H2 Store, Manifest und Checksums?
-- Wie wird Cleanup gesteuert?
-- Hinweis: Joern/gRPC/Server-Push folgen später.
-```
-
-### Keine Änderungen
-
-Nicht ändern:
-
-```text
-- SonarCloud Badge entfernen
-- Coverage-Schwellen senken
-- Release-Konfiguration ändern
-- Java-Toolchain ändern
+- dass gRPC bereits implementiert ist
+- dass forensic_analytics bereits angebunden ist
+- dass Replay oder LLM-Kontext bereits erzeugt werden
 ```
 
 ### Akzeptanzkriterien
 
-* README beschreibt neue Artefakte.
-* Keine falsche Aussage zu Joern oder gRPC.
-* Keine Behauptung, dass der forensic_analytics Server bereits existiert.
+* README beschreibt Joern als optionalen semantischen Anreicherungsfluss.
+* Standardlauf ohne Joern bleibt dokumentiert.
+* Joern-Lauf ist klar als optionaler Build-Schritt dokumentiert.
 
----
+# 8. Interne Ablaufreihenfolge
 
-# 9. Empfohlene interne Ablaufreihenfolge im Code
-
-Der finale Ablauf in `GenerateBtmTask` soll ungefähr so aussehen:
+## Standardlauf ohne Joern
 
 ```text
 resolve configuration
 create output directories
 create analysis run id
 calculate source fingerprints
-create initial build identity
+create build identity
 open analysis store
 initialize schema
 create analysis run
@@ -1148,108 +897,36 @@ close analysis store
 apply cleanup policy
 ```
 
+## Lauf mit Joern
+
+```text
+run standard analysis store flow
+verify joernEnabled
+verify joern executables or configured adapter
+run joern-parse
+run joern query/script exports
+run joern-slice if configured
+parse joern artifacts
+store joern_import_run
+store joern_node and joern_edge
+store call/control/data flow relations
+match scan_event to joern_node
+store semantic_anchor
+update manifest with joern artifacts
+update checksums
+mark semantic enrichment completed
+```
+
 Bei Fehler:
 
 ```text
-mark status FAILED if store is available
+mark analysis_run or joern_import_run as FAILED if store is available
 close store
-apply cleanup policy for failure
-rethrow exception
+apply cleanup policy
+rethrow exception unless joernFailOnError=false
 ```
 
----
-
-# 10. Tabellen-Mapping
-
-## analysis_run
-
-Quelle:
-
-```text
-BuildIdentity
-AnalysisRunStatus
-```
-
-Zweck:
-
-```text
-Eindeutiger statischer Analyse-Snapshot.
-```
-
-## source_file
-
-Quelle:
-
-```text
-SourceFingerprintService
-```
-
-Zweck:
-
-```text
-Späterer Abgleich zwischen Analysepaket und Runtime-Artefakt.
-```
-
-## scan_method
-
-Quelle:
-
-```text
-AnalysisContext.methodContexts
-```
-
-Zweck:
-
-```text
-Methodenanker für ScanEvents, BTM-Regeln und später Joern.
-```
-
-## scan_event
-
-Quelle:
-
-```text
-AnalysisContext.events
-```
-
-Zweck:
-
-```text
-Rohdaten aus JavaParserScanner.
-```
-
-## btm_rule
-
-Quelle:
-
-```text
-RuleGenerationResult.rules
-RuleGenerationResult.renderedRules
-```
-
-Zweck:
-
-```text
-Verbindung zwischen statischer Scan-Information und erzeugter Byteman-Regel.
-```
-
-## artifact_checksum
-
-Quelle:
-
-```text
-ArtifactChecksumService
-```
-
-Zweck:
-
-```text
-Integritätsprüfung für späteren Upload und Server-Import.
-```
-
----
-
-# 11. Done Definition für den Gesamtworkflow
+# 9. Done Definition
 
 Der Workflow ist abgeschlossen, wenn folgende Punkte erfüllt sind:
 
@@ -1267,35 +944,20 @@ Der Workflow ist abgeschlossen, wenn folgende Punkte erfüllt sind:
 [ ] H2 enthält btm_rule Einträge.
 [ ] BTM Header enthält analysisRunId.
 [ ] Manifest enthält dieselbe analysisRunId.
-[ ] Checksums enthalten BTM, Manifest und H2-Dateien.
-[ ] Cleanup-Policy ist konfigurierbar.
-[ ] analysisStoreEnabled=false ist getestet.
-[ ] Domain enthält keine H2-/Gradle-/Dateisystemabhängigkeiten.
-[ ] Application enthält keine H2-/Gradle-Abhängigkeiten.
+[ ] Joern ist standardmäßig deaktiviert.
+[ ] analyzeForensicsSemantics ist explizit ausführbar.
+[ ] Bei joernEnabled=true werden Joern-Artefakte erzeugt oder Fake-Fixtures importiert.
+[ ] H2 enthält joern_import_run.
+[ ] H2 enthält joern_node und joern_edge.
+[ ] H2 enthält semantic_anchor.
+[ ] Manifest enthält Joern-Artefakte bei joernEnabled=true.
+[ ] Checksums enthalten Joern-Artefakte bei joernEnabled=true.
+[ ] Domain enthält keine H2-/Gradle-/Joern-Abhängigkeiten.
+[ ] Application enthält keine H2-/Gradle-/Joern-Adapter-Abhängigkeiten.
 [ ] README ist minimal aktualisiert.
 ```
 
----
-
-# 12. Tests, die mindestens vorhanden sein müssen
-
-```text
-AnalysisRunIdTest
-BuildIdentityTest
-ArtifactChecksumTest
-SourceFingerprintServiceTest
-H2SchemaInitializerTest
-H2AnalysisStoreAdapterTest
-AnalysisManifestWriterTest
-ChecksumFileWriterTest
-GenerateBtmTaskAnalysisStoreTest
-```
-
-Bestehende Tests müssen angepasst, aber nicht abgeschwächt werden.
-
----
-
-# 13. Qualitätsgate
+# 10. Qualitätsgate
 
 Nach jedem größeren Slice:
 
@@ -1311,43 +973,50 @@ Nach Abschluss des Workflows:
 ./gradlew validatePlugins
 ```
 
-Falls Dependency Verification im Projekt aktiv ist, müssen neue H2-Artefakte sauber in die Verification-Metadaten aufgenommen werden. Keine unsicheren Workarounds verwenden.
+Falls Dependency Verification aktiv ist, müssen neue Artefakte sauber in die Verification-Metadaten aufgenommen werden. Keine unsicheren Workarounds verwenden.
 
----
-
-# 14. Erwartete Commit-Struktur
+# 11. Erwartete Commit-Struktur
 
 Empfohlene Commit-Aufteilung:
 
 ```text
-1. feat: add analysis identity domain model
-2. feat: add analysis store port
-3. feat: add h2 analysis store adapter
-4. feat: add source fingerprinting
-5. feat: expose generated domain rules
-6. feat: persist btm analysis data
-7. feat: write analysis manifest and checksums
-8. feat: add analysis store cleanup policy
-9. test: add analysis store integration coverage
-10. docs: document forensics analysis store artifacts
+1. feat: add persistent analysis identity model
+2. feat: add h2 analysis store foundation
+3. feat: persist btm scan and rule data
+4. feat: write analysis manifest and checksums
+5. feat: add semantic analysis domain port
+6. feat: add optional joern configuration
+7. feat: add joern cli semantic adapter
+8. feat: import joern semantic data into analysis store
+9. feat: anchor scan events to joern nodes
+10. test: add joern enrichment fixture coverage
+11. docs: document analysis store and joern enrichment flow
 ```
 
----
+# 12. Erwarteter Endzustand
 
-# 15. Erwarteter Endzustand
+Nach diesem Workflow ist das Plugin noch kein Server-Client und noch keine Replay-Plattform.
 
-Nach diesem Workflow ist das Plugin noch kein Server-Client und noch kein Joern-Analyzer.
-
-Es ist aber bereit für den nächsten Evolutionsschritt:
+Es erzeugt aber einen stabilen statischen Analyse-Snapshot:
 
 ```text
-Joern Enrichment
-  -> joern_node
-  -> joern_edge
+JavaParser Scan
+  -> H2 Analysis Store
+  -> BTM Rules
+  -> Manifest
+  -> Checksums
+```
+
+Und optional einen semantisch angereicherten Snapshot:
+
+```text
+Joern CPG
+  -> Joern JSON Artifacts
+  -> H2 Joern Tables
   -> semantic_anchor
 ```
 
-Danach:
+Damit ist die Basis für den nächsten Evolutionsschritt vorhanden:
 
 ```text
 gRPC Publish
@@ -1363,4 +1032,4 @@ Runtime Trace Identity
   -> forensic_analytics correlates live events with static snapshot
 ```
 
-Dieser Workflow schafft damit den notwendigen stabilen Rohdatenkern für die spätere Forensics Analytics Platform.
+Dieser Workflow schafft damit den notwendigen Rohdatenkern und den Joern-Semantikfluss für die spätere Forensics Analytics Platform.
