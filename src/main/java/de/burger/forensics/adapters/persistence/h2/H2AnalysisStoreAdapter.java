@@ -38,6 +38,122 @@ import java.util.Objects;
  */
 public final class H2AnalysisStoreAdapter implements AnalysisStorePort, SemanticAnalysisStorePort {
 
+    private static final String ANALYSIS_RUN_ID_REQUIRED = "Analysis run id must not be null.";
+    private static final String INSERT_ANALYSIS_RUN_SQL = """
+            INSERT INTO analysis_run (
+                analysis_run_id,
+                project_key,
+                build_id,
+                source_fingerprint,
+                classpath_fingerprint,
+                btm_rules_fingerprint,
+                artifact_fingerprint,
+                plugin_version,
+                schema_version,
+                status,
+                created_at,
+                updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+    private static final String UPDATE_ANALYSIS_RUN_STATUS_SQL = """
+            UPDATE analysis_run
+            SET status = ?
+            WHERE analysis_run_id = ?
+            """;
+    private static final String INSERT_SOURCE_FILE_SQL = """
+            INSERT INTO source_file (
+                analysis_run_id,
+                relative_path,
+                absolute_path,
+                sha256,
+                file_size,
+                last_modified_epoch_millis
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """;
+    private static final String INSERT_SCAN_METHOD_SQL = """
+            INSERT INTO scan_method (
+                analysis_run_id,
+                method_key,
+                fqcn,
+                method_name,
+                signature,
+                return_type
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            """;
+    private static final String INSERT_SCAN_EVENT_SQL = """
+            INSERT INTO scan_event (
+                analysis_run_id,
+                fqcn,
+                method_name,
+                signature,
+                rule_template,
+                line_number,
+                condition_text,
+                language,
+                return_type
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+    private static final String INSERT_BTM_RULE_SQL = """
+            INSERT INTO btm_rule (
+                analysis_run_id,
+                rule_id,
+                fqcn,
+                method_name,
+                rule_template,
+                line_number,
+                rendered_rule,
+                emitted_to_btm
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+    private static final String INSERT_ARTIFACT_CHECKSUM_SQL = """
+            INSERT INTO artifact_checksum (
+                analysis_run_id,
+                artifact_path,
+                artifact_type,
+                sha256,
+                size_bytes
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """;
+    private static final String INSERT_JOERN_IMPORT_RUN_SQL = """
+            INSERT INTO joern_import_run (
+                analysis_run_id,
+                joern_fingerprint,
+                joern_version,
+                status,
+                started_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """;
+    private static final String INSERT_SEMANTIC_ANCHOR_SQL = """
+            INSERT INTO semantic_anchor (
+                analysis_run_id,
+                scan_event_key,
+                semantic_node_id,
+                relative_path,
+                fqcn,
+                method_name,
+                signature,
+                line_number,
+                normalized_code,
+                confidence,
+                match_strategy
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+    private static final String UPDATE_JOERN_IMPORT_RUN_STATUS_SQL = """
+            UPDATE joern_import_run
+            SET status = ?,
+                completed_at = ?
+            WHERE analysis_run_id = ?
+              AND joern_fingerprint = ?
+            """;
+
     private final Path databasePath;
     private final SqlTransactionRunner transactions;
 
@@ -56,23 +172,7 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
         Objects.requireNonNull(identity, "Build identity must not be null.");
         transactions.run("create analysis run", connection -> {
             deleteExistingRun(connection, identity.analysisRunId());
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO analysis_run (
-                        analysis_run_id,
-                        project_key,
-                        build_id,
-                        source_fingerprint,
-                        classpath_fingerprint,
-                        btm_rules_fingerprint,
-                        artifact_fingerprint,
-                        plugin_version,
-                        schema_version,
-                        status,
-                        created_at,
-                        updated_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(INSERT_ANALYSIS_RUN_SQL)) {
                 statement.setString(1, identity.analysisRunId().value());
                 statement.setString(2, identity.projectKey());
                 statement.setString(3, identity.buildId().value());
@@ -93,14 +193,10 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
 
     @Override
     public void updateAnalysisRunStatus(AnalysisRunId analysisRunId, AnalysisRunStatus status) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         Objects.requireNonNull(status, "Analysis run status must not be null.");
         transactions.run("update analysis run status", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE analysis_run
-                    SET status = ?
-                    WHERE analysis_run_id = ?
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(UPDATE_ANALYSIS_RUN_STATUS_SQL)) {
                 statement.setString(1, status.name());
                 statement.setString(2, analysisRunId.value());
                 statement.executeUpdate();
@@ -110,20 +206,10 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
 
     @Override
     public void storeSourceFiles(AnalysisRunId analysisRunId, List<SourceFileSnapshot> sourceFiles) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         Objects.requireNonNull(sourceFiles, "Source files must not be null.");
         transactions.run("store source files", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO source_file (
-                        analysis_run_id,
-                        relative_path,
-                        absolute_path,
-                        sha256,
-                        file_size,
-                        last_modified_epoch_millis
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(INSERT_SOURCE_FILE_SQL)) {
                 for (SourceFileSnapshot sourceFile : sourceFiles) {
                     statement.setString(1, analysisRunId.value());
                     statement.setString(2, sourceFile.relativePath());
@@ -140,20 +226,10 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
 
     @Override
     public void storeMethods(AnalysisRunId analysisRunId, List<MethodEntry> methods) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         Objects.requireNonNull(methods, "Methods must not be null.");
         transactions.run("store methods", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO scan_method (
-                        analysis_run_id,
-                        method_key,
-                        fqcn,
-                        method_name,
-                        signature,
-                        return_type
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?)
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(INSERT_SCAN_METHOD_SQL)) {
                 for (MethodEntry method : methods) {
                     statement.setString(1, analysisRunId.value());
                     statement.setString(2, method.fullyQualifiedMethodName());
@@ -170,23 +246,10 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
 
     @Override
     public void storeScanEvents(AnalysisRunId analysisRunId, List<ScanEvent> events) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         Objects.requireNonNull(events, "Scan events must not be null.");
         transactions.run("store scan events", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO scan_event (
-                        analysis_run_id,
-                        fqcn,
-                        method_name,
-                        signature,
-                        rule_template,
-                        line_number,
-                        condition_text,
-                        language,
-                        return_type
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(INSERT_SCAN_EVENT_SQL)) {
                 for (ScanEvent event : events) {
                     SourceLocation location = event.location();
                     statement.setString(1, analysisRunId.value());
@@ -207,23 +270,11 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
 
     @Override
     public void storeRules(AnalysisRunId analysisRunId, List<Rule> rules, Map<String, String> renderedRulesByRuleId) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         Objects.requireNonNull(rules, "Rules must not be null.");
         Objects.requireNonNull(renderedRulesByRuleId, "Rendered rules must not be null.");
         transactions.run("store rules", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO btm_rule (
-                        analysis_run_id,
-                        rule_id,
-                        fqcn,
-                        method_name,
-                        rule_template,
-                        line_number,
-                        rendered_rule,
-                        emitted_to_btm
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(INSERT_BTM_RULE_SQL)) {
                 for (Rule rule : rules) {
                     SourceLocation location = rule.location();
                     String renderedRule = renderedRulesByRuleId.get(rule.id().value());
@@ -244,19 +295,10 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
 
     @Override
     public void storeArtifactChecksums(AnalysisRunId analysisRunId, List<ArtifactChecksum> checksums) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         Objects.requireNonNull(checksums, "Artifact checksums must not be null.");
         transactions.run("store artifact checksums", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO artifact_checksum (
-                        analysis_run_id,
-                        artifact_path,
-                        artifact_type,
-                        sha256,
-                        size_bytes
-                    )
-                    VALUES (?, ?, ?, ?, ?)
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(INSERT_ARTIFACT_CHECKSUM_SQL)) {
                 for (ArtifactChecksum checksum : checksums) {
                     statement.setString(1, analysisRunId.value());
                     statement.setString(2, checksum.path());
@@ -272,20 +314,11 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
 
     @Override
     public void createSemanticImportRun(AnalysisRunId analysisRunId, SemanticAnalysisResult result) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         Objects.requireNonNull(result, "Semantic analysis result must not be null.");
         transactions.run("create semantic import run", connection -> {
             deleteSemanticData(connection, analysisRunId);
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO joern_import_run (
-                        analysis_run_id,
-                        joern_fingerprint,
-                        joern_version,
-                        status,
-                        started_at
-                    )
-                    VALUES (?, ?, ?, ?, ?)
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(INSERT_JOERN_IMPORT_RUN_SQL)) {
                 statement.setString(1, analysisRunId.value());
                 statement.setString(2, result.semanticFingerprint());
                 statement.setString(3, result.providerVersion());
@@ -298,7 +331,7 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
 
     @Override
     public void storeSemanticGraph(AnalysisRunId analysisRunId, SemanticAnalysisResult result) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         Objects.requireNonNull(result, "Semantic analysis result must not be null.");
         transactions.run("store semantic graph", connection -> {
             insertSemanticNodes(connection, analysisRunId, result.nodes());
@@ -312,25 +345,10 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
 
     @Override
     public void storeSemanticAnchors(AnalysisRunId analysisRunId, List<SemanticAnchor> anchors) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         Objects.requireNonNull(anchors, "Semantic anchors must not be null.");
         transactions.run("store semantic anchors", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    INSERT INTO semantic_anchor (
-                        analysis_run_id,
-                        scan_event_key,
-                        semantic_node_id,
-                        relative_path,
-                        fqcn,
-                        method_name,
-                        signature,
-                        line_number,
-                        normalized_code,
-                        confidence,
-                        match_strategy
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(INSERT_SEMANTIC_ANCHOR_SQL)) {
                 for (SemanticAnchor anchor : anchors) {
                     statement.setString(1, analysisRunId.value());
                     statement.setString(2, anchor.scanEventKey());
@@ -356,7 +374,7 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
             String semanticFingerprint,
             String status
     ) {
-        Objects.requireNonNull(analysisRunId, "Analysis run id must not be null.");
+        Objects.requireNonNull(analysisRunId, ANALYSIS_RUN_ID_REQUIRED);
         if (semanticFingerprint == null || semanticFingerprint.isBlank()) {
             throw new IllegalArgumentException("Semantic fingerprint must not be blank.");
         }
@@ -364,13 +382,7 @@ public final class H2AnalysisStoreAdapter implements AnalysisStorePort, Semantic
             throw new IllegalArgumentException("Semantic import status must not be blank.");
         }
         transactions.run("update semantic import status", connection -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                    UPDATE joern_import_run
-                    SET status = ?,
-                        completed_at = ?
-                    WHERE analysis_run_id = ?
-                      AND joern_fingerprint = ?
-                    """)) {
+            try (PreparedStatement statement = connection.prepareStatement(UPDATE_JOERN_IMPORT_RUN_STATUS_SQL)) {
                 statement.setString(1, status);
                 statement.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
                 statement.setString(3, analysisRunId.value());

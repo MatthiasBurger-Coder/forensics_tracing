@@ -1,5 +1,6 @@
 package de.burger.forensics.plugin.btmgen.gradle;
 
+import de.burger.forensics.domain.model.analysis.BuildIdentity;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationException;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationRequest;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationRunner;
@@ -189,8 +190,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .minBranchesPerMethod(minBranches())
                 .includeTimestampHeader(getIncludeTimestampHeader().getOrElse(false))
                 .cleanupPolicy(getCleanupPolicy().getOrElse("KEEP_ON_SUCCESS"))
-                .projectKey(getProjectKey().getOrElse("UNKNOWN"))
-                .pluginVersion(getPluginVersion().getOrElse("UNKNOWN"))
+                .projectKey(getProjectKey().getOrElse(BuildIdentity.UNKNOWN))
+                .pluginVersion(getPluginVersion().getOrElse(BuildIdentity.UNKNOWN))
                 .manifestFile(getManifestFile().get().getAsFile().toPath())
                 .checksumsFile(getChecksumsFile().get().getAsFile().toPath());
 
@@ -230,8 +231,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
         conventionIfMissing(getAnalysisStoreEnabled(), true);
         conventionIfMissing(getAnalysisStoreDirectory(), layout.getBuildDirectory().dir("forensics/analysis-store"));
         conventionIfMissing(getCleanupPolicy(), "KEEP_ON_SUCCESS");
-        conventionIfMissing(getProjectKey(), "UNKNOWN");
-        conventionIfMissing(getPluginVersion(), "UNKNOWN");
+        conventionIfMissing(getProjectKey(), BuildIdentity.UNKNOWN);
+        conventionIfMissing(getPluginVersion(), BuildIdentity.UNKNOWN);
         conventionIfMissing(getManifestFile(), layout.getBuildDirectory().file("forensics/manifest.json"));
         conventionIfMissing(getChecksumsFile(), layout.getBuildDirectory().file("forensics/checksums.sha256"));
         conventionIfMissing(getProfilingEnabled(), false);

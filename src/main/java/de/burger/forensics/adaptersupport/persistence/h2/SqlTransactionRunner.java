@@ -16,16 +16,20 @@ public final class SqlTransactionRunner {
 
     public void run(String operation, SqlWork work) {
         try (Connection connection = connectionFactory.openConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                work.execute(connection);
-                connection.commit();
-            } catch (SQLException | RuntimeException e) {
-                rollback(connection, e);
-                throw e;
-            }
+            executeInTransaction(connection, work);
         } catch (SQLException e) {
             throw new IllegalStateException("Failed to " + operation + " H2 analysis store.", e);
+        }
+    }
+
+    private static void executeInTransaction(Connection connection, SqlWork work) throws SQLException {
+        connection.setAutoCommit(false);
+        try {
+            work.execute(connection);
+            connection.commit();
+        } catch (SQLException | RuntimeException e) {
+            rollback(connection, e);
+            throw e;
         }
     }
 

@@ -44,11 +44,12 @@ class AnalysisManifestWriterTest {
                 new ArtifactChecksum("forensics.btm", "byteman-rules", "abc", 12L)));
 
         String json = Files.readString(manifest);
-        assertThat(json).contains("\"schemaVersion\": \"1\"");
-        assertThat(json).contains("\"projectKey\": \"demo\\\"project\\\\with\\b\\f\\n\\r\\tcontrols\"");
-        assertThat(json).contains("\"analysisRunId\": \"run-1\"");
-        assertThat(json).contains("\"joernEnabled\": false");
-        assertThat(json).contains("\"path\": \"forensics.btm\"");
+        assertThat(json).contains(
+                "\"schemaVersion\": \"1\"",
+                "\"projectKey\": \"demo\\\"project\\\\with\\b\\f\\n\\r\\tcontrols\"",
+                "\"analysisRunId\": \"run-1\"",
+                "\"joernEnabled\": false",
+                "\"path\": \"forensics.btm\"");
     }
 
     @Test
