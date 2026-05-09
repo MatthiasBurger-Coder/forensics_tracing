@@ -31,7 +31,8 @@ public final class BtmGenerationDefaults {
 
     private static final Path FORENSICS_DIRECTORY = Path.of("forensics");
     private static final Path CACHE_DIRECTORY = FORENSICS_DIRECTORY.resolve("cache");
-    private static final Path ANALYSIS_STORE_DIRECTORY = FORENSICS_DIRECTORY.resolve("analysis-store");
+    private static final Path ANALYSIS_STORE_DIRECTORY =
+            FORENSICS_DIRECTORY.resolve(DEFAULT_ANALYSIS_STORE_DATABASE_FILE_NAME);
 
     private BtmGenerationDefaults() {
     }

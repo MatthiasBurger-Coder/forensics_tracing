@@ -25,7 +25,6 @@ import de.burger.forensics.domain.model.analysis.BuildId;
 import de.burger.forensics.domain.model.analysis.BuildIdentity;
 import de.burger.forensics.domain.model.cache.ScanPhase;
 import de.burger.forensics.domain.model.cache.ScanProfile;
-import de.burger.forensics.domain.model.entry.MethodEntry;
 import de.burger.forensics.domain.port.out.CodeScanPort;
 import de.burger.forensics.domain.port.out.LogPort;
 import de.burger.forensics.domain.port.out.RuleRenderPort;
@@ -219,7 +218,33 @@ public final class BtmGenerationRunner {
         ArtifactChecksumService checksumService = new ArtifactChecksumService();
         ArtifactChecksum btmChecksum = null;
         boolean success = false;
-        H2AnalysisStoreAdapter store = new H2AnalysisStoreAdapter(databaseFile);
+        try (H2AnalysisStoreAdapter store = new H2AnalysisStoreAdapter(databaseFile)) {
+            btmChecksum = persistAnalysisRun(
+                    request,
+                    output,
+                    sourceFingerprint,
+                    dedupedRules,
+                    identity,
+                    profileCollector,
+                    checksumService,
+                    store);
+            success = true;
+        } finally {
+            if (success && btmChecksum != null) {
+                writeAnalysisArtifacts(request, identity, btmChecksum, checksumService);
+            }
+            applyCleanupPolicy(request, success);
+        }
+    }
+
+    private ArtifactChecksum persistAnalysisRun(BtmGenerationRequest request,
+                                                RunOutput output,
+                                                SourceFingerprintResult sourceFingerprint,
+                                                List<String> dedupedRules,
+                                                BuildIdentity identity,
+                                                ScanProfileCollector profileCollector,
+                                                ArtifactChecksumService checksumService,
+                                                H2AnalysisStoreAdapter store) {
         try {
             store.initializeSchema();
             store.createAnalysisRun(identity);
@@ -227,25 +252,25 @@ public final class BtmGenerationRunner {
             store.storeSourceFiles(identity.analysisRunId(), sourceFingerprint.sourceFiles());
             store.storeMethods(identity.analysisRunId(), output.context().getMethodEntries());
             store.storeScanEvents(identity.analysisRunId(), output.context().getEvents());
-            store.storeRules(identity.analysisRunId(), output.domainRules(), renderedRulesByRuleId(output.domainRules(), output.renderedRules()));
+            store.storeRules(
+                    identity.analysisRunId(),
+                    output.domainRules(),
+                    renderedRulesByRuleId(output.domainRules(), output.renderedRules()));
             profileCollector.measure(ScanPhase.BTM_FILE_WRITING, () -> {
                 writeRules(request, dedupedRules, identity);
                 return null;
             });
             store.updateAnalysisRunStatus(identity.analysisRunId(), AnalysisRunStatus.BTM_GENERATED);
-            btmChecksum = checksumService.checksumFile(analysisBaseDirectory(request), request.outputFile(), "byteman-rules");
+            ArtifactChecksum btmChecksum = checksumService.checksumFile(
+                    analysisBaseDirectory(request),
+                    request.outputFile(),
+                    "byteman-rules");
             store.storeArtifactChecksums(identity.analysisRunId(), List.of(btmChecksum));
             store.updateAnalysisRunStatus(identity.analysisRunId(), AnalysisRunStatus.COMPLETED);
-            success = true;
+            return btmChecksum;
         } catch (RuntimeException exception) {
             markFailed(store, identity.analysisRunId());
             throw exception;
-        } finally {
-            store.close();
-            if (success && btmChecksum != null) {
-                writeAnalysisArtifacts(request, identity, btmChecksum, checksumService);
-            }
-            applyCleanupPolicy(request, success);
         }
     }
 
