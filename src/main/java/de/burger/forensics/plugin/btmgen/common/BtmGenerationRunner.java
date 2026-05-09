@@ -220,13 +220,14 @@ public final class BtmGenerationRunner {
         boolean success = false;
         try (H2AnalysisStoreAdapter store = new H2AnalysisStoreAdapter(databaseFile)) {
             btmChecksum = persistAnalysisRun(
-                    request,
-                    output,
-                    sourceFingerprint,
-                    dedupedRules,
-                    identity,
-                    profileCollector,
-                    checksumService,
+                    new AnalysisPersistence(
+                            request,
+                            output,
+                            sourceFingerprint,
+                            dedupedRules,
+                            identity,
+                            profileCollector,
+                            checksumService),
                     store);
             success = true;
         } finally {
@@ -237,39 +238,32 @@ public final class BtmGenerationRunner {
         }
     }
 
-    private ArtifactChecksum persistAnalysisRun(BtmGenerationRequest request,
-                                                RunOutput output,
-                                                SourceFingerprintResult sourceFingerprint,
-                                                List<String> dedupedRules,
-                                                BuildIdentity identity,
-                                                ScanProfileCollector profileCollector,
-                                                ArtifactChecksumService checksumService,
-                                                H2AnalysisStoreAdapter store) {
+    private ArtifactChecksum persistAnalysisRun(AnalysisPersistence persistence, H2AnalysisStoreAdapter store) {
         try {
             store.initializeSchema();
-            store.createAnalysisRun(identity);
-            store.updateAnalysisRunStatus(identity.analysisRunId(), AnalysisRunStatus.SCANNING);
-            store.storeSourceFiles(identity.analysisRunId(), sourceFingerprint.sourceFiles());
-            store.storeMethods(identity.analysisRunId(), output.context().getMethodEntries());
-            store.storeScanEvents(identity.analysisRunId(), output.context().getEvents());
+            store.createAnalysisRun(persistence.identity());
+            store.updateAnalysisRunStatus(persistence.identity().analysisRunId(), AnalysisRunStatus.SCANNING);
+            store.storeSourceFiles(persistence.identity().analysisRunId(), persistence.sourceFingerprint().sourceFiles());
+            store.storeMethods(persistence.identity().analysisRunId(), persistence.output().context().getMethodEntries());
+            store.storeScanEvents(persistence.identity().analysisRunId(), persistence.output().context().getEvents());
             store.storeRules(
-                    identity.analysisRunId(),
-                    output.domainRules(),
-                    renderedRulesByRuleId(output.domainRules(), output.renderedRules()));
-            profileCollector.measure(ScanPhase.BTM_FILE_WRITING, () -> {
-                writeRules(request, dedupedRules, identity);
+                    persistence.identity().analysisRunId(),
+                    persistence.output().domainRules(),
+                    renderedRulesByRuleId(persistence.output().domainRules(), persistence.output().renderedRules()));
+            persistence.profileCollector().measure(ScanPhase.BTM_FILE_WRITING, () -> {
+                writeRules(persistence.request(), persistence.dedupedRules(), persistence.identity());
                 return null;
             });
-            store.updateAnalysisRunStatus(identity.analysisRunId(), AnalysisRunStatus.BTM_GENERATED);
-            ArtifactChecksum btmChecksum = checksumService.checksumFile(
-                    analysisBaseDirectory(request),
-                    request.outputFile(),
+            store.updateAnalysisRunStatus(persistence.identity().analysisRunId(), AnalysisRunStatus.BTM_GENERATED);
+            ArtifactChecksum btmChecksum = persistence.checksumService().checksumFile(
+                    analysisBaseDirectory(persistence.request()),
+                    persistence.request().outputFile(),
                     "byteman-rules");
-            store.storeArtifactChecksums(identity.analysisRunId(), List.of(btmChecksum));
-            store.updateAnalysisRunStatus(identity.analysisRunId(), AnalysisRunStatus.COMPLETED);
+            store.storeArtifactChecksums(persistence.identity().analysisRunId(), List.of(btmChecksum));
+            store.updateAnalysisRunStatus(persistence.identity().analysisRunId(), AnalysisRunStatus.COMPLETED);
             return btmChecksum;
         } catch (RuntimeException exception) {
-            markFailed(store, identity.analysisRunId());
+            markFailed(store, persistence.identity().analysisRunId());
             throw exception;
         }
     }
@@ -605,5 +599,14 @@ public final class BtmGenerationRunner {
                              List<String> renderedRules,
                              AnalysisContext context,
                              ConditionValidationReport validationReport) {
+    }
+
+    private record AnalysisPersistence(BtmGenerationRequest request,
+                                       RunOutput output,
+                                       SourceFingerprintResult sourceFingerprint,
+                                       List<String> dedupedRules,
+                                       BuildIdentity identity,
+                                       ScanProfileCollector profileCollector,
+                                       ArtifactChecksumService checksumService) {
     }
 }

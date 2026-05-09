@@ -20,6 +20,7 @@ import javax.inject.Inject;
 public abstract class ImportForensicsSemanticsTask extends DefaultTask {
 
     @Inject
+    @SuppressWarnings("java:S5993")
     public ImportForensicsSemanticsTask() {
         conventionIfMissing(getJoernEnabled(), false);
         if (!getJoernOutputDirectory().isPresent()) {

@@ -63,6 +63,7 @@ import java.util.Set;
 public abstract class AnalyzeForensicsSemanticsTask extends DefaultTask {
 
     @Inject
+    @SuppressWarnings("java:S5993")
     public AnalyzeForensicsSemanticsTask() {
         applyDefaultConventions();
     }
@@ -286,16 +287,13 @@ public abstract class AnalyzeForensicsSemanticsTask extends DefaultTask {
             if (escaped) {
                 builder.append(current);
                 escaped = false;
-                continue;
-            }
-            if (current == '\\') {
+            } else if (current == '\\') {
                 escaped = true;
-                continue;
-            }
-            if (current == '"') {
+            } else if (current == '"') {
                 return builder.toString();
+            } else {
+                builder.append(current);
             }
-            builder.append(current);
         }
         throw new GradleException("Analysis manifest has unterminated field: " + fieldName);
     }

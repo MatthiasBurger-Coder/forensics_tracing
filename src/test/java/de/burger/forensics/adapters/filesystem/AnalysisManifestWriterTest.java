@@ -64,10 +64,11 @@ class AnalysisManifestWriterTest {
                 semanticResult);
 
         String json = Files.readString(manifest);
-        assertThat(json).contains("\"joernEnabled\": true");
-        assertThat(json).contains("\"joernVersion\": \"joern 1.0\"");
-        assertThat(json).contains("\"joernFingerprint\": \"sha256:semantic\"");
-        assertThat(json).contains("\"joernArtifacts\": [");
+        assertThat(json).contains(
+                "\"joernEnabled\": true",
+                "\"joernVersion\": \"joern 1.0\"",
+                "\"joernFingerprint\": \"sha256:semantic\"",
+                "\"joernArtifacts\": [");
     }
 
     @Test
