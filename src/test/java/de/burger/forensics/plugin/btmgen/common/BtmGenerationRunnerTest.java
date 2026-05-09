@@ -97,19 +97,31 @@ class BtmGenerationRunnerTest {
     }
 
     @Test
-    void runnerRejectsDependencyAwareInvalidation(@TempDir Path tempDir) {
+    void runnerConservativelyRebuildsCacheWhenDependencyAwareInvalidationIsEnabled(@TempDir Path tempDir) throws IOException {
+        Files.createDirectories(tempDir.resolve("src/main/java/com/example"));
+        Files.writeString(tempDir.resolve("src/main/java/com/example/Sample.java"), """
+                package com.example;
+                public class Sample {
+                  public int run(int value) {
+                    if (value > 0) { }
+                    return value;
+                  }
+                }
+                """);
         BtmGenerationRequest request = BtmGenerationRequest.builder()
                 .sourceRoot(tempDir.resolve("src/main/java"))
                 .outputFile(tempDir.resolve("build/forensics/rules.btm"))
+                .cacheDatabaseFile(tempDir.resolve("build/forensics/cache/scan-cache"))
                 .cacheEnabled(true)
+                .profileReportFile(tempDir.resolve("build/forensics/profile.json"))
+                .profilingEnabled(true)
                 .dependencyAwareInvalidation(true)
                 .build();
 
-        BtmGenerationRunner runner = new BtmGenerationRunner();
+        BtmGenerationResult result = new BtmGenerationRunner().generate(request);
 
-        BtmGenerationException exception = assertThrows(BtmGenerationException.class, () -> runner.generate(request));
-
-        assertEquals("Dependency-aware cache invalidation is not implemented yet.", exception.getMessage());
+        assertEquals(1, result.parsedFileCount());
+        assertTrue(Files.exists(tempDir.resolve("build/forensics/cache/scan-cache.mv.db")));
     }
 
     @Test

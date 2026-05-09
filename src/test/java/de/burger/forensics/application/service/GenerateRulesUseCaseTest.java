@@ -99,6 +99,31 @@ class GenerateRulesUseCaseTest {
     }
 
     @Test
+    void generateAppliesExcludedPackagePrefixesAfterIncludedPrefixes() {
+        List<ScanEvent> events = List.of(
+            event("com.example.Foo", "kept", 10, "(String name)", RuleTemplate.IF_TRUE, "x > 1", "java", "boolean"),
+            event("com.example.generated.Bar", "skipped", 20, "(String name)", RuleTemplate.IF_TRUE, "x > 1", "java", "boolean")
+        );
+
+        GenerationRequest request = new GenerationRequest(
+            Path.of("/tmp/project"),
+            GenerationRequest.DEFAULT_HELPER_FQCN,
+            false,
+            false,
+            List.of("com.example"),
+            List.of("com.example.generated"),
+            0,
+            false,
+            List.of()
+        );
+
+        RuleGenerationResult result = useCase(events).generate(request);
+
+        assertThat(result.renderedRules())
+            .containsExactly("IF_TRUE|kept|x > 1");
+    }
+
+    @Test
     void methodWithReturnRuleDoesNotReceiveGenericExitRule() {
         List<ScanEvent> events = List.of(
             event("com.example.Foo", "map", 10, "(int value)", RuleTemplate.RETURN, "zero", "java", "String"),

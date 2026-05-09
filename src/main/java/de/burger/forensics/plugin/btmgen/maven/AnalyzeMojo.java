@@ -1,14 +1,11 @@
 package de.burger.forensics.plugin.btmgen.maven;
 
+import de.burger.forensics.plugin.btmgen.common.BtmGenerationDefaults;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationException;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationRequest;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationResult;
-import de.burger.forensics.plugin.btmgen.common.BtmGenerationRunner;
-import de.burger.forensics.plugin.btmgen.common.BtmGenerationDefaults;
-import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
@@ -18,16 +15,15 @@ import java.io.File;
 import java.util.List;
 
 /**
- * Maven goal that delegates BTM generation to the shared build-tool-neutral runner.
+ * Maven full analysis goal for BTM generation plus optional Joern enrichment.
  */
 @Mojo(
-        name = "btmgen",
-        defaultPhase = LifecyclePhase.GENERATE_RESOURCES,
+        name = "analyze",
         requiresProject = true,
         requiresDependencyResolution = ResolutionScope.NONE,
         threadSafe = true
 )
-public class BtmGenMojo extends AbstractMojo {
+public class AnalyzeMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
@@ -107,17 +103,56 @@ public class BtmGenMojo extends AbstractMojo {
     @Parameter(property = "forensics.includeTimestampHeader", defaultValue = "false")
     private boolean includeTimestampHeader;
 
+    @Parameter(property = "forensics.joernEnabled", defaultValue = "false")
+    private boolean joernEnabled;
+
+    @Parameter(property = "forensics.joernExecutable", defaultValue = "joern")
+    private File joernExecutable;
+
+    @Parameter(property = "forensics.joernParseExecutable", defaultValue = "joern-parse")
+    private File joernParseExecutable;
+
+    @Parameter(property = "forensics.joernSliceExecutable", defaultValue = "joern-slice")
+    private File joernSliceExecutable;
+
+    @Parameter(property = "forensics.joernWorkspaceDirectory", defaultValue = "${project.build.directory}/forensics/joern/workspace")
+    private File joernWorkspaceDirectory;
+
+    @Parameter(property = "forensics.joernOutputDirectory", defaultValue = "${project.build.directory}/forensics/joern")
+    private File joernOutputDirectory;
+
+    @Parameter(property = "forensics.joernTimeoutSeconds", defaultValue = "300")
+    private int joernTimeoutSeconds;
+
+    @Parameter(property = "forensics.joernFailOnError", defaultValue = "true")
+    private boolean joernFailOnError;
+
     @Override
     public void execute() throws MojoExecutionException {
         try {
+            MavenForensicsMojoSupport.requireJoernEnabled(joernEnabled, "forensics:analyze");
+            requireAnalysisStoreEnabled();
             BtmGenerationRequest request = parameters().toGenerationRequest();
-            BtmGenerationResult result = new BtmGenerationRunner(
-                    StrategyRegistries.defaultRegistry(),
-                    new MavenLogAdapter(getLog())
-            ).generate(request);
-            getLog().info("Generated " + result.generatedRuleCount() + " BTM rules.");
+            BtmGenerationResult result = MavenForensicsMojoSupport.generateBtm(parameters(), getLog());
+            MavenForensicsMojoSupport.analyzeSemantics(MavenForensicsMojoSupport.semanticRequest(
+                    request,
+                    joernExecutable,
+                    joernParseExecutable,
+                    joernSliceExecutable,
+                    joernWorkspaceDirectory,
+                    joernOutputDirectory,
+                    joernTimeoutSeconds,
+                    joernFailOnError));
+            getLog().info("Generated " + result.generatedRuleCount() + " BTM rules and imported Joern semantic artifacts.");
         } catch (IllegalArgumentException | BtmGenerationException exception) {
             throw new MojoExecutionException(exception.getMessage(), exception);
+        }
+    }
+
+    private void requireAnalysisStoreEnabled() throws MojoExecutionException {
+        if (!analysisStoreEnabled) {
+            throw new MojoExecutionException(
+                    "Analysis Store is required for forensics:analyze. Set -Dforensics.analysisStoreEnabled=true.");
         }
     }
 

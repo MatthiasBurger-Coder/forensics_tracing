@@ -18,12 +18,14 @@ class GenerationRequestTest {
             true,
             true,
             List.of("com.example"),
+            List.of("com.example.generated"),
             1,
             true,
             List.of("value")
         );
 
         assertThat(request.packagePrefixes()).containsExactly("com.example");
+        assertThat(request.excludedPackagePrefixes()).containsExactly("com.example.generated");
         assertThat(request.strictConditionValidation()).isTrue();
         assertThat(request.trackedVariables()).containsExactly("value");
     }
@@ -36,12 +38,14 @@ class GenerationRequestTest {
             true,
             true,
             null,
+            null,
             0,
             false,
             null
         );
 
         assertThat(request.packagePrefixes()).isEmpty();
+        assertThat(request.excludedPackagePrefixes()).isEmpty();
         assertThat(request.trackedVariables()).isEmpty();
     }
 

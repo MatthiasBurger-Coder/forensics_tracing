@@ -24,9 +24,11 @@ public class BtmGenExtension {
     private final ConfigurableFileCollection sourceRoots;
     private final Property<@NotNull File> outputFile;
     private final Property<@NotNull String> includes;
+    private final Property<@NotNull String> excludes;
     private final Property<@NotNull String> helperFqn;
     private final Property<@NotNull Integer> minBranchesPerMethod;
     private final Property<@NotNull Boolean> scanSubprojects;
+    private final Property<@NotNull Boolean> includeTests;
     private final Property<@NotNull Boolean> includeTimestampHeader;
     private final Property<@NotNull Boolean> cacheEnabled;
     private final Property<@NotNull File> cacheDatabaseFile;
@@ -58,9 +60,11 @@ public class BtmGenExtension {
         this.sourceRoots = objects.fileCollection();
         this.outputFile = objects.property(File.class);
         this.includes = objects.property(String.class);
+        this.excludes = objects.property(String.class);
         this.helperFqn = objects.property(String.class);
         this.minBranchesPerMethod = objects.property(Integer.class);
         this.scanSubprojects = objects.property(Boolean.class);
+        this.includeTests = objects.property(Boolean.class);
         this.includeTimestampHeader = objects.property(Boolean.class);
         this.cacheEnabled = objects.property(Boolean.class);
         this.cacheDatabaseFile = objects.property(File.class);
@@ -88,8 +92,11 @@ public class BtmGenExtension {
         this.sourceRoot.convention(new File("src/main/java"));
         this.outputFile.convention(new File("build/forensics/forensics.btm"));
         this.helperFqn.convention(RuleParams.DEFAULT_HELPER_FQN);
+        this.includes.convention("");
+        this.excludes.convention("");
         this.minBranchesPerMethod.convention(2);
         this.scanSubprojects.convention(false);
+        this.includeTests.convention(false);
         this.includeTimestampHeader.convention(false);
         this.cacheEnabled.convention(false);
         this.cacheDatabaseFile.convention(new File("build/forensics/cache/scan-cache"));
@@ -145,6 +152,10 @@ public class BtmGenExtension {
         return includes;
     }
 
+    public Property<@NotNull String> getExcludes() {
+        return excludes;
+    }
+
     public Property<@NotNull String> getHelperFqn() {
         return helperFqn;
     }
@@ -155,6 +166,10 @@ public class BtmGenExtension {
 
     public Property<@NotNull Boolean> getScanSubprojects() {
         return scanSubprojects;
+    }
+
+    public Property<@NotNull Boolean> getIncludeTests() {
+        return includeTests;
     }
 
     public Property<@NotNull Boolean> getIncludeTimestampHeader() {

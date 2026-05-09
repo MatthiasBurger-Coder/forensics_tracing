@@ -1,5 +1,6 @@
 package de.burger.forensics.plugin.btmgen.maven;
 
+import de.burger.forensics.domain.model.analysis.BuildIdentity;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationDefaults;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationRequest;
 import org.apache.maven.project.MavenProject;
@@ -17,11 +18,20 @@ import java.util.Objects;
  */
 record MavenBtmGenParameters(
         MavenProject project,
+        List<Path> selectedSourceRoots,
         File sourceRoot,
+        List<File> sourceRoots,
         File outputFile,
         boolean cacheEnabled,
         String cacheBackend,
         File cacheDatabaseFile,
+        boolean analysisStoreEnabled,
+        File analysisStoreDirectory,
+        String cleanupPolicy,
+        String projectKey,
+        String pluginVersion,
+        File manifestFile,
+        File checksumsFile,
         boolean profilingEnabled,
         File profileReportFile,
         boolean strictParsing,
@@ -37,15 +47,18 @@ record MavenBtmGenParameters(
 ) {
 
     private static final String NO_SOURCE_ROOTS_MESSAGE =
-            "No existing Maven source roots were found. Configure forensics.sourceRoot or add compile source roots.";
+            "No existing Maven source roots were found. Configure forensics.sourceRoot, "
+                    + "forensics.sourceRoots, or add compile source roots.";
 
     MavenBtmGenParameters {
         Objects.requireNonNull(project, "project");
+        selectedSourceRoots = List.copyOf(Objects.requireNonNull(selectedSourceRoots, "selectedSourceRoots"));
+        sourceRoots = sourceRoots == null ? List.of() : List.copyOf(sourceRoots);
     }
 
     BtmGenerationRequest toGenerationRequest() {
         Path buildDirectory = buildDirectory(project);
-        List<Path> roots = sourceRoots();
+        List<Path> roots = resolvedSourceRoots();
         if (roots.isEmpty()) {
             throw new IllegalArgumentException(NO_SOURCE_ROOTS_MESSAGE);
         }
@@ -53,6 +66,13 @@ record MavenBtmGenParameters(
                 .sourceRoots(roots)
                 .outputFile(resolveFile(outputFile, buildDirectory.resolve("forensics/generated.btm")))
                 .cacheDatabaseFile(resolveFile(cacheDatabaseFile, buildDirectory.resolve("forensics/cache/scan-cache")))
+                .analysisStoreEnabled(analysisStoreEnabled)
+                .analysisStoreDirectory(resolveFile(analysisStoreDirectory, buildDirectory.resolve("forensics/analysis-store")))
+                .cleanupPolicy(blankToDefault(cleanupPolicy, BtmGenerationDefaults.defaultCleanupPolicy()))
+                .projectKey(blankToDefault(projectKey, projectKey(project)))
+                .pluginVersion(blankToDefault(pluginVersion, pluginVersion(project)))
+                .manifestFile(resolveFile(manifestFile, buildDirectory.resolve("forensics/manifest.json")))
+                .checksumsFile(resolveFile(checksumsFile, buildDirectory.resolve("forensics/checksums.sha256")))
                 .profileReportFile(resolveFile(profileReportFile, buildDirectory.resolve("forensics/scan-profile.json")))
                 .cacheEnabled(cacheEnabled)
                 .cacheBackend(blankToDefault(cacheBackend, BtmGenerationDefaults.DEFAULT_CACHE_BACKEND))
@@ -69,10 +89,17 @@ record MavenBtmGenParameters(
                 .build();
     }
 
-    private List<Path> sourceRoots() {
+    private List<Path> resolvedSourceRoots() {
         LinkedHashSet<Path> roots = new LinkedHashSet<>();
-        if (sourceRoot != null) {
-            addExistingRoot(roots, sourceRoot.toPath());
+        if (hasExplicitSourceRoots()) {
+            if (sourceRoot != null) {
+                addExistingRoot(roots, sourceRoot.toPath());
+            }
+            sourceRoots.forEach(root -> addExistingRoot(roots, root.toPath()));
+            return List.copyOf(roots);
+        }
+        if (!selectedSourceRoots.isEmpty()) {
+            selectedSourceRoots.forEach(root -> addExistingRoot(roots, root));
             return List.copyOf(roots);
         }
         project.getCompileSourceRoots().forEach(root -> addExistingRoot(roots, Path.of(root)));
@@ -80,6 +107,10 @@ record MavenBtmGenParameters(
             project.getTestCompileSourceRoots().forEach(root -> addExistingRoot(roots, Path.of(root)));
         }
         return List.copyOf(roots);
+    }
+
+    private boolean hasExplicitSourceRoots() {
+        return sourceRoot != null || !sourceRoots.isEmpty();
     }
 
     private static void addExistingRoot(LinkedHashSet<Path> roots, Path root) {
@@ -123,5 +154,28 @@ record MavenBtmGenParameters(
 
     private static String blankToDefault(String value, String defaultValue) {
         return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    private static String projectKey(MavenProject project) {
+        String groupId = project.getGroupId();
+        String artifactId = project.getArtifactId();
+        if (isBlank(groupId) && isBlank(artifactId)) {
+            return BuildIdentity.UNKNOWN;
+        }
+        if (isBlank(groupId)) {
+            return artifactId;
+        }
+        if (isBlank(artifactId)) {
+            return groupId;
+        }
+        return groupId + ":" + artifactId;
+    }
+
+    private static String pluginVersion(MavenProject project) {
+        return blankToDefault(project.getVersion(), BuildIdentity.UNKNOWN);
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

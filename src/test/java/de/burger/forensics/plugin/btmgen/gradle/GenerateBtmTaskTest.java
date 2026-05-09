@@ -308,6 +308,71 @@ class GenerateBtmTaskTest {
     }
 
     @Test
+    void resolveSourceRootsIncludesTestSourceSetsWhenEnabled(@TempDir Path tempDir) throws Exception {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        project.getPlugins().apply("java-library");
+        Path mainRoot = tempDir.resolve("src/main/java");
+        Path testRoot = tempDir.resolve("src/test/java");
+        Files.createDirectories(mainRoot);
+        Files.createDirectories(testRoot);
+
+        var task = project.getTasks().register("generateBtmWithTests", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        extension.getIncludeTests().set(true);
+        task.setExtension(extension);
+
+        Method resolveSourceRoots = GenerateBtmTask.class.getDeclaredMethod("resolveSourceRoots");
+        resolveSourceRoots.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        List<Path> roots = (List<Path>) resolveSourceRoots.invoke(task);
+
+        assertTrue(roots.contains(mainRoot.toAbsolutePath().normalize()));
+        assertTrue(roots.contains(testRoot.toAbsolutePath().normalize()));
+    }
+
+    @Test
+    void generateAppliesExcludePackagePrefixes(@TempDir Path tempDir) throws Exception {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).build();
+        Path included = tempDir.resolve("src/main/java/com/acme");
+        Path excluded = tempDir.resolve("src/main/java/com/acme/internal");
+        Files.createDirectories(included);
+        Files.createDirectories(excluded);
+        Files.writeString(included.resolve("PublicSample.java"), """
+                package com.acme;
+                public class PublicSample {
+                  public int run(int value) {
+                    if (value > 0) { }
+                    return value;
+                  }
+                }
+                """);
+        Files.writeString(excluded.resolve("InternalSample.java"), """
+                package com.acme.internal;
+                public class InternalSample {
+                  public int run(int value) {
+                    if (value > 0) { }
+                    return value;
+                  }
+                }
+                """);
+
+        var task = project.getTasks().register("generateBtmExcluded", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        Path outputFile = tempDir.resolve("build/forensics/excluded.btm");
+        extension.getSourceRoot().set(tempDir.resolve("src/main/java").toFile());
+        extension.getOutputFile().set(outputFile.toFile());
+        extension.getExcludes().set("com.acme.internal");
+        task.setExtension(extension);
+
+        task.generate();
+
+        String content = Files.readString(outputFile);
+        assertTrue(content.contains("com.acme.PublicSample#run"));
+        assertFalse(content.contains("com.acme.internal.InternalSample#run"));
+    }
+
+    @Test
     void resolveSourceRootsDeduplicatesDuplicateRootsAcrossInputs(@TempDir Path tempDir) throws Exception {
         Path sourceRoot = tempDir.resolve("src/main/java");
         Files.createDirectories(sourceRoot);

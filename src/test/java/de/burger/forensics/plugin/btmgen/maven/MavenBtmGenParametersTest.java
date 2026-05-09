@@ -10,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,10 +26,19 @@ class MavenBtmGenParametersTest {
         project.addTestCompileSourceRoot(testRoot.toString());
         MavenBtmGenParameters parameters = new MavenBtmGenParameters(
                 project,
+                List.of(),
                 null,
+                List.of(),
                 null,
                 true,
                 " ",
+                null,
+                true,
+                null,
+                " ",
+                " ",
+                " ",
+                null,
                 null,
                 true,
                 null,
@@ -49,6 +59,13 @@ class MavenBtmGenParametersTest {
         assertThat(request.sourceRoots()).containsExactly(mainRoot.toAbsolutePath(), testRoot.toAbsolutePath());
         assertThat(request.outputFile()).isEqualTo(tempDir.resolve("target/forensics/generated.btm").toAbsolutePath());
         assertThat(request.cacheDatabaseFile()).isEqualTo(tempDir.resolve("target/forensics/cache/scan-cache").toAbsolutePath());
+        assertThat(request.analysisStoreEnabled()).isTrue();
+        assertThat(request.analysisStoreDirectory()).isEqualTo(tempDir.resolve("target/forensics/analysis-store").toAbsolutePath());
+        assertThat(request.cleanupPolicy()).isEqualTo(BtmGenerationDefaults.defaultCleanupPolicy());
+        assertThat(request.projectKey()).isEqualTo("de.burger.forensics:sample");
+        assertThat(request.pluginVersion()).isEqualTo("1.0.0");
+        assertThat(request.manifestFile()).isEqualTo(tempDir.resolve("target/forensics/manifest.json").toAbsolutePath());
+        assertThat(request.checksumsFile()).isEqualTo(tempDir.resolve("target/forensics/checksums.sha256").toAbsolutePath());
         assertThat(request.profileReportFile()).isEqualTo(tempDir.resolve("target/forensics/scan-profile.json").toAbsolutePath());
         assertThat(request.cacheEnabled()).isTrue();
         assertThat(request.cacheBackend()).isEqualTo(BtmGenerationDefaults.DEFAULT_CACHE_BACKEND);
@@ -64,18 +81,28 @@ class MavenBtmGenParametersTest {
     }
 
     @Test
-    void explicitSourceRootOverridesProjectRoots(@TempDir Path tempDir) throws Exception {
+    void explicitSourceRootsCombineAndOverrideProjectRoots(@TempDir Path tempDir) throws Exception {
         Path mainRoot = createDirectory(tempDir.resolve("src/main/java"));
         Path explicitRoot = createDirectory(tempDir.resolve("external/java"));
+        Path additionalExplicitRoot = createDirectory(tempDir.resolve("generated/java"));
         MavenProject project = projectWithBuildDirectory(tempDir);
         project.addCompileSourceRoot(mainRoot.toString());
         MavenBtmGenParameters parameters = new MavenBtmGenParameters(
                 project,
+                List.of(),
                 explicitRoot.toFile(),
+                List.of(additionalExplicitRoot.toFile(), explicitRoot.toFile()),
                 tempDir.resolve("custom/rules.btm").toFile(),
                 false,
                 "h2",
                 tempDir.resolve("custom/cache/scan-cache").toFile(),
+                true,
+                tempDir.resolve("custom/store").toFile(),
+                "DELETE_ON_FAILURE",
+                "custom-key",
+                "custom-version",
+                tempDir.resolve("custom/manifest.json").toFile(),
+                tempDir.resolve("custom/checksums.sha256").toFile(),
                 false,
                 tempDir.resolve("custom/profile.json").toFile(),
                 false,
@@ -92,9 +119,17 @@ class MavenBtmGenParametersTest {
 
         BtmGenerationRequest request = parameters.toGenerationRequest();
 
-        assertThat(request.sourceRoots()).containsExactly(explicitRoot.toAbsolutePath());
+        assertThat(request.sourceRoots()).containsExactly(
+                explicitRoot.toAbsolutePath(),
+                additionalExplicitRoot.toAbsolutePath());
         assertThat(request.outputFile()).isEqualTo(tempDir.resolve("custom/rules.btm").toAbsolutePath());
         assertThat(request.cacheDatabaseFile()).isEqualTo(tempDir.resolve("custom/cache/scan-cache").toAbsolutePath());
+        assertThat(request.analysisStoreDirectory()).isEqualTo(tempDir.resolve("custom/store").toAbsolutePath());
+        assertThat(request.cleanupPolicy()).isEqualTo("DELETE_ON_FAILURE");
+        assertThat(request.projectKey()).isEqualTo("custom-key");
+        assertThat(request.pluginVersion()).isEqualTo("custom-version");
+        assertThat(request.manifestFile()).isEqualTo(tempDir.resolve("custom/manifest.json").toAbsolutePath());
+        assertThat(request.checksumsFile()).isEqualTo(tempDir.resolve("custom/checksums.sha256").toAbsolutePath());
         assertThat(request.profileReportFile()).isEqualTo(tempDir.resolve("custom/profile.json").toAbsolutePath());
     }
 
@@ -103,10 +138,19 @@ class MavenBtmGenParametersTest {
         MavenProject project = projectWithBuildDirectory(tempDir);
         MavenBtmGenParameters parameters = new MavenBtmGenParameters(
                 project,
+                List.of(),
                 null,
+                List.of(),
                 null,
                 false,
                 "h2",
+                null,
+                false,
+                null,
+                "KEEP_ON_SUCCESS",
+                "",
+                "",
+                null,
                 null,
                 false,
                 null,
@@ -167,6 +211,21 @@ class MavenBtmGenParametersTest {
         assertThat(request.outputFile()).isEqualTo(tempDir.resolve("target/custom/forensics/generated.btm").toAbsolutePath());
     }
 
+    @Test
+    void mapsPartialProjectIdentityToStableProjectKeys(@TempDir Path tempDir) throws Exception {
+        Path sourceRoot = createDirectory(tempDir.resolve("src/main/java"));
+        MavenProject unknownProject = projectWithIdentity(tempDir.resolve("unknown"), null, null);
+        unknownProject.addCompileSourceRoot(sourceRoot.toString());
+        MavenProject artifactOnlyProject = projectWithIdentity(tempDir.resolve("artifact-only"), null, "sample");
+        artifactOnlyProject.addCompileSourceRoot(sourceRoot.toString());
+        MavenProject groupOnlyProject = projectWithIdentity(tempDir.resolve("group-only"), "de.burger.forensics", null);
+        groupOnlyProject.addCompileSourceRoot(sourceRoot.toString());
+
+        assertThat(defaultParameters(unknownProject).toGenerationRequest().projectKey()).isEqualTo("UNKNOWN");
+        assertThat(defaultParameters(artifactOnlyProject).toGenerationRequest().projectKey()).isEqualTo("sample");
+        assertThat(defaultParameters(groupOnlyProject).toGenerationRequest().projectKey()).isEqualTo("de.burger.forensics");
+    }
+
     private static Path createDirectory(Path path) throws Exception {
         Files.createDirectories(path);
         return path;
@@ -176,6 +235,20 @@ class MavenBtmGenParametersTest {
         Model model = new Model();
         model.setGroupId("de.burger.forensics");
         model.setArtifactId("sample");
+        model.setVersion("1.0.0");
+        MavenProject project = new MavenProject(model);
+        project.setFile(projectDirectory.resolve("pom.xml").toFile());
+        Build build = new Build();
+        build.setDirectory(projectDirectory.resolve("target").toString());
+        project.setBuild(build);
+        return project;
+    }
+
+    private static MavenProject projectWithIdentity(Path projectDirectory, String groupId, String artifactId) throws Exception {
+        Files.createDirectories(projectDirectory);
+        Model model = new Model();
+        model.setGroupId(groupId);
+        model.setArtifactId(artifactId);
         model.setVersion("1.0.0");
         MavenProject project = new MavenProject(model);
         project.setFile(projectDirectory.resolve("pom.xml").toFile());
@@ -204,10 +277,19 @@ class MavenBtmGenParametersTest {
     private static MavenBtmGenParameters defaultParameters(MavenProject project) {
         return new MavenBtmGenParameters(
                 project,
+                List.of(),
                 null,
+                List.of(),
                 null,
                 false,
                 "h2",
+                null,
+                false,
+                null,
+                "KEEP_ON_SUCCESS",
+                "",
+                "",
+                null,
                 null,
                 false,
                 null,

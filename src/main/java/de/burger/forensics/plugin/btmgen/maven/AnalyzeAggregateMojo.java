@@ -1,36 +1,38 @@
 package de.burger.forensics.plugin.btmgen.maven;
 
+import de.burger.forensics.plugin.btmgen.common.BtmGenerationDefaults;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationException;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationRequest;
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationResult;
-import de.burger.forensics.plugin.btmgen.common.BtmGenerationRunner;
-import de.burger.forensics.plugin.btmgen.common.BtmGenerationDefaults;
-import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Maven goal that delegates BTM generation to the shared build-tool-neutral runner.
+ * Maven reactor full analysis goal for BTM generation plus optional Joern enrichment.
  */
 @Mojo(
-        name = "btmgen",
-        defaultPhase = LifecyclePhase.GENERATE_RESOURCES,
+        name = "analyze-aggregate",
         requiresProject = true,
         requiresDependencyResolution = ResolutionScope.NONE,
-        threadSafe = true
+        threadSafe = true,
+        aggregator = true
 )
-public class BtmGenMojo extends AbstractMojo {
+public class AnalyzeAggregateMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
+
+    @Parameter(defaultValue = "${session}", readonly = true, required = true)
+    private MavenSession session;
 
     @Parameter(property = "forensics.sourceRoot")
     private File sourceRoot;
@@ -107,24 +109,67 @@ public class BtmGenMojo extends AbstractMojo {
     @Parameter(property = "forensics.includeTimestampHeader", defaultValue = "false")
     private boolean includeTimestampHeader;
 
+    @Parameter(property = "forensics.joernEnabled", defaultValue = "false")
+    private boolean joernEnabled;
+
+    @Parameter(property = "forensics.joernExecutable", defaultValue = "joern")
+    private File joernExecutable;
+
+    @Parameter(property = "forensics.joernParseExecutable", defaultValue = "joern-parse")
+    private File joernParseExecutable;
+
+    @Parameter(property = "forensics.joernSliceExecutable", defaultValue = "joern-slice")
+    private File joernSliceExecutable;
+
+    @Parameter(property = "forensics.joernWorkspaceDirectory", defaultValue = "${project.build.directory}/forensics/joern/workspace")
+    private File joernWorkspaceDirectory;
+
+    @Parameter(property = "forensics.joernOutputDirectory", defaultValue = "${project.build.directory}/forensics/joern")
+    private File joernOutputDirectory;
+
+    @Parameter(property = "forensics.joernTimeoutSeconds", defaultValue = "300")
+    private int joernTimeoutSeconds;
+
+    @Parameter(property = "forensics.joernFailOnError", defaultValue = "true")
+    private boolean joernFailOnError;
+
     @Override
     public void execute() throws MojoExecutionException {
         try {
-            BtmGenerationRequest request = parameters().toGenerationRequest();
-            BtmGenerationResult result = new BtmGenerationRunner(
-                    StrategyRegistries.defaultRegistry(),
-                    new MavenLogAdapter(getLog())
-            ).generate(request);
-            getLog().info("Generated " + result.generatedRuleCount() + " BTM rules.");
+            MavenForensicsMojoSupport.requireJoernEnabled(joernEnabled, "forensics:analyze-aggregate");
+            requireAnalysisStoreEnabled();
+            MavenBtmGenParameters parameters = parameters();
+            BtmGenerationRequest request = parameters.toGenerationRequest();
+            BtmGenerationResult result = MavenForensicsMojoSupport.generateBtm(parameters, getLog());
+            MavenForensicsMojoSupport.analyzeSemantics(MavenForensicsMojoSupport.semanticRequest(
+                    request,
+                    joernExecutable,
+                    joernParseExecutable,
+                    joernSliceExecutable,
+                    joernWorkspaceDirectory,
+                    joernOutputDirectory,
+                    joernTimeoutSeconds,
+                    joernFailOnError));
+            getLog().info("Generated " + result.generatedRuleCount() + " reactor BTM rules and imported Joern semantic artifacts.");
         } catch (IllegalArgumentException | BtmGenerationException exception) {
             throw new MojoExecutionException(exception.getMessage(), exception);
         }
     }
 
+    private void requireAnalysisStoreEnabled() throws MojoExecutionException {
+        if (!analysisStoreEnabled) {
+            throw new MojoExecutionException(
+                    "Analysis Store is required for forensics:analyze-aggregate. Set -Dforensics.analysisStoreEnabled=true.");
+        }
+    }
+
     MavenBtmGenParameters parameters() {
+        List<Path> reactorRoots = sourceRoot == null && (sourceRoots == null || sourceRoots.isEmpty())
+                ? new MavenReactorSourceRootCollector().collect(session, project, includeTests)
+                : List.of();
         return new MavenBtmGenParameters(
                 project,
-                List.of(),
+                reactorRoots,
                 sourceRoot,
                 sourceRoots,
                 outputFile,

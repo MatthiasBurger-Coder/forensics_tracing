@@ -74,7 +74,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
     public abstract ConfigurableFileCollection getCurrentProjectSourceSetRoots();
 
     @Internal
+    public abstract ConfigurableFileCollection getCurrentProjectTestSourceSetRoots();
+
+    @Internal
     public abstract ConfigurableFileCollection getSubprojectSourceSetRoots();
+
+    @Internal
+    public abstract ConfigurableFileCollection getSubprojectTestSourceSetRoots();
 
     @InputFiles
     @Optional
@@ -102,7 +108,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Input @Optional public abstract Property<@NotNull Integer>  getMinBranchesPerMethod();
     @Input @Optional public abstract Property<@NotNull String>  getHelperFqn();
     @Input @Optional public abstract Property<@NotNull String>  getIncludes();
+    @Input @Optional public abstract Property<@NotNull String>  getExcludes();
     @Input @Optional public abstract Property<@NotNull Boolean> getScanSubprojects();
+    @Input @Optional public abstract Property<@NotNull Boolean> getIncludeTests();
     @Input @Optional public abstract Property<@NotNull Boolean> getIncludeTimestampHeader();
     @Input @Optional public abstract Property<@NotNull String> getRegistryFingerprint();
     @Input @Optional public abstract Property<@NotNull Boolean> getCacheEnabled();
@@ -135,8 +143,10 @@ public abstract class GenerateBtmTask extends DefaultTask {
         }
         getHelperFqn().convention(ext.getHelperFqn());
         getIncludes().convention(ext.getIncludes());
+        getExcludes().convention(ext.getExcludes());
         getMinBranchesPerMethod().convention(ext.getMinBranchesPerMethod());
         getScanSubprojects().convention(ext.getScanSubprojects());
+        getIncludeTests().convention(ext.getIncludeTests());
         getIncludeTimestampHeader().convention(ext.getIncludeTimestampHeader());
         getCacheEnabled().convention(ext.getCacheEnabled());
         getCacheBackend().convention(ext.getCacheBackend());
@@ -184,7 +194,8 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .strictParsing(getStrictParsing().getOrElse(false))
                 .strictConditionValidation(getStrictConditionValidation().getOrElse(false))
                 .dependencyAwareInvalidation(getDependencyAwareInvalidation().getOrElse(false))
-                .includePackages(packagePrefixes())
+                .includePackages(includePackagePrefixes())
+                .excludePackages(excludePackagePrefixes())
                 .helperFqn(resolveHelperFqn())
                 .includeEntryExit(includeEntryExit())
                 .minBranchesPerMethod(minBranches())
@@ -221,7 +232,9 @@ public abstract class GenerateBtmTask extends DefaultTask {
         conventionIfMissing(getMinBranchesPerMethod(), 2);
         conventionIfMissing(getHelperFqn(), RuleParams.DEFAULT_HELPER_FQN);
         conventionIfMissing(getIncludes(), "");
+        conventionIfMissing(getExcludes(), "");
         conventionIfMissing(getScanSubprojects(), false);
+        conventionIfMissing(getIncludeTests(), false);
         conventionIfMissing(getIncludeTimestampHeader(), false);
         conventionIfMissing(getRegistryFingerprint(), registryFingerprint(registry));
         conventionIfMissing(getCacheEnabled(), false);
@@ -268,11 +281,17 @@ public abstract class GenerateBtmTask extends DefaultTask {
 
     private void configureSourceSetRoots() {
         getCurrentProjectSourceSetRoots().setFrom(mainSourceSetRoots(getProject()));
+        getCurrentProjectTestSourceSetRoots().setFrom(testSourceSetRoots(getProject()));
         List<File> subprojectRoots = getProject().getSubprojects().stream()
                 .sorted(Comparator.comparing(Project::getPath))
                 .flatMap(subproject -> mainSourceSetRoots(subproject).stream())
                 .toList();
         getSubprojectSourceSetRoots().setFrom(subprojectRoots);
+        List<File> subprojectTestRoots = getProject().getSubprojects().stream()
+                .sorted(Comparator.comparing(Project::getPath))
+                .flatMap(subproject -> testSourceSetRoots(subproject).stream())
+                .toList();
+        getSubprojectTestSourceSetRoots().setFrom(subprojectTestRoots);
     }
 
     private boolean hasMinimalInputs() {
@@ -303,20 +322,37 @@ public abstract class GenerateBtmTask extends DefaultTask {
         addSourceRoot(roots, getSourceRoot().getOrNull() == null ? null : getSourceRoot().get().getAsFile());
         sortedFiles(getSourceRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
         sortedFiles(getCurrentProjectSourceSetRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
+        if (getIncludeTests().getOrElse(false)) {
+            sortedFiles(getCurrentProjectTestSourceSetRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
+        }
         if (getScanSubprojects().getOrElse(false)) {
             sortedFiles(getSubprojectSourceSetRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
+            if (getIncludeTests().getOrElse(false)) {
+                sortedFiles(getSubprojectTestSourceSetRoots().getFiles()).forEach(file -> addSourceRoot(roots, file));
+            }
         }
         return roots.stream()
                 .filter(GenerateBtmTask::isExistingSourceLocation)
                 .toList();
     }
 
+    private List<String> includePackagePrefixes() {
+        return packagePrefixes(getIncludes().getOrElse(""));
+    }
+
     private List<String> packagePrefixes() {
-        String includes = getIncludes().getOrElse("");
-        if (includes.isBlank()) {
+        return includePackagePrefixes();
+    }
+
+    private List<String> excludePackagePrefixes() {
+        return packagePrefixes(getExcludes().getOrElse(""));
+    }
+
+    private static List<String> packagePrefixes(String csv) {
+        if (csv.isBlank()) {
             return Collections.emptyList();
         }
-        return Arrays.stream(includes.split(","))
+        return Arrays.stream(csv.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
@@ -334,6 +370,20 @@ public abstract class GenerateBtmTask extends DefaultTask {
         }
 
         return mainSourceSet.getAllJava().getSrcDirs();
+    }
+
+    private static Set<File> testSourceSetRoots(Project candidate) {
+        SourceSetContainer sourceSets = candidate.getExtensions().findByType(SourceSetContainer.class);
+        if (sourceSets == null) {
+            return Set.of();
+        }
+
+        SourceSet testSourceSet = sourceSets.findByName(SourceSet.TEST_SOURCE_SET_NAME);
+        if (testSourceSet == null) {
+            return Set.of();
+        }
+
+        return testSourceSet.getAllJava().getSrcDirs();
     }
 
     private static List<File> sortedFiles(Set<File> files) {

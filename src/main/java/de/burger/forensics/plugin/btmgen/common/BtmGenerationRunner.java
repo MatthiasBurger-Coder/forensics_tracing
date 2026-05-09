@@ -188,6 +188,7 @@ public final class BtmGenerationRunner {
                     false,
                     request.includeEntryExit(),
                     request.includePackages(),
+                    request.excludePackages(),
                     request.minBranchesPerMethod(),
                     request.strictConditionValidation(),
                     List.of()
@@ -381,11 +382,12 @@ public final class BtmGenerationRunner {
         if (!BtmGenerationDefaults.DEFAULT_CACHE_BACKEND.equalsIgnoreCase(request.cacheBackend())) {
             throw new BtmGenerationException("Unsupported parser scan cache backend: " + request.cacheBackend());
         }
+        H2ScanCacheAdapter scanCache = new H2ScanCacheAdapter(request.cacheDatabaseFile());
         if (request.dependencyAwareInvalidation()) {
-            throw new BtmGenerationException("Dependency-aware cache invalidation is not implemented yet.");
+            scanCache.rebuild();
         }
         return new CachedJavaParserScanner(
-                new H2ScanCacheAdapter(request.cacheDatabaseFile()),
+                scanCache,
                 new DefaultSourceFingerprintPort(),
                 request.profilingEnabled() ? profileCollector : null,
                 request.strictParsing()

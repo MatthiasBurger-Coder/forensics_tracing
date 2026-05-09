@@ -11,6 +11,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -42,6 +43,27 @@ class BtmGenMojoTest {
         mojo.execute();
 
         assertThat(Files.readString(outputFile)).contains("com.example.Sample");
+    }
+
+    @Test
+    void executeUsesExplicitSourceRoots(@TempDir Path tempDir) throws Exception {
+        Path firstSourceRoot = createSource(tempDir.resolve("external/first"), "com.example", "Sample");
+        Path secondSourceRoot = createSource(tempDir.resolve("external/second"), "org.demo", "OtherSample");
+        Path outputFile = tempDir.resolve("target/forensics/generated.btm");
+        BtmGenMojo mojo = mojo(projectWithBuildDirectory(tempDir));
+        setField(mojo, "sourceRoots", List.of(firstSourceRoot.toFile(), secondSourceRoot.toFile()));
+        setField(mojo, "outputFile", outputFile.toFile());
+        setField(mojo, "cacheDatabaseFile", tempDir.resolve("target/forensics/cache/scan-cache").toFile());
+        setField(mojo, "profileReportFile", tempDir.resolve("target/forensics/scan-profile.json").toFile());
+        setField(mojo, "includePackages", "com.example,org.demo");
+        setField(mojo, "includeEntryExit", true);
+        setField(mojo, "minBranchesPerMethod", 2);
+
+        mojo.execute();
+
+        assertThat(Files.readString(outputFile))
+                .contains("com.example.Sample")
+                .contains("org.demo.OtherSample");
     }
 
     @Test
@@ -83,17 +105,21 @@ class BtmGenMojoTest {
     }
 
     private static Path createSampleSource(Path sourceRoot) throws Exception {
-        Path packageDirectory = sourceRoot.resolve("com/example");
+        return createSource(sourceRoot, "com.example", "Sample");
+    }
+
+    private static Path createSource(Path sourceRoot, String packageName, String className) throws Exception {
+        Path packageDirectory = sourceRoot.resolve(packageName.replace('.', '/'));
         Files.createDirectories(packageDirectory);
-        Files.writeString(packageDirectory.resolve("Sample.java"), """
-                package com.example;
-                public class Sample {
+        Files.writeString(packageDirectory.resolve(className + ".java"), """
+                package %s;
+                public class %s {
                   public int run(int value) {
                     if (value > 0) { }
                     return value;
                   }
                 }
-                """);
+                """.formatted(packageName, className));
         return sourceRoot;
     }
 

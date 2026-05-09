@@ -77,7 +77,8 @@ public final class GenerateRulesUseCase {
         try (Stream<ScanEvent> stream = scanner.scan(request.root())) {
             return stream
                 .filter(event -> event.language() == null || "java".equalsIgnoreCase(event.language()))
-                .filter(event -> matchesPrefixes(event.location(), request.packagePrefixes()))
+                .filter(event -> matchesIncludedPrefixes(event.location(), request.packagePrefixes()))
+                .filter(event -> doesNotMatchExcludedPrefixes(event.location(), request.excludedPackagePrefixes()))
                 .sorted(Comparator
                     .comparing((ScanEvent e) -> e.location().fqcn())
                     .thenComparing(e -> e.location().method())
@@ -294,12 +295,20 @@ public final class GenerateRulesUseCase {
         return new Rule(ruleId, location, "true", true, helperFqcn, RuleTemplate.METHOD_EXIT, methodSignature, null);
     }
 
-    private boolean matchesPrefixes(SourceLocation location, List<String> prefixes) {
+    private boolean matchesIncludedPrefixes(SourceLocation location, List<String> prefixes) {
         if (prefixes == null || prefixes.isEmpty()) {
             return true;
         }
         String fqcn = location.fqcn();
         return prefixes.stream().anyMatch(fqcn::startsWith);
+    }
+
+    private boolean doesNotMatchExcludedPrefixes(SourceLocation location, List<String> prefixes) {
+        if (prefixes == null || prefixes.isEmpty()) {
+            return true;
+        }
+        String fqcn = location.fqcn();
+        return prefixes.stream().noneMatch(fqcn::startsWith);
     }
 
     private String methodKey(ScanEvent event) {

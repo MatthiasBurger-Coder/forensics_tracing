@@ -12,10 +12,30 @@ public record GenerationRequest(Path root,
                                 boolean safeMode,
                                 boolean includeEntryExit,
                                 List<String> packagePrefixes,
+                                List<String> excludedPackagePrefixes,
                                 int minBranches,
                                 boolean strictConditionValidation,
                                 List<String> trackedVariables) {
     public static final String DEFAULT_HELPER_FQCN = "de.burger.forensics.infrastructure.rt.RtTraceHelper";
+
+    public GenerationRequest(Path root,
+                             String helperFqcn,
+                             boolean safeMode,
+                             boolean includeEntryExit,
+                             List<String> packagePrefixes,
+                             int minBranches,
+                             boolean strictConditionValidation,
+                             List<String> trackedVariables) {
+        this(root,
+                helperFqcn,
+                safeMode,
+                includeEntryExit,
+                packagePrefixes,
+                List.of(),
+                minBranches,
+                strictConditionValidation,
+                trackedVariables);
+    }
 
     public GenerationRequest {
         Objects.requireNonNull(root, "root");
@@ -24,6 +44,7 @@ public record GenerationRequest(Path root,
             helperFqcn = DEFAULT_HELPER_FQCN;
         }
         packagePrefixes = packagePrefixes == null ? List.of() : List.copyOf(packagePrefixes);
+        excludedPackagePrefixes = excludedPackagePrefixes == null ? List.of() : List.copyOf(excludedPackagePrefixes);
         trackedVariables = trackedVariables == null ? List.of() : List.copyOf(trackedVariables);
     }
 }

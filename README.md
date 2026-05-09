@@ -8,13 +8,13 @@
 This repository provides:
 
 - a Gradle plugin, `de.burger.forensics.btmgen`, that scans Java source code
-- a Maven plugin goal, `forensics:btmgen`, backed by the same generation core
+- Maven plugin goals, including `forensics:btmgen` and `forensics:btmgen-aggregate`, backed by the same generation core
 - generation of Byteman `.btm` rules
 - runtime tracing helpers centered around `de.burger.forensics.infrastructure.rt.RtTrace`
 - an application-facing tracing facade, `de.burger.forensics.application.tracing.Tracer`
 - optional AspectJ-based method logging via `de.burger.forensics.infrastructure.logging.MethodLoggingAspect`
 
-Internally the repository is split into pragmatic hexagonal layers (`domain`, `application`, `adapters`, `plugin`, `infrastructure`). The Gradle task and Maven Mojo sit in build-tool adapter packages and both delegate to the shared `BtmGenerationRunner`.
+Internally the repository is split into pragmatic hexagonal layers (`domain`, `application`, `adapters`, `plugin`, `infrastructure`). The Gradle tasks and Maven Mojos sit in build-tool adapter packages and delegate to shared build-tool-neutral runners.
 
 ## Gradle quickstart
 
@@ -116,6 +116,12 @@ Then invoke the Mojo with the full coordinate:
 mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:btmgen
 ```
 
+For a Maven reactor run from the root project:
+
+```bash
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:btmgen-aggregate
+```
+
 Minimal `pom.xml` configuration:
 
 ```xml
@@ -133,6 +139,7 @@ Minimal `pom.xml` configuration:
 ```
 
 The short `mvn forensics:btmgen` form requires Maven plugin prefix resolution for the `de.burger.forensics` group. Use the full coordinate when that prefix metadata is not available in the configured repositories.
+The Maven BTM goals write the same default package shape as Gradle under `target/forensics`: the `.btm` file, `manifest.json`, `checksums.sha256`, and `analysis-store/` when `analysisStoreEnabled=true`.
 
 ## Step-by-step usage
 
@@ -205,7 +212,7 @@ The plugin scans Java sources, writes one Byteman script, and prepares the stati
 
 ### Forensics Analysis Store
 
-For Gradle builds, `generateBtmRules` creates a persistent analysis package under `build/forensics` by default:
+Gradle `generateBtmRules` and Maven `forensics:btmgen` create a persistent analysis package by default:
 
 - `forensics.btm`: Byteman rules with a comment header containing the analysis identity
 - `manifest.json`: machine-readable metadata for the generated package
@@ -225,9 +232,23 @@ btmGen {
 }
 ```
 
+The equivalent Maven configuration uses the same parameter names through the `forensics.*` user-property prefix:
+
+```xml
+<configuration>
+    <analysisStoreEnabled>true</analysisStoreEnabled>
+    <analysisStoreDirectory>${project.build.directory}/forensics/analysis-store</analysisStoreDirectory>
+    <cleanupPolicy>KEEP_ON_SUCCESS</cleanupPolicy>
+    <projectKey>legacy-demo-shop</projectKey>
+    <manifestFile>${project.build.directory}/forensics/manifest.json</manifestFile>
+    <checksumsFile>${project.build.directory}/forensics/checksums.sha256</checksumsFile>
+</configuration>
+```
+
 Supported cleanup policies are `DELETE_ON_SUCCESS`, `KEEP_ON_SUCCESS`, `KEEP_ON_FAILURE`, and `KEEP_ALWAYS`.
-Set `analysisStoreEnabled=false` to keep the previous Gradle behavior of writing only the `.btm` file.
+Set `analysisStoreEnabled=false` to write only the `.btm` file.
 Run `./gradlew cleanForensicsAnalysisStore` to delete the generated analysis store, manifest, checksum file, and Joern work directories without wiring that cleanup into the normal `clean` lifecycle.
+Run `mvn forensics:clean-analysis` for the equivalent Maven cleanup goal.
 gRPC publishing, server upload, replay, and LLM context generation are not implemented by this feature.
 
 ### Joern Semantic Enrichment
@@ -256,7 +277,31 @@ btmGen {
 }
 ```
 
-When enabled, the package additionally contains `build/forensics/joern/cpg.bin`, `callgraph.json`, `controlflow.json`, `dataflow.json`, and `slices.json`.
+Maven exposes the same semantic enrichment flow:
+
+```bash
+mvn forensics:analyze
+mvn forensics:analyze-aggregate
+```
+
+`forensics:analyze` runs module-local BTM generation plus Joern enrichment.
+`forensics:analyze-aggregate` runs the same flow over Maven reactor source roots.
+For an already generated package, use `forensics:analyze-semantics` followed by `forensics:import-semantics`.
+
+```xml
+<configuration>
+    <joernEnabled>true</joernEnabled>
+    <joernExecutable>/opt/joern/joern</joernExecutable>
+    <joernParseExecutable>/opt/joern/joern-parse</joernParseExecutable>
+    <joernSliceExecutable>/opt/joern/joern-slice</joernSliceExecutable>
+    <joernWorkspaceDirectory>${project.build.directory}/forensics/joern/workspace</joernWorkspaceDirectory>
+    <joernOutputDirectory>${project.build.directory}/forensics/joern</joernOutputDirectory>
+    <joernTimeoutSeconds>300</joernTimeoutSeconds>
+    <joernFailOnError>true</joernFailOnError>
+</configuration>
+```
+
+When enabled, the package additionally contains Joern artifacts under `build/forensics/joern` for Gradle or `target/forensics/joern` for Maven, including `cpg.bin`, `callgraph.json`, `controlflow.json`, `dataflow.json`, and `slices.json`.
 The H2 store receives `joern_import_run`, graph, relation, data-flow, and `semantic_anchor` rows, and the manifest/checksum files include the Joern artifacts.
 
 ### Step 5: Inspect the generated file
@@ -339,7 +384,20 @@ Prefer the Maven Mojo for Maven projects:
 mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:btmgen
 ```
 
-The first Maven version runs for the current Maven project/module and uses that module's compile source roots. Reactor aggregation is not implemented yet.
+Use the aggregate goal from a reactor root when you want one coherent analysis package for several Maven modules:
+
+```bash
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:btmgen-aggregate
+```
+
+Verified Maven reactor behavior:
+
+- a root project with `pom` packaging is a valid aggregation context
+- modules without existing source roots are ignored safely
+- compile source roots are collected from all reactor modules
+- `includeTests=true` adds Maven test compile source roots
+- duplicate roots are de-duplicated deterministically
+- `sourceRoot` or `sourceRoots` can be used to override automatic project or reactor root discovery
 
 For Gradle sidecar builds that scan an external Maven-style source tree, keep `scanSubprojects=false` and pass discovered `src/main/java` directories explicitly through `btmGen.sourceRoots`. `scanSubprojects=true` only applies to Gradle subprojects in the current build.
 
@@ -390,6 +448,8 @@ The verified configuration split is:
   - `outputFile`
   - `helperFqn`
   - `includes`
+  - `excludes`
+  - `includeTests`
   - `minBranchesPerMethod`
   - `strictConditionValidation`
   - `analysisStoreEnabled`
@@ -421,6 +481,8 @@ btmGen {
     checksumsFile.set(file("build/forensics/checksums.sha256"))
     helperFqn.set("de.burger.forensics.infrastructure.rt.RtTraceHelper")
     includes.set("com.example,org.acme")
+    excludes.set("com.example.generated")
+    includeTests.set(false)
     minBranchesPerMethod.set(2)
     strictConditionValidation.set(false)
 }
@@ -433,19 +495,33 @@ tasks.named<de.burger.forensics.plugin.btmgen.gradle.GenerateBtmTask>("generateB
 
 ### Maven goal parameters
 
-The Maven goal is:
+The Maven goals are:
 
 ```text
 forensics:btmgen
+forensics:btmgen-aggregate
+forensics:analyze-semantics
+forensics:import-semantics
+forensics:analyze
+forensics:analyze-aggregate
+forensics:clean-analysis
 ```
 
 Supported Maven parameters use the `forensics.*` user-property prefix:
 
 - `sourceRoot`
+- `sourceRoots`
 - `outputFile`
 - `cacheEnabled`
 - `cacheBackend`
 - `cacheDatabaseFile`
+- `analysisStoreEnabled`
+- `analysisStoreDirectory`
+- `cleanupPolicy`
+- `projectKey`
+- `pluginVersion`
+- `manifestFile`
+- `checksumsFile`
 - `profilingEnabled`
 - `profileReportFile`
 - `strictParsing`
@@ -458,15 +534,20 @@ Supported Maven parameters use the `forensics.*` user-property prefix:
 - `includeEntryExit`
 - `minBranchesPerMethod`
 - `includeTimestampHeader`
+- `joernEnabled`
+- `joernExecutable`
+- `joernParseExecutable`
+- `joernSliceExecutable`
+- `joernWorkspaceDirectory`
+- `joernOutputDirectory`
+- `joernTimeoutSeconds`
+- `joernFailOnError`
 
-The first Maven implementation is intentionally module-local:
-
-- it runs for the current Maven project/module
-- it uses Maven compile source roots by default
-- `includeTests=true` adds Maven test compile source roots
-- a configured `sourceRoot` overrides Maven project roots
-- Maven reactor aggregation is not implemented yet
-- the generated `.btm` file remains the only generated build artifact; scan cache files are local scanner state
+Maven module-local goals use the current project's compile source roots by default.
+Maven aggregate goals use `MavenSession.getProjects()` to collect reactor source roots.
+A configured `sourceRoot` or non-empty `sourceRoots` list overrides automatic Maven project or reactor root discovery.
+`includeTests=true` adds Maven test compile roots to the selected source roots.
+The generated package can contain the `.btm` file, Analysis Store, manifest, checksums, and optional Joern artifacts, matching the Gradle artifact model.
 
 The Maven adapter must stay thin. It must not call `GenerateBtmTask` and must not duplicate JavaParser scanning or Byteman rendering logic.
 
@@ -478,7 +559,7 @@ Property behavior:
   - missing directories are ignored instead of failing the task
 - `sourceRoots`
   - additional explicit scan roots
-  - combined with `sourceRoot` and auto-discovered Gradle `SourceSet` roots
+  - combined with `sourceRoot` and auto-discovered Gradle `SourceSet` or Maven compile roots
   - duplicate roots are de-duplicated before scanning
   - use this for legacy folders, external folders, and included/composite build sources
 - `scanSubprojects`
@@ -493,9 +574,9 @@ Property behavior:
   - when `false`, the generated header stays deterministic and the task can participate in the build cache
   - when `true`, the writer adds `# Timestamp: ...` and `GenerateBtmTask` explicitly opts out of task output caching
 - `analysisStoreEnabled`
-  - default for Gradle: `true`
-  - when `true`, the task writes `manifest.json`, `checksums.sha256`, and an H2 analysis store next to the `.btm` file
-  - when `false`, Gradle task output stays limited to the `.btm` file and can use the build cache when other non-cacheable options are disabled
+  - default for Gradle and Maven: `true`
+  - when `true`, the build-tool connector writes `manifest.json`, `checksums.sha256`, and an H2 analysis store next to the `.btm` file
+  - when `false`, output stays limited to the `.btm` file and can use caching when other non-cacheable options are disabled
 - `cleanupPolicy`
   - default: `KEEP_ON_SUCCESS`
   - controls whether the H2 analysis store directory is retained after task execution
@@ -521,9 +602,14 @@ Property behavior:
   - default: `de.burger.forensics.infrastructure.rt.RtTraceHelper`
   - blank values normalize back to that default
 - `includes`
-  - extension-only
+  - Gradle extension and Maven `includePackages`
   - comma-separated fully qualified package or class prefixes
   - example: `com.example,org.acme`
+- `excludes` / `excludePackages`
+  - comma-separated fully qualified package or class prefixes to omit after include filtering
+- `includeTests`
+  - default: `false`
+  - when `true`, Gradle adds test `SourceSet` roots and Maven adds test compile source roots
 - `includeEntryExit`
   - task-only
   - default: `true`
@@ -544,6 +630,7 @@ Verified behavior:
 
 - the default output file is `build/forensics/forensics.btm`
 - Gradle also writes `build/forensics/manifest.json`, `build/forensics/checksums.sha256`, and `build/forensics/analysis-store/` by default
+- Maven writes the equivalent defaults under `target/forensics/`
 - the default file content is deterministic
 - the file contains `# Generated Byteman rules`, analysis identity comments, no timestamp line by default, and the rendered rule blocks
 - scan mode is the default mode
@@ -650,17 +737,17 @@ The verified build-tool adapter split is:
 ```text
 GenerateBtmTask ─┐
                  ├── BtmGenerationRunner ─── Scanner / UseCase / Renderer / Writer
-BtmGenMojo   ────┘
+BtmGenMojo(s) ───┘
 ```
 
 The shared runner owns scanner, rule-generation, rendering, profiling, cache selection, and file writing orchestration. Build-tool adapters only map Gradle or Maven parameters into `BtmGenerationRequest`, invoke the runner, and translate logging or exceptions.
 
 The verified scan execution flow is:
 
-1. The Gradle task `generateBtmRules` (`GenerateBtmTask`) or Maven goal `forensics:btmgen` starts in scan mode by default.
+1. The Gradle task `generateBtmRules` (`GenerateBtmTask`) or Maven BTM goal starts in scan mode by default.
 2. The build-tool adapter resolves one or more Java source roots and creates a build-tool-neutral `BtmGenerationRequest`.
 3. `JavaParserScanner` scans those roots with JavaParser-based support classes and produces `ScanEvent` instances.
-4. `GenerateRulesUseCase` filters scan events by language and optional package prefixes, groups them by method, optionally adds synthetic `METHOD_ENTER` and `METHOD_EXIT` rules, and applies the `minBranchesPerMethod` filter.
+4. `GenerateRulesUseCase` filters scan events by language and optional include/exclude package prefixes, groups them by method, optionally adds synthetic `METHOD_ENTER` and `METHOD_EXIT` rules, and applies the `minBranchesPerMethod` filter.
 5. The application layer turns scan events into domain `Rule` objects typed by `RuleTemplate`.
 6. `BytemanRuleRenderAdapter` converts each domain rule into `RuleParams`, and `BytemanRuleRenderer` dispatches to the matching render strategy.
 7. `BtmFileWriter` writes one `.btm` file containing a deterministic generated header plus all rendered rule blocks, unless an optional timestamp header is explicitly enabled.
@@ -830,8 +917,24 @@ The test suite in `src/test/java` verifies the behavior described above. In part
 
 - `BtmGenMojoTest`
   - Maven parameter mapping into the shared runner
-  - explicit `sourceRoot` handling
+  - explicit `sourceRoot` and `sourceRoots` handling
   - clear failure behavior for missing roots and unsupported cache backends
+
+- `MavenReactorAggregationTest`
+  - Maven reactor root collection
+  - root `pom` aggregation behavior
+  - deterministic handling of compile and test source roots
+
+- `MavenAnalysisStoreParityTest`
+  - Maven Analysis Store, manifest, and checksum artifact generation
+
+- `MavenJoernConfigurationParityTest`
+  - Maven Joern configuration mapping
+  - disabled Joern failure behavior
+
+- `BuildToolConnectorParityTest`
+  - shared connector capability catalog coverage
+  - mandatory Gradle and Maven capability parity
 
 - `BtmGenerationAdapterValidationTest`
   - deterministic direct runner output

@@ -26,6 +26,9 @@ class BtmGenExtensionTest {
         var project = ProjectBuilder.builder().build();
         var extension = project.getObjects().newInstance(BtmGenExtension.class);
 
+        assertEquals("", extension.getIncludes().get());
+        assertEquals("", extension.getExcludes().get());
+        assertTrue(!extension.getIncludeTests().get());
         assertTrue(extension.getAnalysisStoreEnabled().get());
         assertEquals(new File("build/forensics/analysis-store"), extension.getAnalysisStoreDirectory().get());
         assertEquals("KEEP_ON_SUCCESS", extension.getCleanupPolicy().get());
