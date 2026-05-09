@@ -39,6 +39,13 @@ final class MavenForensicsMojoSupport {
         }
     }
 
+    static void requireAnalysisStoreEnabled(boolean analysisStoreEnabled, String goal) throws MojoExecutionException {
+        if (!analysisStoreEnabled) {
+            throw new MojoExecutionException(
+                    "Analysis Store is required for " + goal + ". Set -Dforensics.analysisStoreEnabled=true.");
+        }
+    }
+
     static void verifyImportedArtifacts(boolean joernEnabled, File joernOutputDirectory) throws MojoExecutionException {
         requireJoernEnabled(joernEnabled, "forensics:import-semantics");
         Path callgraph = filePath(joernOutputDirectory, "target/forensics/joern").resolve("callgraph.json");

@@ -8,12 +8,12 @@ import org.apache.maven.project.MavenProject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static de.burger.forensics.plugin.btmgen.maven.MavenMojoTestSupport.setField;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -175,9 +175,4 @@ class MavenReactorAggregationTest {
         return root.toAbsolutePath().normalize();
     }
 
-    private static void setField(BtmGenAggregateMojo mojo, String name, Object value) throws Exception {
-        Field field = BtmGenAggregateMojo.class.getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(mojo, value);
-    }
 }

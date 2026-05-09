@@ -1,18 +1,17 @@
 package de.burger.forensics.plugin.btmgen.maven;
 
 import de.burger.forensics.plugin.btmgen.common.SemanticEnrichmentRequest;
-import org.apache.maven.model.Build;
-import org.apache.maven.model.Model;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.project.MavenProject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static de.burger.forensics.plugin.btmgen.maven.MavenMojoTestSupport.projectWithBuildDirectory;
+import static de.burger.forensics.plugin.btmgen.maven.MavenMojoTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class MavenJoernConfigurationParityTest {
@@ -53,22 +52,4 @@ class MavenJoernConfigurationParityTest {
         assertThat(exception.getMessage()).contains("joernEnabled=true");
     }
 
-    private static MavenProject projectWithBuildDirectory(Path projectDirectory) {
-        Model model = new Model();
-        model.setGroupId("de.burger.forensics");
-        model.setArtifactId("sample");
-        model.setVersion("1.0.0");
-        MavenProject project = new MavenProject(model);
-        project.setFile(projectDirectory.resolve("pom.xml").toFile());
-        Build build = new Build();
-        build.setDirectory(projectDirectory.resolve("target").toString());
-        project.setBuild(build);
-        return project;
-    }
-
-    private static void setField(Object target, String name, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(target, value);
-    }
 }

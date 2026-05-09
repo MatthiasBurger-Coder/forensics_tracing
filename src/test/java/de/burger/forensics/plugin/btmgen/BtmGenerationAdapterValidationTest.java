@@ -120,10 +120,19 @@ class BtmGenerationAdapterValidationTest {
         return sourceRoot;
     }
 
-    private static void setField(BtmGenMojo mojo, String name, Object value) throws Exception {
-        Field field = BtmGenMojo.class.getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(mojo, value);
+    private static void setField(Object target, String name, Object value) throws Exception {
+        Class<?> type = target.getClass();
+        while (type != null) {
+            try {
+                Field field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                field.set(target, value);
+                return;
+            } catch (NoSuchFieldException ignored) {
+                type = type.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(name);
     }
 
     private static final class SilentLog implements Log {

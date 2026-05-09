@@ -1,24 +1,23 @@
 package de.burger.forensics.plugin.btmgen.maven;
 
 import de.burger.forensics.plugin.btmgen.common.BtmGenerationRequest;
-import org.apache.maven.execution.MavenSession;
-import org.apache.maven.model.Build;
-import org.apache.maven.model.Model;
+import de.burger.forensics.plugin.btmgen.common.BtmGenerationDefaults;
 import org.apache.maven.plugin.MojoExecutionException;
-import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static de.burger.forensics.plugin.btmgen.maven.MavenMojoTestSupport.createSampleSource;
+import static de.burger.forensics.plugin.btmgen.maven.MavenMojoTestSupport.project;
+import static de.burger.forensics.plugin.btmgen.maven.MavenMojoTestSupport.session;
+import static de.burger.forensics.plugin.btmgen.maven.MavenMojoTestSupport.setField;
+import static de.burger.forensics.plugin.btmgen.maven.MavenMojoTestSupport.sourceRoot;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class MavenAnalysisGoalsTest {
 
@@ -66,7 +65,7 @@ class MavenAnalysisGoalsTest {
         Path joernOutput = Files.createDirectories(tempDir.resolve("target/forensics/joern"));
         Files.writeString(joernOutput.resolve("callgraph.json"), "{}");
         ImportSemanticsMojo mojo = new ImportSemanticsMojo();
-        mojo.setLog(new SilentLog());
+        mojo.setLog(new MavenMojoTestSupport.SilentLog());
         setField(mojo, "joernEnabled", true);
         setField(mojo, "joernOutputDirectory", joernOutput.toFile());
 
@@ -119,6 +118,19 @@ class MavenAnalysisGoalsTest {
     }
 
     @Test
+    void analyzeMojoKeepsAnalysisStoreForSemanticEnrichment(@TempDir Path tempDir) throws Exception {
+        Path sourceRoot = createSampleSource(tempDir.resolve("src/main/java"));
+        AnalyzeMojo mojo = new AnalyzeMojo();
+        setField(mojo, "project", project(tempDir.resolve("root"), "root"));
+        setField(mojo, "sourceRoot", sourceRoot.toFile());
+        setField(mojo, "cleanupPolicy", "DELETE_ON_SUCCESS");
+
+        BtmGenerationRequest request = mojo.generationParameters().toGenerationRequest();
+
+        assertThat(request.cleanupPolicy()).isEqualTo(BtmGenerationDefaults.defaultCleanupPolicy());
+    }
+
+    @Test
     void analyzeAggregateMojoFailsClearlyWhenJoernIsDisabled() {
         AnalyzeAggregateMojo mojo = new AnalyzeAggregateMojo();
 
@@ -150,6 +162,21 @@ class MavenAnalysisGoalsTest {
         MojoExecutionException exception = assertThrows(MojoExecutionException.class, mojo::execute);
 
         assertThat(exception.getMessage()).contains("No existing Maven source roots were found");
+    }
+
+    @Test
+    void analyzeAggregateMojoKeepsAnalysisStoreForSemanticEnrichment(@TempDir Path tempDir) throws Exception {
+        MavenProject root = project(tempDir.resolve("root"), "root");
+        Path sourceRoot = createSampleSource(tempDir.resolve("src/main/java"));
+        AnalyzeAggregateMojo mojo = new AnalyzeAggregateMojo();
+        setField(mojo, "project", root);
+        setField(mojo, "session", session(List.of(root)));
+        setField(mojo, "sourceRoot", sourceRoot.toFile());
+        setField(mojo, "cleanupPolicy", "DELETE_ON_SUCCESS");
+
+        BtmGenerationRequest request = mojo.generationParameters().toGenerationRequest();
+
+        assertThat(request.cleanupPolicy()).isEqualTo(BtmGenerationDefaults.defaultCleanupPolicy());
     }
 
     @Test
@@ -195,7 +222,7 @@ class MavenAnalysisGoalsTest {
         Path explicitRoot = createSampleSource(tempDir.resolve("external/java"));
         Path outputFile = tempDir.resolve("root/target/forensics/generated.btm");
         BtmGenAggregateMojo mojo = new BtmGenAggregateMojo();
-        mojo.setLog(new SilentLog());
+        mojo.setLog(new MavenMojoTestSupport.SilentLog());
         setField(mojo, "project", root);
         setField(mojo, "session", session(List.of(root)));
         setField(mojo, "sourceRoots", List.of(explicitRoot.toFile()));
@@ -242,69 +269,4 @@ class MavenAnalysisGoalsTest {
         assertThat(request.analysisStoreEnabled()).isTrue();
     }
 
-    private static MavenSession session(List<MavenProject> projects) {
-        MavenSession session = mock(MavenSession.class);
-        when(session.getProjects()).thenReturn(projects);
-        return session;
-    }
-
-    private static MavenProject project(Path projectDirectory, String artifactId) throws Exception {
-        Files.createDirectories(projectDirectory);
-        Model model = new Model();
-        model.setGroupId("de.burger.forensics");
-        model.setArtifactId(artifactId);
-        model.setVersion("1.0.0");
-        MavenProject project = new MavenProject(model);
-        project.setFile(projectDirectory.resolve("pom.xml").toFile());
-        Build build = new Build();
-        build.setDirectory(projectDirectory.resolve("target").toString());
-        project.setBuild(build);
-        return project;
-    }
-
-    private static Path sourceRoot(MavenProject project, String relativePath) throws Exception {
-        Path root = Files.createDirectories(project.getBasedir().toPath().resolve(relativePath));
-        project.addCompileSourceRoot(root.toString());
-        return root.toAbsolutePath().normalize();
-    }
-
-    private static Path createSampleSource(Path sourceRoot) throws Exception {
-        Path packageDirectory = sourceRoot.resolve("com/example");
-        Files.createDirectories(packageDirectory);
-        Files.writeString(packageDirectory.resolve("Sample.java"), """
-                package com.example;
-                public class Sample {
-                  public int run(int value) {
-                    if (value > 0) { }
-                    return value;
-                  }
-                }
-                """);
-        return sourceRoot;
-    }
-
-    private static void setField(Object target, String name, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(target, value);
-    }
-
-    private static final class SilentLog implements Log {
-        @Override public boolean isDebugEnabled() { return true; }
-        @Override public void debug(CharSequence content) { }
-        @Override public void debug(CharSequence content, Throwable error) { }
-        @Override public void debug(Throwable error) { }
-        @Override public boolean isInfoEnabled() { return true; }
-        @Override public void info(CharSequence content) { }
-        @Override public void info(CharSequence content, Throwable error) { }
-        @Override public void info(Throwable error) { }
-        @Override public boolean isWarnEnabled() { return true; }
-        @Override public void warn(CharSequence content) { }
-        @Override public void warn(CharSequence content, Throwable error) { }
-        @Override public void warn(Throwable error) { }
-        @Override public boolean isErrorEnabled() { return true; }
-        @Override public void error(CharSequence content) { }
-        @Override public void error(CharSequence content, Throwable error) { }
-        @Override public void error(Throwable error) { }
-    }
 }
