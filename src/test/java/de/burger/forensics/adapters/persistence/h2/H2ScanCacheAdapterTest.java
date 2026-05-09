@@ -44,20 +44,22 @@ class H2ScanCacheAdapterTest {
         adapter.store(result);
 
         assertThat(tableNames(databasePath))
-                .contains("schema_version", "scan_run", "source_file", "type_declaration",
-                        "method_declaration", "scan_event", "code_dependency", "scan_metric");
-        assertThat(schemaVersion(databasePath)).isEqualTo(2);
+                .contains("schema_version", "cache_scan_run", "cache_source_file", "cache_type_declaration",
+                        "cache_method_declaration", "cache_scan_event", "cache_code_dependency", "cache_scan_metric",
+                        "analysis_run", "source_file", "scan_method", "scan_event", "btm_rule", "artifact_checksum");
+        assertThat(schemaVersion(databasePath)).isEqualTo(3);
         assertThat(adapter.find(result.source())).contains(result);
 
         overwriteSchemaVersion(databasePath, 99);
 
         adapter.initialize();
 
-        assertThat(schemaVersion(databasePath)).isEqualTo(2);
+        assertThat(schemaVersion(databasePath)).isEqualTo(3);
         assertThat(adapter.find(result.source())).isEmpty();
         assertThat(tableNames(databasePath))
-                .contains("schema_version", "scan_run", "source_file", "type_declaration",
-                        "method_declaration", "scan_event", "code_dependency", "scan_metric");
+                .contains("schema_version", "cache_scan_run", "cache_source_file", "cache_type_declaration",
+                        "cache_method_declaration", "cache_scan_event", "cache_code_dependency", "cache_scan_metric",
+                        "analysis_run", "source_file", "scan_method", "scan_event", "btm_rule", "artifact_checksum");
     }
 
     @Test
@@ -153,9 +155,9 @@ class H2ScanCacheAdapterTest {
         assertThat(adapter.find(current.source())).contains(current);
         assertThat(adapter.find(stale.source())).isEmpty();
         assertThat(adapter.find(otherRoot.source())).contains(otherRoot);
-        assertThat(rowCount(databasePath, "source_file")).isEqualTo(2);
-        assertThat(rowCount(databasePath, "scan_event")).isEqualTo(2);
-        assertThat(rowCount(databasePath, "code_dependency")).isEqualTo(2);
+        assertThat(rowCount(databasePath, "cache_source_file")).isEqualTo(2);
+        assertThat(rowCount(databasePath, "cache_scan_event")).isEqualTo(2);
+        assertThat(rowCount(databasePath, "cache_code_dependency")).isEqualTo(2);
     }
 
     @Test
@@ -169,8 +171,8 @@ class H2ScanCacheAdapterTest {
         H2ScanCacheAdapter emptyVersionAdapter = new H2ScanCacheAdapter(emptyVersionDatabase);
         emptyVersionAdapter.initialize();
 
-        assertThat(schemaVersion(emptyVersionDatabase)).isEqualTo(2);
-        assertThat(tableNames(emptyVersionDatabase)).contains("source_file", "scan_event", "code_dependency");
+        assertThat(schemaVersion(emptyVersionDatabase)).isEqualTo(3);
+        assertThat(tableNames(emptyVersionDatabase)).contains("cache_source_file", "cache_scan_event", "cache_code_dependency", "analysis_run", "source_file", "scan_event");
 
         Path duplicateVersionDatabase = tempDir.resolve("duplicate-version-cache");
         H2ScanCacheAdapter duplicateVersionAdapter = initializedAdapter(duplicateVersionDatabase);
@@ -183,7 +185,7 @@ class H2ScanCacheAdapterTest {
 
         duplicateVersionAdapter.initialize();
 
-        assertThat(schemaVersion(duplicateVersionDatabase)).isEqualTo(2);
+        assertThat(schemaVersion(duplicateVersionDatabase)).isEqualTo(3);
         assertThat(duplicateVersionAdapter.find(result.source())).isEmpty();
     }
 

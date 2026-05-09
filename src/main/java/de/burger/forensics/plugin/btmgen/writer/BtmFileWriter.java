@@ -37,6 +37,10 @@ public final class BtmFileWriter {
     }
 
     public void write(List<String> rules) {
+        write(List.of(), rules);
+    }
+
+    public void write(List<String> additionalHeaderLines, List<String> rules) {
         try {
             Files.createDirectories(output.getParent());
             try (var writer = Files.newBufferedWriter(output, StandardCharsets.UTF_8,
@@ -45,6 +49,10 @@ public final class BtmFileWriter {
                 writer.write(System.lineSeparator());
                 if (includeTimestampHeader) {
                     writer.write("# Timestamp: " + ZonedDateTime.now(clock).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+                    writer.write(System.lineSeparator());
+                }
+                for (String line : additionalHeaderLines) {
+                    writer.write(line);
                     writer.write(System.lineSeparator());
                 }
                 writer.write(System.lineSeparator());

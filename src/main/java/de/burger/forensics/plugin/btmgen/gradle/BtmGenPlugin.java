@@ -5,6 +5,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.plugins.JavaPlugin;
+import org.gradle.api.tasks.Delete;
 import org.gradle.api.tasks.TaskProvider;
 import org.jetbrains.annotations.NotNull;
 
@@ -36,6 +37,13 @@ public final class BtmGenPlugin implements Plugin<@NotNull Project> {
         });
 
         project.getPlugins().withType(JavaPlugin.class, ignored -> attachRuntimeHelper(project));
+        project.getTasks().register("cleanForensicsAnalysisStore", Delete.class, task -> {
+            task.setGroup(FORENSICS_GROUP);
+            task.setDescription("Deletes generated forensics analysis store artifacts.");
+            task.delete(project.provider(() -> project.file(ext.getAnalysisStoreDirectory().get())));
+            task.delete(project.provider(() -> project.file(ext.getManifestFile().get())));
+            task.delete(project.provider(() -> project.file(ext.getChecksumsFile().get())));
+        });
         configureSubprojectRuntimeHelpers(project, ext);
 
         project.getTasks().matching(t -> t.getName().equals("build"))

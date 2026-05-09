@@ -64,6 +64,7 @@ class BtmGenerationAdapterValidationTest {
         extension.getOutputFile().set(outputFile.toFile());
         extension.getIncludes().set("com.example");
         extension.getMinBranchesPerMethod().set(2);
+        extension.getAnalysisStoreEnabled().set(false);
 
         GenerateBtmTask task = project.getTasks().register("generateBtmValidation", GenerateBtmTask.class).get();
         task.setExtension(extension);

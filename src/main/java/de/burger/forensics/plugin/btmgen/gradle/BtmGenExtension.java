@@ -31,6 +31,12 @@ public class BtmGenExtension {
     private final Property<@NotNull Boolean> cacheEnabled;
     private final Property<@NotNull File> cacheDatabaseFile;
     private final Property<@NotNull String> cacheBackend;
+    private final Property<@NotNull Boolean> analysisStoreEnabled;
+    private final Property<@NotNull File> analysisStoreDirectory;
+    private final Property<@NotNull String> cleanupPolicy;
+    private final Property<@NotNull String> projectKey;
+    private final Property<@NotNull File> manifestFile;
+    private final Property<@NotNull File> checksumsFile;
     private final Property<@NotNull Boolean> profilingEnabled;
     private final Property<@NotNull File> profileReportFile;
     private final Property<@NotNull Boolean> strictParsing;
@@ -50,6 +56,12 @@ public class BtmGenExtension {
         this.cacheEnabled = objects.property(Boolean.class);
         this.cacheDatabaseFile = objects.property(File.class);
         this.cacheBackend = objects.property(String.class);
+        this.analysisStoreEnabled = objects.property(Boolean.class);
+        this.analysisStoreDirectory = objects.property(File.class);
+        this.cleanupPolicy = objects.property(String.class);
+        this.projectKey = objects.property(String.class);
+        this.manifestFile = objects.property(File.class);
+        this.checksumsFile = objects.property(File.class);
         this.profilingEnabled = objects.property(Boolean.class);
         this.profileReportFile = objects.property(File.class);
         this.strictParsing = objects.property(Boolean.class);
@@ -64,6 +76,11 @@ public class BtmGenExtension {
         this.cacheEnabled.convention(false);
         this.cacheDatabaseFile.convention(new File("build/forensics/cache/scan-cache"));
         this.cacheBackend.convention("h2");
+        this.analysisStoreEnabled.convention(true);
+        this.analysisStoreDirectory.convention(new File("build/forensics/analysis-store"));
+        this.cleanupPolicy.convention("KEEP_ON_SUCCESS");
+        this.manifestFile.convention(new File("build/forensics/manifest.json"));
+        this.checksumsFile.convention(new File("build/forensics/checksums.sha256"));
         this.profilingEnabled.convention(false);
         this.profileReportFile.convention(new File("build/forensics/scan-profile.json"));
         this.strictParsing.convention(false);
@@ -127,6 +144,30 @@ public class BtmGenExtension {
 
     public Property<@NotNull String> getCacheBackend() {
         return cacheBackend;
+    }
+
+    public Property<@NotNull Boolean> getAnalysisStoreEnabled() {
+        return analysisStoreEnabled;
+    }
+
+    public Property<@NotNull File> getAnalysisStoreDirectory() {
+        return analysisStoreDirectory;
+    }
+
+    public Property<@NotNull String> getCleanupPolicy() {
+        return cleanupPolicy;
+    }
+
+    public Property<@NotNull String> getProjectKey() {
+        return projectKey;
+    }
+
+    public Property<@NotNull File> getManifestFile() {
+        return manifestFile;
+    }
+
+    public Property<@NotNull File> getChecksumsFile() {
+        return checksumsFile;
     }
 
     public Property<@NotNull Boolean> getProfilingEnabled() {

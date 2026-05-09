@@ -198,6 +198,7 @@ class BtmGenerationRunnerTest {
                 "RULE duplicate\nCLASS A\nENDRULE",
                 "\n  RULE duplicate  \nCLASS A\nENDRULE",
                 "RULE    \nCLASS A\nENDRULE",
+                "RULE",
                 "RULER duplicate\nCLASS A\nENDRULE"
         ));
 
@@ -205,7 +206,21 @@ class BtmGenerationRunnerTest {
         assertTrue(deduped.get(2).contains("RULE duplicate_2"));
         assertTrue(deduped.get(3).contains("RULE duplicate_3"));
         assertEquals("RULE    \nCLASS A\nENDRULE", deduped.get(4));
-        assertEquals("RULER duplicate\nCLASS A\nENDRULE", deduped.get(5));
+        assertEquals("RULE", deduped.get(5));
+        assertEquals("RULER duplicate\nCLASS A\nENDRULE", deduped.get(6));
+    }
+
+    @Test
+    void runnerFindsRuleHeadersAfterDifferentLineBreaks() {
+        List<String> deduped = BtmGenerationRunner.dedupeRuleHeaders(List.of(
+                "comment\r\nRULE duplicate\nCLASS A\nENDRULE",
+                "comment\rRULE duplicate\nCLASS A\nENDRULE",
+                "comment\nRULE duplicate\nCLASS A\nENDRULE"
+        ));
+
+        assertTrue(deduped.get(0).contains("RULE duplicate"));
+        assertTrue(deduped.get(1).contains("RULE duplicate_2"));
+        assertTrue(deduped.get(2).contains("RULE duplicate_3"));
     }
 
     private static Map<String, RecordingStrategy> defaultRecordingStrategies() {

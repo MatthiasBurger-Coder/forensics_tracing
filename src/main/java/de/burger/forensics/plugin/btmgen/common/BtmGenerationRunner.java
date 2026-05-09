@@ -2,15 +2,30 @@ package de.burger.forensics.plugin.btmgen.common;
 
 import de.burger.forensics.adapters.javaparser.CachedJavaParserScanner;
 import de.burger.forensics.adapters.javaparser.JavaParserScanner;
+import de.burger.forensics.adapters.filesystem.AnalysisManifestWriter;
+import de.burger.forensics.adapters.filesystem.ArtifactChecksumService;
+import de.burger.forensics.adapters.filesystem.ChecksumFileWriter;
+import de.burger.forensics.adapters.persistence.h2.H2AnalysisStoreAdapter;
 import de.burger.forensics.adapters.persistence.h2.H2ScanCacheAdapter;
+import de.burger.forensics.application.AnalysisContext;
 import de.burger.forensics.adaptersupport.javaparser.DefaultSourceFingerprintPort;
 import de.burger.forensics.application.service.ConditionValidationException;
 import de.burger.forensics.application.service.GenerateRulesUseCase;
 import de.burger.forensics.application.service.GenerationRequest;
 import de.burger.forensics.application.service.RuleGenerationResult;
+import de.burger.forensics.application.service.SourceFingerprintResult;
+import de.burger.forensics.application.service.SourceFingerprintService;
 import de.burger.forensics.domain.model.Rule;
+import de.burger.forensics.domain.model.analysis.AnalysisRunId;
+import de.burger.forensics.domain.model.analysis.AnalysisRunStatus;
+import de.burger.forensics.domain.model.analysis.AnalysisSchemaVersion;
+import de.burger.forensics.domain.model.analysis.AnalysisStoreCleanupPolicy;
+import de.burger.forensics.domain.model.analysis.ArtifactChecksum;
+import de.burger.forensics.domain.model.analysis.BuildId;
+import de.burger.forensics.domain.model.analysis.BuildIdentity;
 import de.burger.forensics.domain.model.cache.ScanPhase;
 import de.burger.forensics.domain.model.cache.ScanProfile;
+import de.burger.forensics.domain.model.entry.MethodEntry;
 import de.burger.forensics.domain.port.out.CodeScanPort;
 import de.burger.forensics.domain.port.out.LogPort;
 import de.burger.forensics.domain.port.out.RuleRenderPort;
@@ -20,6 +35,7 @@ import de.burger.forensics.domain.validation.ConditionValidationReport;
 import de.burger.forensics.plugin.adapters.JsonScanProfileSinkAdapter;
 import de.burger.forensics.plugin.adapters.SystemClockAdapter;
 import de.burger.forensics.plugin.btmgen.internal.BytemanRuleRenderAdapter;
+import de.burger.forensics.plugin.btmgen.render.BtmHeaderRenderer;
 import de.burger.forensics.plugin.btmgen.render.BytemanRuleRenderer;
 import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
@@ -28,12 +44,17 @@ import de.burger.forensics.plugin.btmgen.writer.BtmFileWriter;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.HashMap;
 import java.util.List;
@@ -63,21 +84,33 @@ public final class BtmGenerationRunner {
         Path outputFile = request.outputFile();
         BytemanRuleRenderer renderer = BytemanRuleRenderer.of(registry);
         ScanProfileCollector profileCollector = new ScanProfileCollector(request.profilingEnabled());
+        SourceFingerprintResult sourceFingerprint = request.analysisStoreEnabled()
+                ? new SourceFingerprintService().fingerprint(request.sourceRoots())
+                : null;
 
         createOutputDirectory(outputFile);
 
         RunOutput output = request.templateRequest()
                 .map(template -> new RunOutput(
+                        List.of(),
                         renderTemplate(renderer, request, template, profileCollector),
+                        AnalysisContext.builder().build(),
                         ConditionValidationReport.empty()))
                 .orElseGet(() -> scanSources(renderer, request, profileCollector));
 
-        List<String> uniqueRules = new ArrayList<>(new LinkedHashSet<>(output.rules()));
+        List<String> uniqueRules = new ArrayList<>(new LinkedHashSet<>(output.renderedRules()));
         List<String> dedupedRuleNames = dedupeRuleHeaders(uniqueRules);
-        profileCollector.measure(ScanPhase.BTM_FILE_WRITING, () -> {
-            writeRules(request, dedupedRuleNames);
-            return null;
-        });
+        BuildIdentity identity = null;
+        if (request.analysisStoreEnabled()) {
+            Objects.requireNonNull(sourceFingerprint, "sourceFingerprint");
+            identity = buildIdentity(request, sourceFingerprint, rulesFingerprint(dedupedRuleNames));
+            persistAnalysis(request, output, sourceFingerprint, dedupedRuleNames, identity, profileCollector);
+        } else {
+            profileCollector.measure(ScanPhase.BTM_FILE_WRITING, () -> {
+                writeRules(request, dedupedRuleNames);
+                return null;
+            });
+        }
 
         ScanProfile profile = profileCollector.profile();
         publishProfile(request, profile, output.validationReport());
@@ -144,7 +177,9 @@ public final class BtmGenerationRunner {
                 new DomainLogAdapter(log),
                 new DefaultStrategyFactory()
         );
+        List<Rule> allDomainRules = new ArrayList<>();
         List<String> allRules = new ArrayList<>();
+        AnalysisContext mergedContext = AnalysisContext.builder().build();
         ConditionValidationReport validationReport = ConditionValidationReport.empty();
         for (Path srcRoot : request.sourceRoots()) {
             log.info("Scanning sources in " + srcRoot.toAbsolutePath());
@@ -164,10 +199,160 @@ public final class BtmGenerationRunner {
             } catch (ConditionValidationException exception) {
                 throw new BtmGenerationException(exception.getMessage(), exception);
             }
+            allDomainRules.addAll(result.rules());
             allRules.addAll(result.renderedRules());
+            result.context().getEvents().forEach(mergedContext::addEvent);
+            result.context().getMethodEntries().forEach(mergedContext::addMethodEntry);
             validationReport = validationReport.merge(result.validationReport());
         }
-        return new RunOutput(allRules, validationReport);
+        return new RunOutput(allDomainRules, allRules, mergedContext, validationReport);
+    }
+
+    private void persistAnalysis(BtmGenerationRequest request,
+                                 RunOutput output,
+                                 SourceFingerprintResult sourceFingerprint,
+                                 List<String> dedupedRules,
+                                 BuildIdentity identity,
+                                 ScanProfileCollector profileCollector) {
+        Path analysisStoreDirectory = request.analysisStoreDirectory();
+        Path databaseFile = analysisStoreDirectory.resolve(BtmGenerationDefaults.DEFAULT_ANALYSIS_STORE_DATABASE_FILE_NAME);
+        ArtifactChecksumService checksumService = new ArtifactChecksumService();
+        ArtifactChecksum btmChecksum = null;
+        boolean success = false;
+        H2AnalysisStoreAdapter store = new H2AnalysisStoreAdapter(databaseFile);
+        try {
+            store.initializeSchema();
+            store.createAnalysisRun(identity);
+            store.updateAnalysisRunStatus(identity.analysisRunId(), AnalysisRunStatus.SCANNING);
+            store.storeSourceFiles(identity.analysisRunId(), sourceFingerprint.sourceFiles());
+            store.storeMethods(identity.analysisRunId(), output.context().getMethodEntries());
+            store.storeScanEvents(identity.analysisRunId(), output.context().getEvents());
+            store.storeRules(identity.analysisRunId(), output.domainRules(), renderedRulesByRuleId(output.domainRules(), output.renderedRules()));
+            profileCollector.measure(ScanPhase.BTM_FILE_WRITING, () -> {
+                writeRules(request, dedupedRules, identity);
+                return null;
+            });
+            store.updateAnalysisRunStatus(identity.analysisRunId(), AnalysisRunStatus.BTM_GENERATED);
+            btmChecksum = checksumService.checksumFile(analysisBaseDirectory(request), request.outputFile(), "byteman-rules");
+            store.storeArtifactChecksums(identity.analysisRunId(), List.of(btmChecksum));
+            store.updateAnalysisRunStatus(identity.analysisRunId(), AnalysisRunStatus.COMPLETED);
+            success = true;
+        } catch (RuntimeException exception) {
+            markFailed(store, identity.analysisRunId());
+            throw exception;
+        } finally {
+            store.close();
+            if (success && btmChecksum != null) {
+                writeAnalysisArtifacts(request, identity, btmChecksum, checksumService);
+            }
+            applyCleanupPolicy(request, success);
+        }
+    }
+
+    private void writeAnalysisArtifacts(BtmGenerationRequest request,
+                                        BuildIdentity identity,
+                                        ArtifactChecksum btmChecksum,
+                                        ArtifactChecksumService checksumService) {
+        Path baseDirectory = analysisBaseDirectory(request);
+        ArtifactChecksum storeChecksum = checksumService.checksumDirectory(
+                baseDirectory,
+                request.analysisStoreDirectory(),
+                "h2-analysis-store");
+        new AnalysisManifestWriter().write(request.manifestFile(), identity, List.of(btmChecksum, storeChecksum));
+        ArtifactChecksum manifestChecksum = checksumService.checksumFile(
+                baseDirectory,
+                request.manifestFile(),
+                "analysis-manifest");
+        List<ArtifactChecksum> checksumEntries = new ArrayList<>();
+        checksumEntries.add(btmChecksum);
+        checksumEntries.add(manifestChecksum);
+        checksumEntries.addAll(checksumService.checksumFiles(
+                baseDirectory,
+                request.analysisStoreDirectory(),
+                "h2-analysis-store-file"));
+        new ChecksumFileWriter().write(request.checksumsFile(), checksumEntries);
+    }
+
+    private void markFailed(H2AnalysisStoreAdapter store, AnalysisRunId analysisRunId) {
+        try {
+            store.updateAnalysisRunStatus(analysisRunId, AnalysisRunStatus.FAILED);
+        } catch (RuntimeException failure) {
+            log.warn("Failed to mark analysis run as failed: " + failure.getMessage());
+        }
+    }
+
+    private void applyCleanupPolicy(BtmGenerationRequest request, boolean success) {
+        AnalysisStoreCleanupPolicy policy = AnalysisStoreCleanupPolicy.from(request.cleanupPolicy());
+        boolean delete = success ? policy.shouldDeleteAfterSuccess() : policy.shouldDeleteAfterFailure();
+        if (!delete) {
+            return;
+        }
+        try {
+            deleteRecursively(request.analysisStoreDirectory());
+        } catch (IOException e) {
+            throw new BtmGenerationException("Failed to clean analysis store " + request.analysisStoreDirectory(), e);
+        }
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (!Files.exists(root)) {
+            return;
+        }
+        try (var stream = Files.walk(root)) {
+            List<Path> paths = stream.sorted((left, right) -> right.compareTo(left)).toList();
+            for (Path path : paths) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    private static Map<String, String> renderedRulesByRuleId(List<Rule> rules, List<String> renderedRules) {
+        Map<String, String> rendered = new HashMap<>();
+        for (int index = 0; index < rules.size(); index++) {
+            String ruleBody = index < renderedRules.size() ? renderedRules.get(index) : null;
+            if (ruleBody != null) {
+                rendered.putIfAbsent(rules.get(index).id().value(), ruleBody);
+            }
+        }
+        return rendered;
+    }
+
+    private static BuildIdentity buildIdentity(BtmGenerationRequest request,
+                                               SourceFingerprintResult sourceFingerprint,
+                                               String btmRulesFingerprint) {
+        String projectKey = request.projectKey().isBlank() ? BuildIdentity.UNKNOWN : request.projectKey();
+        String seed = projectKey + "|" + sourceFingerprint.sourceFingerprint().value() + "|" + btmRulesFingerprint
+                + "|" + request.pluginVersion();
+        BuildId buildId = new BuildId("sha256:" + sha256(seed));
+        return new BuildIdentity(
+                projectKey,
+                AnalysisRunId.deterministic(buildId.value()),
+                buildId,
+                sourceFingerprint.sourceFingerprint(),
+                BuildIdentity.NOT_COMPUTED,
+                btmRulesFingerprint,
+                BuildIdentity.NOT_COMPUTED,
+                request.pluginVersion(),
+                AnalysisSchemaVersion.CURRENT,
+                Instant.EPOCH);
+    }
+
+    private static String rulesFingerprint(List<String> rules) {
+        return "sha256:" + sha256(String.join("\n", rules));
+    }
+
+    private static String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available.", e);
+        }
+    }
+
+    private static Path analysisBaseDirectory(BtmGenerationRequest request) {
+        Path parent = request.manifestFile().toAbsolutePath().normalize().getParent();
+        return parent == null ? Path.of(".").toAbsolutePath().normalize() : parent;
     }
 
     private CodeScanPort createScanner(BtmGenerationRequest request, ScanProfileCollector profileCollector) {
@@ -201,9 +386,14 @@ public final class BtmGenerationRunner {
     }
 
     private void writeRules(BtmGenerationRequest request, List<String> rules) {
+        writeRules(request, rules, null);
+    }
+
+    private void writeRules(BtmGenerationRequest request, List<String> rules, BuildIdentity identity) {
         Path outputFile = request.outputFile();
         try {
-            createWriter(outputFile, request.includeTimestampHeader()).write(rules);
+            List<String> header = identity == null ? List.of() : new BtmHeaderRenderer().render(identity);
+            createWriter(outputFile, request.includeTimestampHeader()).write(header, rules);
         } catch (UncheckedIOException e) {
             throw new BtmGenerationException("Failed writing BTM file " + outputFile, e);
         }
@@ -386,6 +576,9 @@ public final class BtmGenerationRunner {
     private record RuleHeader(int startIndex, int endIndex, String prefix, String name) {
     }
 
-    private record RunOutput(List<String> rules, ConditionValidationReport validationReport) {
+    private record RunOutput(List<Rule> domainRules,
+                             List<String> renderedRules,
+                             AnalysisContext context,
+                             ConditionValidationReport validationReport) {
     }
 }

@@ -56,6 +56,10 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 "Profiling writes local diagnostic state that should be refreshed on execution.",
                 task -> getProfilingEnabled().getOrElse(false)
         );
+        getOutputs().doNotCacheIf(
+                "Analysis store writes H2 files that are retained as local analysis state.",
+                task -> getAnalysisStoreEnabled().getOrElse(false)
+        );
     }
 
     // ---- Configurable inputs ----
@@ -104,6 +108,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Input @Optional public abstract Property<@NotNull String> getCacheBackend();
     @Internal public abstract RegularFileProperty getCacheDatabaseFile();
     @LocalState @Optional public abstract DirectoryProperty getCacheDatabaseDirectory();
+    @Input @Optional public abstract Property<@NotNull Boolean> getAnalysisStoreEnabled();
+    @OutputDirectory @Optional public abstract DirectoryProperty getAnalysisStoreDirectory();
+    @Input @Optional public abstract Property<@NotNull String> getCleanupPolicy();
+    @Input @Optional public abstract Property<@NotNull String> getProjectKey();
+    @Input @Optional public abstract Property<@NotNull String> getPluginVersion();
+    @OutputFile @Optional public abstract RegularFileProperty getManifestFile();
+    @OutputFile @Optional public abstract RegularFileProperty getChecksumsFile();
     @Input @Optional public abstract Property<@NotNull Boolean> getProfilingEnabled();
     @LocalState @Optional public abstract RegularFileProperty getProfileReportFile();
     @Input @Optional public abstract Property<@NotNull Boolean> getStrictParsing();
@@ -130,6 +141,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getCacheBackend().convention(ext.getCacheBackend());
         getCacheDatabaseFile().set(getProjectLayout().file(ext.getCacheDatabaseFile()));
         getCacheDatabaseDirectory().convention(getProjectLayout().dir(ext.getCacheDatabaseFile().map(GenerateBtmTask::parentDirectory)));
+        getAnalysisStoreEnabled().convention(ext.getAnalysisStoreEnabled());
+        getAnalysisStoreDirectory().convention(getProjectLayout().dir(ext.getAnalysisStoreDirectory()));
+        getCleanupPolicy().convention(ext.getCleanupPolicy());
+        getProjectKey().convention(ext.getProjectKey().orElse(getProject().getName()));
+        getPluginVersion().convention(getProject().getVersion().toString());
+        getManifestFile().set(getProjectLayout().file(ext.getManifestFile()));
+        getChecksumsFile().set(getProjectLayout().file(ext.getChecksumsFile()));
         getProfilingEnabled().convention(ext.getProfilingEnabled());
         getProfileReportFile().set(getProjectLayout().file(ext.getProfileReportFile()));
         getStrictParsing().convention(ext.getStrictParsing());
@@ -156,8 +174,10 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .sourceRoots(resolveSourceRoots())
                 .outputFile(getOutputFile().get().getAsFile().toPath())
                 .cacheDatabaseFile(getCacheDatabaseFile().get().getAsFile().toPath())
+                .analysisStoreDirectory(getAnalysisStoreDirectory().get().getAsFile().toPath())
                 .profileReportFile(getProfileReportFile().get().getAsFile().toPath())
                 .cacheEnabled(getCacheEnabled().getOrElse(false))
+                .analysisStoreEnabled(getAnalysisStoreEnabled().getOrElse(true))
                 .cacheBackend(getCacheBackend().getOrElse("h2"))
                 .profilingEnabled(getProfilingEnabled().getOrElse(false))
                 .strictParsing(getStrictParsing().getOrElse(false))
@@ -167,7 +187,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .helperFqn(resolveHelperFqn())
                 .includeEntryExit(includeEntryExit())
                 .minBranchesPerMethod(minBranches())
-                .includeTimestampHeader(getIncludeTimestampHeader().getOrElse(false));
+                .includeTimestampHeader(getIncludeTimestampHeader().getOrElse(false))
+                .cleanupPolicy(getCleanupPolicy().getOrElse("KEEP_ON_SUCCESS"))
+                .projectKey(getProjectKey().getOrElse("UNKNOWN"))
+                .pluginVersion(getPluginVersion().getOrElse("UNKNOWN"))
+                .manifestFile(getManifestFile().get().getAsFile().toPath())
+                .checksumsFile(getChecksumsFile().get().getAsFile().toPath());
 
         if (hasMinimalInputs()) {
             builder.templateRequest(new BtmTemplateRequest(
@@ -202,6 +227,13 @@ public abstract class GenerateBtmTask extends DefaultTask {
         conventionIfMissing(getCacheBackend(), "h2");
         conventionIfMissing(getCacheDatabaseFile(), layout.getBuildDirectory().file("forensics/cache/scan-cache"));
         conventionIfMissing(getCacheDatabaseDirectory(), layout.getBuildDirectory().dir("forensics/cache"));
+        conventionIfMissing(getAnalysisStoreEnabled(), true);
+        conventionIfMissing(getAnalysisStoreDirectory(), layout.getBuildDirectory().dir("forensics/analysis-store"));
+        conventionIfMissing(getCleanupPolicy(), "KEEP_ON_SUCCESS");
+        conventionIfMissing(getProjectKey(), "UNKNOWN");
+        conventionIfMissing(getPluginVersion(), "UNKNOWN");
+        conventionIfMissing(getManifestFile(), layout.getBuildDirectory().file("forensics/manifest.json"));
+        conventionIfMissing(getChecksumsFile(), layout.getBuildDirectory().file("forensics/checksums.sha256"));
         conventionIfMissing(getProfilingEnabled(), false);
         conventionIfMissing(getProfileReportFile(), layout.getBuildDirectory().file("forensics/scan-profile.json"));
         conventionIfMissing(getStrictParsing(), false);

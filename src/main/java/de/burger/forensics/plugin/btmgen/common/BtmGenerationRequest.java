@@ -12,8 +12,10 @@ public record BtmGenerationRequest(
         List<Path> sourceRoots,
         Path outputFile,
         Path cacheDatabaseFile,
+        Path analysisStoreDirectory,
         Path profileReportFile,
         boolean cacheEnabled,
+        boolean analysisStoreEnabled,
         String cacheBackend,
         boolean profilingEnabled,
         boolean strictParsing,
@@ -25,6 +27,11 @@ public record BtmGenerationRequest(
         boolean includeEntryExit,
         int minBranchesPerMethod,
         boolean includeTimestampHeader,
+        String cleanupPolicy,
+        String projectKey,
+        String pluginVersion,
+        Path manifestFile,
+        Path checksumsFile,
         Optional<BtmTemplateRequest> templateRequest
 ) {
 
@@ -32,6 +39,7 @@ public record BtmGenerationRequest(
         sourceRoots = List.copyOf(Objects.requireNonNull(sourceRoots, "sourceRoots"));
         Objects.requireNonNull(outputFile, "outputFile");
         Objects.requireNonNull(cacheDatabaseFile, "cacheDatabaseFile");
+        Objects.requireNonNull(analysisStoreDirectory, "analysisStoreDirectory");
         Objects.requireNonNull(profileReportFile, "profileReportFile");
         Objects.requireNonNull(cacheBackend, "cacheBackend");
         includePackages = List.copyOf(Objects.requireNonNull(includePackages, "includePackages"));
@@ -40,6 +48,11 @@ public record BtmGenerationRequest(
         if (minBranchesPerMethod < 0) {
             throw new IllegalArgumentException("minBranchesPerMethod must not be negative");
         }
+        Objects.requireNonNull(cleanupPolicy, "cleanupPolicy");
+        Objects.requireNonNull(projectKey, "projectKey");
+        Objects.requireNonNull(pluginVersion, "pluginVersion");
+        Objects.requireNonNull(manifestFile, "manifestFile");
+        Objects.requireNonNull(checksumsFile, "checksumsFile");
         Objects.requireNonNull(templateRequest, "templateRequest");
     }
 
@@ -51,8 +64,10 @@ public record BtmGenerationRequest(
         private List<Path> sourceRoots = List.of();
         private Path outputFile = BtmGenerationDefaults.defaultOutputFile();
         private Path cacheDatabaseFile = BtmGenerationDefaults.defaultCacheDatabaseFile();
+        private Path analysisStoreDirectory = BtmGenerationDefaults.defaultAnalysisStoreDirectory();
         private Path profileReportFile = BtmGenerationDefaults.defaultProfileReportFile();
         private boolean cacheEnabled = BtmGenerationDefaults.DEFAULT_CACHE_ENABLED;
+        private boolean analysisStoreEnabled = BtmGenerationDefaults.DEFAULT_ANALYSIS_STORE_ENABLED;
         private String cacheBackend = BtmGenerationDefaults.DEFAULT_CACHE_BACKEND;
         private boolean profilingEnabled = BtmGenerationDefaults.DEFAULT_PROFILING_ENABLED;
         private boolean strictParsing = BtmGenerationDefaults.DEFAULT_STRICT_PARSING;
@@ -64,6 +79,11 @@ public record BtmGenerationRequest(
         private boolean includeEntryExit = BtmGenerationDefaults.DEFAULT_INCLUDE_ENTRY_EXIT;
         private int minBranchesPerMethod = BtmGenerationDefaults.DEFAULT_MIN_BRANCHES_PER_METHOD;
         private boolean includeTimestampHeader = BtmGenerationDefaults.DEFAULT_INCLUDE_TIMESTAMP_HEADER;
+        private String cleanupPolicy = BtmGenerationDefaults.defaultCleanupPolicy();
+        private String projectKey = "UNKNOWN";
+        private String pluginVersion = "UNKNOWN";
+        private Path manifestFile = BtmGenerationDefaults.defaultManifestFile();
+        private Path checksumsFile = BtmGenerationDefaults.defaultChecksumsFile();
         private Optional<BtmTemplateRequest> templateRequest = Optional.empty();
 
         public Builder sourceRoot(Path sourceRoot) {
@@ -86,6 +106,11 @@ public record BtmGenerationRequest(
             return this;
         }
 
+        public Builder analysisStoreDirectory(Path analysisStoreDirectory) {
+            this.analysisStoreDirectory = Objects.requireNonNull(analysisStoreDirectory, "analysisStoreDirectory");
+            return this;
+        }
+
         public Builder profileReportFile(Path profileReportFile) {
             this.profileReportFile = Objects.requireNonNull(profileReportFile, "profileReportFile");
             return this;
@@ -93,6 +118,11 @@ public record BtmGenerationRequest(
 
         public Builder cacheEnabled(boolean cacheEnabled) {
             this.cacheEnabled = cacheEnabled;
+            return this;
+        }
+
+        public Builder analysisStoreEnabled(boolean analysisStoreEnabled) {
+            this.analysisStoreEnabled = analysisStoreEnabled;
             return this;
         }
 
@@ -151,6 +181,31 @@ public record BtmGenerationRequest(
             return this;
         }
 
+        public Builder cleanupPolicy(String cleanupPolicy) {
+            this.cleanupPolicy = Objects.requireNonNull(cleanupPolicy, "cleanupPolicy");
+            return this;
+        }
+
+        public Builder projectKey(String projectKey) {
+            this.projectKey = Objects.requireNonNull(projectKey, "projectKey");
+            return this;
+        }
+
+        public Builder pluginVersion(String pluginVersion) {
+            this.pluginVersion = Objects.requireNonNull(pluginVersion, "pluginVersion");
+            return this;
+        }
+
+        public Builder manifestFile(Path manifestFile) {
+            this.manifestFile = Objects.requireNonNull(manifestFile, "manifestFile");
+            return this;
+        }
+
+        public Builder checksumsFile(Path checksumsFile) {
+            this.checksumsFile = Objects.requireNonNull(checksumsFile, "checksumsFile");
+            return this;
+        }
+
         public Builder templateRequest(BtmTemplateRequest templateRequest) {
             this.templateRequest = Optional.of(Objects.requireNonNull(templateRequest, "templateRequest"));
             return this;
@@ -166,8 +221,10 @@ public record BtmGenerationRequest(
                     sourceRoots,
                     outputFile,
                     cacheDatabaseFile,
+                    analysisStoreDirectory,
                     profileReportFile,
                     cacheEnabled,
+                    analysisStoreEnabled,
                     cacheBackend,
                     profilingEnabled,
                     strictParsing,
@@ -179,6 +236,11 @@ public record BtmGenerationRequest(
                     includeEntryExit,
                     minBranchesPerMethod,
                     includeTimestampHeader,
+                    cleanupPolicy,
+                    projectKey,
+                    pluginVersion,
+                    manifestFile,
+                    checksumsFile,
                     templateRequest
             );
         }
