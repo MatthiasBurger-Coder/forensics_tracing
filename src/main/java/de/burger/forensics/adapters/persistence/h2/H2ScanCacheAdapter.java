@@ -1,5 +1,7 @@
 package de.burger.forensics.adapters.persistence.h2;
 
+import de.burger.forensics.adaptersupport.persistence.h2.H2ConnectionFactory;
+import de.burger.forensics.adaptersupport.persistence.h2.SqlTransactionRunner;
 import de.burger.forensics.domain.model.RuleTemplate;
 import de.burger.forensics.domain.model.ScanEvent;
 import de.burger.forensics.domain.model.SourceLocation;
@@ -11,12 +13,9 @@ import de.burger.forensics.domain.model.cache.ScanProfile;
 import de.burger.forensics.domain.model.cache.SourceFileFingerprint;
 import de.burger.forensics.domain.model.cache.SourceFileSnapshot;
 import de.burger.forensics.domain.port.out.ScanCachePort;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -43,13 +42,14 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
     private static final int CURRENT_SCHEMA_VERSION = 4;
     private static final String PHASE_METRIC_PREFIX = "phase:";
 
-    private final Path databasePath;
-    private final String jdbcUrl;
+    private final H2ConnectionFactory connectionFactory;
+    private final SqlTransactionRunner transactions;
 
     public H2ScanCacheAdapter(Path databasePath) {
-        this.databasePath = Objects.requireNonNull(databasePath, "Database path must not be null.");
-        this.jdbcUrl = "jdbc:h2:file:" + databasePath.toAbsolutePath().normalize().toString().replace('\\', '/')
-                + ";DATABASE_TO_UPPER=false";
+        this.connectionFactory = new H2ConnectionFactory(Objects.requireNonNull(
+                databasePath,
+                "Database path must not be null."));
+        this.transactions = new SqlTransactionRunner(connectionFactory, "H2 scan cache");
     }
 
     @Override
@@ -123,42 +123,11 @@ public final class H2ScanCacheAdapter implements ScanCachePort {
     }
 
     private Connection openConnection() throws SQLException {
-        Path parent = databasePath.toAbsolutePath().normalize().getParent();
-        if (parent != null) {
-            try {
-                Files.createDirectories(parent);
-            } catch (IOException e) {
-                throw new IllegalStateException("Failed to create H2 scan cache directory " + parent + ".", e);
-            }
-        }
-        return DriverManager.getConnection(jdbcUrl);
+        return connectionFactory.openConnection();
     }
 
     private void executeInTransaction(String operation, SqlWork work) {
-        try (Connection connection = openConnection()) {
-            connection.setAutoCommit(false);
-            executeAndCommit(connection, work);
-        } catch (SQLException e) {
-            throw new IllegalStateException("Failed to " + operation + " H2 scan cache.", e);
-        }
-    }
-
-    private static void executeAndCommit(Connection connection, SqlWork work) throws SQLException {
-        try {
-            work.execute(connection);
-            connection.commit();
-        } catch (SQLException | RuntimeException e) {
-            rollback(connection, e);
-            throw e;
-        }
-    }
-
-    private static void rollback(Connection connection, Exception cause) {
-        try {
-            connection.rollback();
-        } catch (SQLException rollbackFailure) {
-            cause.addSuppressed(rollbackFailure);
-        }
+        transactions.run(operation, work::execute);
     }
 
     private static boolean tableExists(Connection connection, String tableName) throws SQLException {

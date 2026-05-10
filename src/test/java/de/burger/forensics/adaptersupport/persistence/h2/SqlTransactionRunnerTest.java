@@ -56,6 +56,20 @@ class SqlTransactionRunnerTest {
     }
 
     @Test
+    void usesConfiguredTargetDescriptionInSqlFailureMessages() {
+        Path databasePath = tempDir.resolve("custom-target");
+        SqlTransactionRunner runner = new SqlTransactionRunner(
+                new H2ConnectionFactory(databasePath),
+                "H2 scan cache");
+
+        assertThatThrownBy(() -> runner.run("initialize", connection -> {
+            throw new SQLException("boom");
+        }))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Failed to initialize H2 scan cache.");
+    }
+
+    @Test
     void rollsBackRuntimeFailuresAndPropagatesTheOriginalException() throws SQLException {
         Path databasePath = tempDir.resolve("runtime-failure");
         SqlTransactionRunner runner = runner(databasePath);

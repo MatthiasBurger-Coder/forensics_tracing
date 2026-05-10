@@ -98,9 +98,18 @@ class BtmGenMojoTest {
     }
 
     private static void setField(BtmGenMojo mojo, String name, Object value) throws Exception {
-        Field field = BtmGenMojo.class.getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(mojo, value);
+        Class<?> current = mojo.getClass();
+        while (current != null) {
+            try {
+                Field field = current.getDeclaredField(name);
+                field.setAccessible(true);
+                field.set(mojo, value);
+                return;
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(name);
     }
 
     private static final class SilentLog implements Log {
