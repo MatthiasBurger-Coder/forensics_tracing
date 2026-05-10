@@ -1,1313 +1,1353 @@
-# workflow.md — Build Tool Connector Feature Parity
+# Workflow: Migrate Forensics Core into `forensic_analytics` Engine
 
-## 0. Source check result from current `main`
+## Purpose
 
-This workflow was checked again against the currently visible GitHub `main` source state.
+This workflow guides Codex through the controlled migration from a plugin-centric architecture into a dedicated Forensics Engine architecture.
 
-Important source-state note:
+The goal is not to move everything at once. The goal is to extract the reusable analysis core into `forensic_analytics`, while keeping `forensics_tracing` as a thin Gradle/Maven adapter.
+
+## Repositories
+
+Codex is expected to work with two local repositories:
 
 ```text
-The uploaded local ZIP appears to be older than the GitHub main state.
-The ZIP checkout is on commit 938c051 and does not contain the current Maven adapter / Analysis Store parity work.
-The current GitHub main state contains a newer implementation with Maven aggregation and Maven Analysis Store support.
-Use GitHub main as the source of truth for this verification unless explicitly told to validate the uploaded ZIP only.
+forensics_tracing      # Existing Gradle/Maven plugin project
+forensic_analytics     # Target engine / analysis platform project
 ```
 
-Checked areas:
+If one of these repositories is missing, Codex must stop and report the missing repository instead of guessing paths or creating an unrelated structure.
+
+## Global Rules
+
+* Use Java 25 for the Forensics core.
+* Use JUnit 6 for all tests.
+* Use Gradle 9.4.0 only.
+* Do not perform a big-bang migration.
+* Do not delete working functionality without a replacement plan.
+* Do not move Gradle or Maven plugin adapter code into the Engine unless explicitly required by this workflow.
+* Source code and source comments must be written in English.
+* User-facing reports must be written in German.
+* Preserve hexagonal architecture.
+* Domain modules must not depend on frameworks, Gradle, Maven, Joern CLI, Docker, gRPC, Spring, persistence, or UI technologies.
+* Application modules may depend on domain ports and use cases, but not on concrete infrastructure implementations.
+* Infrastructure adapters must depend inward on application/domain contracts.
+* If a class, method, responsibility, package, or architectural boundary is unclear, stop and report.
+* Do not silently guess.
+* Do not lower coverage thresholds.
+* Do not disable failing tests.
+* Do not remove tests to make the build pass.
+* Every behavior-relevant migration must have regression tests.
+
+## Target Architecture
+
+The target architecture separates the system into:
 
 ```text
-AGENTS.md
-QUALITY.md
-README.md
-workflow.md
-src/main/java/de/burger/forensics/plugin/btmgen/gradle/**
-src/main/java/de/burger/forensics/plugin/btmgen/maven/**
-src/main/java/de/burger/forensics/plugin/btmgen/common/**
-src/main/java/de/burger/forensics/adapters/persistence/h2/**
-src/test/java/de/burger/forensics/plugin/btmgen/**
-src/test/java/de/burger/forensics/adapters/persistence/h2/**
-src/test/java/de/burger/forensics/quality/**
+forensics_tracing
+  -> Gradle plugin adapter
+  -> Maven plugin adapter
+  -> build-system integration
+  -> optional BTM generation adapter
+  -> later: gRPC client / Engine client
+
+forensic_analytics
+  -> Forensics Engine
+  -> repository checkout / source acquisition
+  -> JavaParser / AST analysis
+  -> Joern / CPG analysis via container adapter
+  -> graph / replay / report model
+  -> persistence
+  -> gRPC ingestion
+  -> CLI
+  -> server / API
+  -> later: UI integration
 ```
 
-Confirmed features in GitHub `main`:
+The plugin must become a producer or client. The Engine must become the owner of analysis orchestration.
+
+## High-Level Migration Strategy
+
+The migration must be done in slices:
 
 ```text
-- Maven BtmGenMojo exists.
-- Maven BtmGenMojo delegates BTM generation to BtmGenerationRunner.
-- Maven BtmGenMojo supports module-local BTM generation parameters.
-- Maven BtmGenMojo supports module-local Analysis Store parameters.
-- Maven BtmGenMojo supports module-local manifest/checksum parameters.
-- Maven BtmGenAggregateMojo exists.
-- Maven BtmGenAggregateMojo uses MavenSession and reactor projects.
-- MavenReactorSourceRootCollector exists.
-- Maven reactor aggregation collects existing compile source roots.
-- Maven reactor aggregation can include test compile source roots when includeTests=true.
-- Maven reactor aggregation ignores empty/non-existing source roots.
-- Maven clean-analysis goal exists.
-- Gradle GenerateBtmTask supports BTM generation, sourceRoots, scanSubprojects, includeTests, excludes, cache, profiling, Analysis Store, manifest, checksums, cleanup policy, and deterministic output controls.
-- Gradle BtmGenExtension exposes Joern configuration.
-- Gradle plugin registers analyzeForensicsSemantics, importForensicsSemantics, and forensicsAnalyze.
-- Shared BtmGenerationRunner writes BTM, Analysis Store rows, manifest, and checksums.
-- Shared ForensicsSemanticAnalysisRunner imports Joern semantic results into the Analysis Store.
-- H2AnalysisStoreAdapter contains static analysis tables and semantic/Joern-related tables.
-- README documents Maven btmgen, btmgen-aggregate, clean-analysis, and Maven Analysis Store output.
-- Maven exposes Joern configuration through semantic and full-analysis goals.
-- Maven analyze-semantics and import-semantics goals are implemented.
-- Maven analyze and analyze-aggregate goals run BTM generation plus Joern semantic enrichment.
-- BuildToolConnectorParityTest enforces that the capability catalog has no connector gaps.
-- MavenJoernConfigurationParityTest and MavenFullAnalysisParityTest cover Maven Joern/full-analysis parity without requiring a local Joern installation.
+1. Inspect both repositories
+2. Classify existing responsibilities
+3. Create a migration work plan
+4. Prepare the Engine module structure
+5. Move neutral domain contracts
+6. Move application-level analysis orchestration
+7. Add Joern Docker adapter to the Engine
+8. Add repository checkout/source acquisition adapter
+9. Add CLI entry point
+10. Add gRPC ingestion contract/module
+11. Reduce plugin logic to adapter/client role
+12. Add external E2E testbed
+13. Verify complete quality gates
 ```
 
-Known remaining gaps in GitHub `main`:
+Each slice must compile and be verifiable before continuing.
 
-```text
-- No known Gradle/Maven connector parity gaps remain after this workflow update.
-```
+---
 
-Answer to the current verification questions:
+# Phase 0: Safety Preparation
 
-```text
-1. Gradle Plugin and Maven Plugin now execute the same connector-level forensic analysis actions.
-   They are equivalent for BTM generation, Analysis Store output, and Joern/full semantic analysis after this workflow update.
+## 0.1 Create or verify branches
 
-2. Planned connector parity features are included.
-   Maven reactor aggregation, Maven Analysis Store, and Maven Joern/full-analysis parity are included.
-
-3. The database can be inspected.
-   The generated H2 database is retained when cleanupPolicy keeps it, especially KEEP_ON_SUCCESS or KEEP_ALWAYS.
-   Default generated locations are build/forensics/analysis-store/analysis-store.mv.db for Gradle and target/forensics/analysis-store/analysis-store.mv.db for Maven.
-```
-
-Implementation priority from this source check:
-
-```text
-1. Add/verify mandatory connector parity rules in AGENTS.md.
-2. Add/verify connector parity quality gate in QUALITY.md.
-3. Add Maven Joern parameters.
-4. Add Maven analyze-semantics / import-semantics / analyze / analyze-aggregate goals.
-5. Extend shared orchestration/request model for full semantic analysis parity.
-6. Add Maven Joern/full-analysis parity tests.
-7. Add database inspection documentation to README.
-8. Run targeted parity tests and full quality gate.
-```
-
-## 1. Goal
-
-Ensure that the Maven plugin connector and the Gradle plugin connector expose the same forensic analysis capabilities.
-
-The build tool must not decide which forensic capabilities are available. Gradle and Maven are inbound adapters only. All forensic behavior must live in build-tool-neutral core/application services and must be invoked through the same request/result model.
-
-Target rule:
-
-```text
-Gradle project analysis == Maven project analysis
-Gradle multi-project analysis == Maven reactor analysis
-Gradle Joern enrichment == Maven Joern enrichment
-Gradle Analysis Store output == Maven Analysis Store output
-```
-
-Allowed differences:
-
-```text
-Gradle API mapping
-Gradle task registration
-Gradle extension/provider types
-Gradle SourceSet discovery
-
-Maven API mapping
-Maven Mojo parameters
-MavenSession / MavenProject access
-Maven reactor project discovery
-Maven lifecycle binding
-```
-
-Forbidden differences:
-
-```text
-BTM generation capabilities
-Analysis Store capabilities
-Joern semantic enrichment capabilities
-Manifest/checksum generation
-Build identity semantics
-Source root aggregation semantics
-Include/exclude semantics
-Test source inclusion semantics
-Profiling/cache behavior
-Generated artifact structure
-Quality gate requirements
-```
-
-## 2. Architectural decision
-
-Introduce an explicit **Build Tool Connector Feature Parity** rule.
-
-Decision:
-
-```text
-Every forensic capability that is exposed by one build-tool connector must be exposed by every supported build-tool connector, unless it is explicitly documented as build-tool-specific and approved as an exception.
-```
-
-Rationale:
-
-```text
-The project analyzes Java source code and generated forensic artifacts.
-Gradle and Maven are only access paths into the same analysis engine.
-A Maven project must not receive weaker forensic analysis than a Gradle project.
-A Gradle project must not receive weaker forensic analysis than a Maven project.
-```
-
-Implication:
-
-```text
-New capabilities must be implemented in build-tool-neutral core/application code first.
-Gradle and Maven adapters may only map their build-tool-specific configuration into the shared request model.
-Parity tests are mandatory for every public connector capability.
-```
-
-## 3. Non-goals
-
-Do not implement unrelated platform features in this workflow.
-
-Not part of this workflow:
-
-```text
-gRPC upload
-forensic_analytics server ingestion
-runtime replay engine
-LLM context generation
-graph database export
-vector store export
-automatic bug fixing
-automatic deployment
-new public tracing API design
-```
-
-Do not rewrite the whole package structure unless the current source state already requires it.
-
-Do not weaken existing quality rules, coverage thresholds, architecture tests, or dependency verification.
-
-## 4. Technical baseline
-
-Use the project-approved baseline.
-
-## 4.1 Mandatory AGENTS.md alignment for workflow creation
-
-Every `workflow.md` must be created from the current `AGENTS.md` rules first.
-
-Mandatory workflow creation rule:
-
-```text
-Before creating or changing a workflow.md, read AGENTS.md and align the workflow with its architecture rules, stop conditions, coding conventions, quality expectations, and agent behavior requirements.
-```
-
-This applies especially to:
-
-```text
-- hexagonal architecture boundaries
-- STOP-and-report rules
-- no speculative implementation
-- regression-first workflow
-- test and quality gate expectations
-- build-tool connector parity rules
-- Java/Gradle/Maven baseline constraints
-- documentation and commit requirements
-```
-
-If `AGENTS.md` conflicts with an existing workflow draft, update the workflow or stop and report the conflict.
-
-Acceptance criteria:
-
-```text
-[ ] workflow.md explicitly follows AGENTS.md.
-[ ] Any AGENTS.md conflict is reported before implementation.
-[ ] No workflow introduces rules that weaken AGENTS.md.
-[ ] No workflow bypasses existing architecture or quality rules.
-```
-
-## 4.2 Technical baseline
-
-Current project decision for this workflow:
-
-```text
-JDK: 17
-Gradle: 9.4.0
-JUnit: 5
-ArchUnit: enabled
-JaCoCo: enabled
-Architecture: hexagonal
-```
-
-If repository files disagree about the baseline, stop and report before implementing functional changes.
-
-Baseline alignment must be handled deliberately. Do not silently upgrade or downgrade Java, Gradle, Maven plugin APIs, JaCoCo, SonarQube plugins, or dependency versions while implementing connector parity.
-
-## 5. Required connector capability matrix
-
-Add and maintain a documented parity matrix.
-
-Minimum capabilities:
-
-```text
-Capability                                  Gradle   Maven   Notes
-BTM generation                              yes      yes     Same runner/use case
-Single module/project scan                  yes      yes     Same source-root semantics
-Multi-module/project aggregation            yes      yes     Gradle subprojects / Maven reactor
-Explicit sourceRoots                        yes      yes     Deterministic de-duplication
-Main source roots                           yes      yes     SourceSet / compileSourceRoots
-Test source roots                           yes      yes     includeTests flag
-Include package/class prefixes              yes      yes     Same matching semantics
-Exclude package/class prefixes              yes      yes     Same matching semantics
-Strict parsing                              yes      yes     Same failure behavior
-Strict condition validation                 yes      yes     Same warning/fail behavior
-Dependency-aware invalidation/cache          yes      yes     Same cache model
-Profiling report                            yes      yes     Same profile format
-includeEntryExit                            yes      yes     Same rule semantics
-minBranchesPerMethod                        yes      yes     Same filter semantics
-includeTimestampHeader                      yes      yes     Same deterministic/cache behavior
-Analysis Store                              yes      yes     Same schema/artifacts
-Analysis Store cleanup policy               yes      yes     Same policies
-Manifest generation                         yes      yes     Same schema
-Checksum generation                         yes      yes     Same checksum rules
-BuildIdentity / AnalysisRunId               yes      yes     Same identity model
-Joern enable/disable                        yes      yes     Default disabled
-Joern CLI executable configuration          yes      yes     Same external adapter
-Joern semantic artifact generation          yes      yes     Same artifacts
-Joern import into Analysis Store            yes      yes     Same tables
-Semantic anchor matching                    yes      yes     Same matching rules
-Full analysis aggregate command             yes      yes     Gradle task / Maven goal
-Clean generated analysis artifacts          yes      yes     Same cleanup behavior
-```
-
-Rules:
-
-```text
-- A capability may not be Gradle-only by default.
-- A capability may not be Maven-only by default.
-- If a capability is temporarily missing, it must be documented as a known gap and must fail a TODO/disabled parity test with a tracking reason.
-- New public connector parameters require a parity check.
-```
-
-## 6. Required AGENTS.md extension
-
-Update `AGENTS.md` with a dedicated section.
-
-Suggested insertion location:
-
-```text
-Architecture Rules
-  -> Build Tool Plugins
-  -> Build Tool Connector Feature Parity
-```
-
-Suggested text:
-
-````markdown
-### Build Tool Connector Feature Parity
-
-Gradle and Maven connectors are inbound adapters for the same forensic analysis capabilities.
-
-The following rule is mandatory:
-
-```text
-If a forensic capability is exposed through the Gradle connector, the Maven connector must expose the same capability.
-If a forensic capability is exposed through the Maven connector, the Gradle connector must expose the same capability.
-````
-
-Allowed differences are limited to build-tool-specific mapping and lifecycle integration:
-
-```text
-Gradle: Project, Task, Extension, Provider API, SourceSet, Gradle layout
-Maven: MavenProject, MavenSession, Mojo parameters, ReactorProjects, Maven lifecycle
-```
-
-Forbidden differences:
-
-```text
-BTM generation behavior
-Analysis Store behavior
-Joern semantic enrichment behavior
-Manifest/checksum structure
-BuildIdentity semantics
-Source root aggregation semantics
-Include/exclude semantics
-Validation behavior
-Generated artifact structure
-```
-
-Agents must not implement new Gradle-only or Maven-only forensic capabilities unless the task explicitly defines a temporary exception.
-
-Every new connector capability must be implemented in this order:
-
-1. build-tool-neutral request/result model
-2. application/core service or runner behavior
-3. Gradle adapter mapping
-4. Maven adapter mapping
-5. parity test proving equivalent behavior
-6. README/QUALITY documentation update
-
-Gradle task classes must not call Maven Mojo classes.
-Maven Mojo classes must not call Gradle task classes.
-Both adapters must delegate to shared build-tool-neutral services.
-
-Maven reactor analysis must provide the same repository-level analysis capability as Gradle multi-project analysis.
-A Maven root project with `pom` packaging must be usable as an aggregation context and must not fail only because the root POM has no source roots.
-
-If the agent finds that a capability exists only in one connector, the agent must either:
-
-* implement the missing connector mapping in the same workflow, or
-* stop and report the parity gap with the affected files, tests, and documented behavior.
-
-````
-
-Acceptance criteria:
-
-```text
-[ ] AGENTS.md explicitly requires Gradle/Maven connector feature parity.
-[ ] AGENTS.md forbids hidden Gradle-only or Maven-only forensic capabilities.
-[ ] AGENTS.md requires parity tests for new connector features.
-[ ] AGENTS.md states that Maven reactor aggregation must match Gradle multi-project aggregation.
-````
-
-## 7. Required QUALITY.md extension
-
-Update `QUALITY.md` with a dedicated quality gate section.
-
-Suggested text:
-
-````markdown
-## Build Tool Connector Parity Gate
-
-Gradle and Maven connector behavior must remain equivalent for all forensic capabilities.
-
-The quality gate must verify:
-
-```text
-- shared request model is build-tool-neutral
-- Gradle adapter maps extension/task configuration into the shared request model
-- Maven adapter maps Mojo/Reactor configuration into the shared request model
-- Gradle and Maven produce equivalent BTM output for the same Java sources
-- Gradle and Maven produce equivalent Analysis Store artifacts when enabled
-- Gradle and Maven produce equivalent manifest/checksum metadata
-- Gradle and Maven expose equivalent Joern configuration when Joern support is available
-- Maven reactor aggregation matches Gradle multi-project aggregation semantics
-````
-
-Required local verification:
+Before any code changes, inspect branches in both repositories.
 
 ```bash
-./gradlew test --tests '*BtmGenerationAdapterValidationTest' --console=plain --stacktrace
-./gradlew test --tests '*BuildToolConnectorParityTest' --console=plain --stacktrace
-./gradlew test --tests '*MavenReactorAggregationTest' --console=plain --stacktrace
-./gradlew test --tests '*HexagonRulesTest' --console=plain --stacktrace
-./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage --console=plain --stacktrace
-./gradlew validatePlugins --console=plain --stacktrace
+git status
+git branch --show-current
 ```
 
-If Maven plugin descriptors or Maven integration behavior are changed, the verification must also include a Maven fixture run from a generated test project or an integration-test fixture.
+If the current branch is not appropriate for a migration, create a dedicated branch.
 
-Agents must not claim connector parity unless the parity tests were executed or the reason for not executing them is explicitly reported.
-
-````
-
-Acceptance criteria:
+Recommended branch names:
 
 ```text
-[ ] QUALITY.md contains a connector parity quality gate.
-[ ] QUALITY.md lists targeted parity tests.
-[ ] QUALITY.md keeps the existing full local quality gate intact.
-[ ] QUALITY.md does not replace the current quality gate with a weaker command.
-````
+forensic_analytics: feature/forensics-engine-foundation
+forensics_tracing:  feature/extract-engine-boundary
+```
 
-## 8. Slices
+## 0.2 Inspect working tree state
 
-### Slice 0 — Preflight and current-state verification
-
-Goal:
-
-Verify the actual repository state before changing files.
-
-Commands:
+Run in both repositories:
 
 ```bash
 git status --short
 git diff --stat
-rg -n "BtmGenerationRunner|BtmGenerationRequest|BtmGenMojo|GenerateBtmTask|AnalyzeForensicsSemanticsTask|forensicsAnalyze|joernEnabled|analysisStoreEnabled|MavenSession|reactor" src/main src/test README.md AGENTS.md QUALITY.md build.gradle.kts settings.gradle.kts gradle || true
-./gradlew test --console=plain --stacktrace
+git diff
 ```
 
-Inspect:
+If unrelated changes exist, stop and report them. Do not overwrite or mix them into this migration.
+
+## 0.3 Verify Java and Gradle
+
+Run in both repositories:
+
+```bash
+java -version
+./gradlew --version
+```
+
+Expected:
+
+* Java 25 runtime suitable for the project baseline.
+* Gradle Wrapper available.
+* Gradle 9.4.0 according to project constraints.
+* JUnit 6 is used for tests.
+
+If the wrapper is missing or the Gradle version differs, stop and report.
+
+---
+
+# Phase 1: Repository Inspection
+
+## 1.1 Inspect `forensics_tracing`
+
+Inspect at least:
 
 ```text
-AGENTS.md
+settings.gradle.kts
+build.gradle.kts
+gradle/libs.versions.toml
 QUALITY.md
+AGENTS.md
 README.md
-src/main/java/**/plugin/**/common/**
-src/main/java/**/plugin/**/gradle/**
-src/main/java/**/plugin/**/maven/**
-src/test/java/**/BtmGenerationAdapterValidationTest.java
-src/test/java/**/quality/**
+src/main/java
+src/test/java
 ```
 
-Stop if:
+Also inspect any plugin-specific source sets or packages containing:
 
 ```text
-- AGENTS.md and README.md disagree about Java/Gradle baseline.
-- BtmGenerationRunner does not exist or has incompatible semantics.
-- Maven adapter currently bypasses the shared runner.
-- Existing Analysis Store or Joern implementation differs from the assumed model.
-- Maven support is located outside the expected plugin adapter package.
+Gradle plugin implementation
+Maven Mojo implementation
+BTM generation
+JavaParser scanning
+Joern integration
+Analysis Store
+Semantic analysis
+Manifest/checksum logic
+Report/export logic
+Domain models
+Application services
 ```
 
-Acceptance criteria:
+## 1.2 Inspect `forensic_analytics`
+
+Inspect at least:
 
 ```text
-[ ] Current connector capabilities are known.
-[ ] Current Maven gaps are listed.
-[ ] Current Gradle-only capabilities are listed.
-[ ] No source changes were made in this slice.
-```
-
-### Slice 1 — Add mandatory parity rules to AGENTS.md and QUALITY.md
-
-Goal:
-
-Make connector parity a repository-level engineering rule before functional implementation begins.
-
-Changes:
-
-```text
-AGENTS.md
+settings.gradle.kts
+build.gradle.kts
+gradle/libs.versions.toml
 QUALITY.md
+AGENTS.md
+README.md
+src/main/java
+src/test/java
 ```
 
-Add:
+If it is already a multi-module project, inspect all modules.
+
+Special attention:
 
 ```text
-Build Tool Connector Feature Parity
-Build Tool Connector Parity Gate
-Maven reactor aggregation rule
-Parity test requirement
-Forbidden Gradle-only/Maven-only capability rule
+gRPC ingestion module
+server/bootstrap module
+existing domain/application packages
+persistence setup
+CLI/server entry points
+Docker/testbed directories
 ```
 
-Acceptance criteria:
+## 1.3 Produce inspection report
+
+Create or update this file in `forensic_analytics`:
 
 ```text
-[ ] AGENTS.md says that Gradle and Maven connectors must expose the same forensic capabilities.
-[ ] QUALITY.md requires parity tests.
-[ ] Documentation uses English.
-[ ] Existing STOP/no-guessing rules remain intact.
-[ ] Existing quality gate remains at least as strict as before.
+docs/migration/INSPECTION_REPORT.md
 ```
 
-Verification:
-
-```bash
-./gradlew test --tests '*HexagonRulesTest' --console=plain --stacktrace
-```
-
-### Slice 2 — Create an explicit connector capability inventory
-
-Goal:
-
-Make all connector capabilities visible and testable.
-
-Preferred implementation:
+The report must be written in German and include:
 
 ```text
-src/main/java/de/burger/forensics/plugin/btmgen/common/ConnectorCapability.java
-src/main/java/de/burger/forensics/plugin/btmgen/common/ConnectorCapabilityDescriptor.java
-src/main/java/de/burger/forensics/plugin/btmgen/common/ConnectorCapabilityCatalog.java
+1. Current structure of forensics_tracing
+2. Current structure of forensic_analytics
+3. Existing reusable core logic
+4. Existing plugin-only logic
+5. Existing Engine/server logic
+6. Open architectural questions
+7. First risk assessment
 ```
 
-The catalog should describe capabilities, not execute logic.
+Do not move code during Phase 1.
 
-Example capabilities:
+---
+
+# Phase 2: Responsibility Classification
+
+Create this file in `forensic_analytics`:
 
 ```text
-BTM_GENERATION
-SOURCE_ROOTS
-MAIN_SOURCE_ROOTS
-TEST_SOURCE_ROOTS
-MULTI_MODULE_AGGREGATION
-INCLUDE_FILTERS
-EXCLUDE_FILTERS
-STRICT_PARSING
-STRICT_CONDITION_VALIDATION
-SCAN_CACHE
-PROFILING
-ANALYSIS_STORE
-MANIFEST
-CHECKSUMS
-CLEANUP_POLICY
-JOERN_CONFIGURATION
-JOERN_SEMANTIC_ANALYSIS
-JOERN_IMPORT
-FULL_ANALYSIS_AGGREGATE
+docs/migration/RESPONSIBILITY_MAPPING.md
 ```
 
-Alternative:
+Classify every relevant responsibility from `forensics_tracing` into one of the following categories.
 
-If adding catalog classes is too heavy, create a test-only parity matrix first. However, production capability descriptors are preferred because they can later drive documentation and validation.
+## Category A: Must stay in `forensics_tracing`
 
-Acceptance criteria:
+Examples:
 
 ```text
-[ ] Capability list exists in one authoritative place.
-[ ] The list is not Gradle-specific.
-[ ] The list is not Maven-specific.
-[ ] Tests fail when a connector is missing a mandatory capability.
+Gradle plugin id declaration
+Gradle plugin implementation class
+Gradle task classes
+Gradle extension classes
+Gradle TestKit tests
+Maven Mojo classes
+Maven plugin descriptor configuration
+Maven plugin harness tests
+Plugin publishing configuration
+Build lifecycle integration
+Consumer-project task wiring
+Local plugin output configuration
 ```
 
-Verification:
+## Category B: Must move to `forensic_analytics`
 
-```bash
-./gradlew test --tests '*BuildToolConnectorParityTest' --console=plain --stacktrace
-```
-
-### Slice 3 — Introduce or consolidate the shared request model
-
-Goal:
-
-Ensure that both build-tool adapters map into the same build-tool-neutral request model.
-
-Current candidate:
+Examples:
 
 ```text
-BtmGenerationRequest
+Analysis domain model
+Analysis request/result model
+Engine-neutral scan event model
+Semantic analysis abstractions
+Joern abstraction contracts
+BTM rule domain model if not plugin-specific
+Repository analysis orchestration
+Analysis persistence abstraction
+Graph/replay concepts
+Report/export model
+Finding model
+Correlation/replay event model
+Analysis profile model
+Repository checkout model
 ```
 
-If `BtmGenerationRequest` is now too narrow, introduce a higher-level request:
+## Category C: Temporary duplication allowed
+
+Use only when necessary to avoid breaking the plugin while the Engine boundary is created.
+
+Examples:
 
 ```text
-ForensicsAnalysisRequest
+DTOs during gRPC boundary migration
+Simple value objects before shared contract exists
+Compatibility models used by both repositories during transition
 ```
 
-Minimum fields:
+Temporary duplication must include a removal note.
+
+## Category D: Later shared contract
+
+Examples:
 
 ```text
-sourceRoots
-testSourceRoots
-outputFile
-cacheEnabled
-cacheBackend
-cacheDatabaseFile
-profilingEnabled
-profileReportFile
-strictParsing
-strictConditionValidation
-dependencyAwareInvalidation
-includePackages
-excludePackages
-includeTests
-helperFqn
-includeEntryExit
-minBranchesPerMethod
-includeTimestampHeader
-analysisStoreEnabled
-analysisStoreDirectory
-cleanupPolicy
-projectKey
-manifestFile
-checksumsFile
-joernEnabled
-joernExecutable
-joernParseExecutable
-joernSliceExecutable
-joernWorkspaceDirectory
-joernOutputDirectory
-joernTimeoutSeconds
-joernFailOnError
-buildTool
-buildRoot
-moduleName
-reactorRoot
+gRPC request/response DTOs
+Plugin-to-Engine request model
+Analysis result upload model
+Artifact reference model
+Correlation event model
+Repository metadata model
+Analysis profile schema
+```
+
+## Category E: Delete later
+
+Only classify something here if there is a verified replacement plan.
+
+Examples:
+
+```text
+Obsolete plugin-internal orchestration after Engine extraction
+Duplicate Joern command resolution after Docker adapter exists
+Deprecated local output models replaced by Engine artifact references
+```
+
+## Category F: Unclear / requires decision
+
+Any unclear item must be listed here with a concrete question.
+
+Do not proceed to code migration while important items remain unclear.
+
+---
+
+# Phase 3: Migration Work Plan
+
+Create this file in `forensic_analytics`:
+
+```text
+MIGRATION_WORKPLAN.md
+```
+
+The work plan must be written in German.
+
+It must contain:
+
+```text
+1. Goal
+2. Non-goals
+3. Current architecture
+4. Target architecture
+5. Repository responsibility split
+6. Proposed module structure
+7. Slice plan
+8. Verification strategy
+9. Rollback strategy
+10. Known risks
+11. Decisions required from the user
+12. First implementation slice
+```
+
+## Required target module proposal
+
+The proposal should evaluate these modules:
+
+```text
+forensic-analytics-domain
+forensic-analytics-application
+forensic-analytics-engine
+forensic-analytics-ingestion-grpc
+forensic-analytics-adapter-git
+forensic-analytics-adapter-build-gradle
+forensic-analytics-adapter-build-maven
+forensic-analytics-adapter-javaparser
+forensic-analytics-adapter-joern-docker
+forensic-analytics-adapter-byteman
+forensic-analytics-persistence
+forensic-analytics-cli
+forensic-analytics-server
+forensic-analytics-bootstrap
+testbed
+```
+
+Do not create all modules automatically. First justify which modules are needed immediately and which should wait.
+
+---
+
+# Phase 4: Prepare Engine Foundation
+
+This is the first implementation phase.
+
+Only implement the minimum foundation needed for the Engine boundary.
+
+## 4.1 Module creation
+
+In `forensic_analytics`, create only the modules needed for the first vertical slice.
+
+Recommended minimal start:
+
+```text
+forensic-analytics-domain
+forensic-analytics-application
+forensic-analytics-engine
+forensic-analytics-cli
+```
+
+Optional if already planned and required:
+
+```text
+forensic-analytics-ingestion-grpc
+```
+
+Do not create empty vanity modules without tests or clear purpose.
+
+## 4.2 Dependency direction
+
+The dependency direction must be:
+
+```text
+cli -> engine -> application -> domain
+```
+
+Forbidden:
+
+```text
+domain -> application
+domain -> engine
+domain -> cli
+domain -> infrastructure
+domain -> Gradle
+domain -> Maven
+domain -> Joern
+domain -> Docker
+domain -> Spring
+domain -> persistence
+```
+
+## 4.3 Minimal domain contracts
+
+Create only minimal contracts if needed, for example:
+
+```text
+AnalysisId
+RepositoryLocation
+RepositoryRevision
+AnalysisProfile
+AnalysisRequest
+AnalysisResult
+AnalysisFinding
+AnalysisArtifact
 ```
 
 Rules:
 
+* Keep them framework-free.
+* Prefer immutable value objects or records where appropriate.
+* Do not model infrastructure concerns in the domain.
+* Comments must be in English.
+
+## 4.4 Minimal application contracts
+
+Create use-case ports only if needed, for example:
+
 ```text
-- No Gradle API types in the shared request.
-- No Maven API types in the shared request.
-- No FileCollection, Property, Provider, MavenProject, or MavenSession in the request.
-- Use Path, List<Path>, String, boolean, int, Duration, and domain value objects.
+RunRepositoryAnalysisUseCase
+LoadRepositoryPort
+StoreAnalysisResultPort
+RunSemanticAnalysisPort
+GenerateInstrumentationRulesPort
 ```
 
-Acceptance criteria:
+Do not implement Joern, Git, Docker, Maven, or Gradle behavior here.
 
-```text
-[ ] Shared request can represent all Gradle connector capabilities.
-[ ] Shared request can represent all Maven connector capabilities.
-[ ] Request validation is deterministic and fail-fast.
-[ ] Blank helper FQCN behavior remains unchanged.
-[ ] Existing BTM generation output does not change unexpectedly.
-```
+## 4.5 Verification
 
-Verification:
+Run in `forensic_analytics`:
 
 ```bash
-./gradlew test --tests '*BtmGenerationRequestTest' --console=plain --stacktrace
-./gradlew test --tests '*BuildToolConnectorParityTest' --console=plain --stacktrace
+./gradlew clean test
+./gradlew check
 ```
 
-### Slice 4 — Extract Gradle mapping into a dedicated adapter mapper
+If `QUALITY.md` defines a stricter gate, run the stricter command.
 
-Goal:
-
-Keep `GenerateBtmTask` and other Gradle tasks thin.
-
-Preferred new class:
+Create/update:
 
 ```text
-src/main/java/de/burger/forensics/plugin/btmgen/gradle/GradleForensicsAnalysisRequestFactory.java
+docs/migration/SLICE_01_ENGINE_FOUNDATION_RESULT.md
 ```
 
-Responsibilities:
+The result must include:
 
 ```text
-- read Gradle extension/task properties
-- collect Gradle source roots
-- handle scanSubprojects
-- normalize and de-duplicate roots
-- map all Gradle connector properties into the shared request
+1. What was created
+2. Why it was created
+3. Files changed
+4. Tests added
+5. Commands executed
+6. Result
+7. Open risks
 ```
 
-Forbidden:
+---
+
+# Phase 5: Move Engine-Neutral Domain Model
+
+Only begin this phase after Phase 4 passes.
+
+## 5.1 Identify movable domain classes
+
+From `forensics_tracing`, identify classes that are independent of:
 
 ```text
-- scanner logic
-- rendering logic
-- Analysis Store schema logic
-- Joern process execution
-- Maven API imports
+Gradle
+Maven
+Joern CLI
+Docker
+File system specifics
+ProcessBuilder
+JUnit/TestKit
+Plugin lifecycle
 ```
 
-Acceptance criteria:
+Candidate areas:
 
 ```text
-[ ] GenerateBtmTask delegates request creation.
-[ ] Gradle mapping is unit-testable without running a full build.
-[ ] Gradle source root ordering is deterministic.
-[ ] Gradle adapter still uses Provider/Property APIs correctly.
-[ ] Configuration-cache behavior is not made worse.
+Analysis request/result model
+Scan event model
+Finding model
+Artifact model
+Rule model
+Manifest/checksum model if engine-neutral
+Correlation/replay model
 ```
 
-Verification:
+## 5.2 Move with compatibility strategy
+
+Preferred order:
+
+```text
+1. Copy domain class into forensic_analytics
+2. Add tests in forensic_analytics
+3. Verify compile/test
+4. Mark original location in forensics_tracing as pending extraction
+5. Only remove or replace original after adapter boundary exists
+```
+
+Do not immediately break the plugin project.
+
+## 5.3 Tests
+
+For every migrated domain model, add tests covering:
+
+```text
+valid construction
+invalid construction
+identity/equality if relevant
+serialization expectations if relevant
+edge cases found in existing tests
+```
+
+## 5.4 Verification
+
+Run in `forensic_analytics`:
 
 ```bash
-./gradlew test --tests '*GenerateBtmTaskTest' --console=plain --stacktrace
-./gradlew test --tests '*Gradle*Request*Test' --console=plain --stacktrace
-./gradlew validatePlugins --console=plain --stacktrace
+./gradlew clean test
+./gradlew check
 ```
 
-### Slice 5 — Extract Maven module mapping into a dedicated adapter mapper
-
-Goal:
-
-Keep `BtmGenMojo` thin and equivalent to the Gradle mapping layer.
-
-Preferred new class:
-
-```text
-src/main/java/de/burger/forensics/plugin/btmgen/maven/MavenForensicsAnalysisRequestFactory.java
-```
-
-Responsibilities:
-
-```text
-- read Maven Mojo parameters
-- read MavenProject compile source roots
-- read MavenProject test compile source roots when includeTests=true
-- normalize and de-duplicate roots
-- map all Maven connector parameters into the shared request
-```
-
-Forbidden:
-
-```text
-- calling Gradle task classes
-- duplicating scanner orchestration
-- duplicating rendering orchestration
-- silently ignoring supported shared request fields
-```
-
-Acceptance criteria:
-
-```text
-[ ] BtmGenMojo delegates request creation.
-[ ] Maven module-local scan still works.
-[ ] Missing source roots are handled like Gradle missing roots where applicable.
-[ ] Maven parameter defaults match Gradle defaults unless explicitly documented.
-[ ] Maven can set every shared capability that Gradle can set.
-```
-
-Verification:
+Run in `forensics_tracing` to ensure it still works:
 
 ```bash
-./gradlew test --tests '*BtmGenMojoTest' --console=plain --stacktrace
-./gradlew test --tests '*BtmGenerationAdapterValidationTest' --console=plain --stacktrace
-./gradlew test --tests '*BuildToolConnectorParityTest' --console=plain --stacktrace
+./gradlew clean test
+./gradlew check
 ```
 
-### Slice 6 — Implement Maven reactor source-root aggregation
+If `QUALITY.md` in either repository defines stricter commands, use them.
 
-Goal:
+Create/update:
 
-Give Maven the same repository-level analysis capability that Gradle has for multi-project builds.
+```text
+docs/migration/SLICE_02_DOMAIN_MIGRATION_RESULT.md
+```
+
+---
+
+# Phase 6: Move Application-Level Orchestration
+
+Only begin after domain model migration is stable.
+
+## 6.1 Identify orchestration logic
+
+Find orchestration logic in `forensics_tracing` that is not inherently Gradle/Maven-specific.
+
+Candidate responsibilities:
+
+```text
+Run complete analysis
+Select source roots
+Collect scan events
+Generate analysis result
+Create artifacts
+Coordinate semantic analysis
+Coordinate BTM generation
+Build analysis manifest
+```
+
+Do not move plugin lifecycle code.
+
+## 6.2 Define application use case
+
+In `forensic_analytics`, introduce a use case similar to:
+
+```text
+RunRepositoryAnalysisUseCase
+```
+
+The use case should coordinate ports, not concrete adapters.
+
+Possible ports:
+
+```text
+RepositorySourcePort
+JavaSourceScannerPort
+SemanticAnalysisPort
+InstrumentationRuleGeneratorPort
+AnalysisResultStorePort
+AnalysisArtifactWriterPort
+```
+
+## 6.3 Adapter neutrality rule
+
+The application layer must not call:
+
+```text
+ProcessBuilder
+docker
+joern
+mvn
+gradle
+git command line directly
+file-system-specific code unless behind a port
+```
+
+## 6.4 Tests
+
+Add application tests using fake adapters.
+
+Required test scenarios:
+
+```text
+analysis request is accepted
+source roots are passed to scanner port
+scanner results are included in result
+semantic analysis can be disabled
+semantic analysis can be enabled through port
+artifact references are returned
+failures are reported clearly
+```
+
+## 6.5 Verification
+
+Run both repository gates again.
+
+Create/update:
+
+```text
+docs/migration/SLICE_03_APPLICATION_ORCHESTRATION_RESULT.md
+```
+
+---
+
+# Phase 7: Add Joern Docker Adapter to `forensic_analytics`
+
+This phase introduces the Joern container approach.
+
+## 7.1 Goal
+
+Joern must not depend on the host JDK.
+
+The Engine must support a Docker-based Joern adapter so that large projects such as WildFly can be analyzed without relying on local Windows, WSL, or host-JDK setup.
+
+## 7.2 Module
+
+Create only if not already present:
+
+```text
+forensic-analytics-adapter-joern-docker
+```
+
+## 7.3 Configuration model
+
+Create an infrastructure configuration model, not a domain model, for:
+
+```text
+container image
+container digest or tag
+workspace mount
+output mount
+heap setting
+timeout
+additional Joern arguments
+```
+
+Example conceptual properties:
+
+```properties
+forensics.joern.mode=container
+forensics.joern.container.image=ghcr.io/joernio/joern:<pinned-version>
+forensics.joern.heap=16G
+forensics.joern.workspace=/workspace
+forensics.joern.output=/forensics-output
+```
+
+Do not use `latest` or `nightly` as final production default.
+
+## 7.4 Docker command construction
+
+The adapter must build commands in a testable way.
+
+Do not hide command construction inside untestable string concatenation.
 
 Preferred design:
 
 ```text
-src/main/java/de/burger/forensics/plugin/btmgen/maven/MavenReactorSourceRootCollector.java
-src/main/java/de/burger/forensics/plugin/btmgen/maven/BtmGenAggregateMojo.java
+JoernDockerCommandBuilder
+JoernDockerRunner
+JoernDockerSemanticAnalysisAdapter
 ```
 
-Maven goal:
+Tests must verify command construction without requiring Docker.
+
+## 7.5 Initial behavior
+
+Support at least:
 
 ```text
-forensics:btmgen-aggregate
+joern --version
+joern-parse against mounted workspace
+output artifact path handling
 ```
 
-Aggregation behavior:
+## 7.6 Tests
+
+Required unit tests:
 
 ```text
-- use MavenSession.getProjects()
-- treat the root POM as aggregation context
-- do not fail only because root packaging is pom
-- skip modules without existing source roots
-- collect compile source roots from all reactor modules
-- collect test compile source roots when includeTests=true
-- de-duplicate roots deterministically
-- preserve module identity for manifest/store metadata where possible
+builds docker command with workspace mount
+builds docker command with output mount
+adds heap setting
+uses pinned image
+rejects missing workspace path
+rejects missing image
+reports non-zero exit clearly
 ```
 
-Root POM behavior:
+Optional integration test:
 
 ```text
-A root project with packaging=pom is valid for aggregation.
-It is not required to have src/main/java.
-It must not fail with "No existing Maven source roots" when reactor modules contain source roots.
+run joern --version in container
 ```
 
-Acceptance criteria:
+This test must be disabled or tagged unless Docker availability is explicitly verified.
 
-```text
-[ ] Maven reactor aggregation scans all module compile roots.
-[ ] Maven reactor aggregation optionally scans test roots.
-[ ] Aggregation handles root pom packaging safely.
-[ ] Aggregation produces one coherent BTM output by default.
-[ ] Aggregation produces the same kind of Analysis Store package as Gradle multi-project analysis.
-```
+## 7.7 Verification
 
-Verification:
+Run:
 
 ```bash
-./gradlew test --tests '*MavenReactorSourceRootCollectorTest' --console=plain --stacktrace
-./gradlew test --tests '*MavenReactorAggregationTest' --console=plain --stacktrace
+./gradlew clean test
+./gradlew check
 ```
 
-### Slice 7 — Add Maven Analysis Store parity
-
-Goal:
-
-Maven must generate the same persistent analysis package as Gradle when Analysis Store is enabled.
-
-Required Maven parameters:
+Create/update:
 
 ```text
-analysisStoreEnabled
-analysisStoreDirectory
-cleanupPolicy
-projectKey
-manifestFile
-checksumsFile
+docs/migration/SLICE_04_JOERN_DOCKER_ADAPTER_RESULT.md
 ```
 
-Rules:
+---
+
+# Phase 8: Add Repository Source Adapter
+
+## 8.1 Goal
+
+The Engine must be able to analyze an external repository without requiring the repository to execute the Forensics plugin itself.
+
+## 8.2 Module
+
+Create only if needed:
 
 ```text
-- same default schema
-- same BuildIdentity model
-- same AnalysisRunId semantics
-- same manifest schema
-- same checksum rules
-- same cleanup policies
+forensic-analytics-adapter-git
 ```
 
-Acceptance criteria:
+## 8.3 Responsibilities
+
+The adapter should support:
 
 ```text
-[ ] Maven module-local scan can write Analysis Store artifacts.
-[ ] Maven aggregate scan can write Analysis Store artifacts.
-[ ] Manifest/checksum output matches Gradle schema.
-[ ] Cleanup policy behavior is equivalent.
-[ ] analysisStoreEnabled=false restores BTM-only behavior where supported.
+local repository path
+optional remote clone URL
+branch selection
+tag selection
+commit selection
+checkout into controlled workspace
+clean workspace strategy
 ```
 
-Verification:
+Initial implementation may support local path only.
 
-```bash
-./gradlew test --tests '*AnalysisStore*Test' --console=plain --stacktrace
-./gradlew test --tests '*Maven*AnalysisStore*Test' --console=plain --stacktrace
-./gradlew test --tests '*BuildToolConnectorParityTest' --console=plain --stacktrace
-```
-
-### Slice 8 — Add Maven Joern configuration parity
-
-Goal:
-
-Maven must expose the same optional Joern semantic enrichment configuration as Gradle.
-
-Required Maven parameters:
-
-```text
-joernEnabled
-joernExecutable
-joernParseExecutable
-joernSliceExecutable
-joernWorkspaceDirectory
-joernOutputDirectory
-joernTimeoutSeconds
-joernFailOnError
-```
-
-Maven goals:
-
-```text
-forensics:analyze-semantics
-forensics:import-semantics
-forensics:analyze
-forensics:analyze-aggregate
-```
-
-If separate semantic import is not useful for Maven, document the reason and keep the externally visible full analysis goal equivalent to Gradle `forensicsAnalyze`.
-
-Rules:
-
-```text
-- Joern remains disabled by default.
-- Joern remains an external CLI/process adapter.
-- No Joern Java library dependency is added to the plugin core.
-- Standard tests must not require a local Joern installation.
-- Fake adapter or fixture mode must cover deterministic tests.
-```
-
-Acceptance criteria:
-
-```text
-[ ] Maven can configure Joern executables.
-[ ] Maven can run full BTM + Analysis Store + Joern enrichment.
-[ ] Maven semantic analysis writes the same Joern artifacts and H2 tables.
-[ ] Maven and Gradle use the same SemanticAnalysisPort / AnalyzeSemanticsUseCase.
-[ ] Joern disabled behavior is consistent across connectors.
-```
-
-Verification:
-
-```bash
-./gradlew test --tests '*AnalyzeSemanticsUseCaseTest' --console=plain --stacktrace
-./gradlew test --tests '*Maven*Joern*Test' --console=plain --stacktrace
-./gradlew test --tests '*BuildToolConnectorParityTest' --console=plain --stacktrace
-```
-
-### Slice 9 — Unify full analysis orchestration
-
-Goal:
-
-A full analysis run must have the same internal sequence for Gradle and Maven.
-
-Shared orchestration target:
-
-```text
-ForensicsAnalysisRunner
-```
-
-or, if the existing runner can be safely extended:
-
-```text
-BtmGenerationRunner
-```
-
-Standard full analysis flow:
-
-```text
-1. resolve connector configuration
-2. collect source roots
-3. create shared request
-4. create BuildIdentity / AnalysisRunId
-5. run JavaParser scan
-6. generate domain rules
-7. render BTM rules
-8. write BTM file
-9. write Analysis Store rows
-10. write manifest
-11. write checksums
-12. if joernEnabled=true, run semantic analysis
-13. import Joern artifacts into Analysis Store
-14. update manifest/checksums
-15. apply cleanup policy
-```
-
-Acceptance criteria:
-
-```text
-[ ] Gradle full analysis delegates to shared orchestration.
-[ ] Maven full analysis delegates to shared orchestration.
-[ ] No duplicated Analysis Store orchestration in Maven Mojo.
-[ ] No duplicated Joern orchestration in Gradle task.
-[ ] Error handling is equivalent.
-```
-
-Verification:
-
-```bash
-./gradlew test --tests '*ForensicsAnalysisRunnerTest' --console=plain --stacktrace
-./gradlew test --tests '*BtmGenerationAdapterValidationTest' --console=plain --stacktrace
-```
-
-### Slice 10 — Add connector parity tests
-
-Goal:
-
-Make parity executable and hard to regress.
+## 8.4 Tests
 
 Required tests:
 
 ```text
-BuildToolConnectorParityTest
-GradleRequestMappingTest
-MavenRequestMappingTest
-BtmGenerationAdapterValidationTest
-MavenReactorAggregationTest
-MavenAnalysisStoreParityTest
-MavenJoernConfigurationParityTest
-MavenFullAnalysisParityTest
+accepts existing local repository path
+rejects missing repository path
+normalizes repository path
+returns repository metadata
 ```
 
-Test scenarios:
+Optional later tests:
 
 ```text
-same simple project -> same BTM output
-same include/exclude filters -> same selected rules
-same minBranchesPerMethod -> same filtered rules
-same includeEntryExit -> same rule set
-same timestamp setting -> same deterministic behavior
-same Analysis Store enabled setting -> same artifact structure
-same Joern disabled setting -> same no-Joern behavior
-same fake Joern result -> same semantic artifacts/import rows
-Gradle multi-project fixture -> equivalent to Maven reactor fixture
+clones remote repository
+checks out branch
+checks out tag
+checks out commit
+cleans workspace
 ```
 
-Recommended fixture layout:
+## 8.5 Verification
+
+Create/update:
 
 ```text
-src/test/resources/fixtures/parity/simple-java-project/
-src/test/resources/fixtures/parity/gradle-multiproject/
-src/test/resources/fixtures/parity/maven-reactor/
-src/test/resources/fixtures/parity/joern-fake-output/
+docs/migration/SLICE_05_REPOSITORY_ADAPTER_RESULT.md
 ```
 
-Acceptance criteria:
+---
 
-```text
-[ ] Tests prove request mapping parity.
-[ ] Tests prove output parity for BTM generation.
-[ ] Tests prove artifact parity for Analysis Store.
-[ ] Tests prove Maven reactor aggregation.
-[ ] Tests do not require real Joern by default.
-```
+# Phase 9: Add CLI Entry Point
 
-Verification:
+## 9.1 Goal
+
+The first usable Engine entry point should be a CLI command.
+
+Conceptual target:
 
 ```bash
-./gradlew test --tests '*Parity*' --console=plain --stacktrace
+./gradlew :forensic-analytics-cli:run --args="analyze --repo D:\Projects\wildfly --profile joern-btm"
 ```
 
-### Slice 11 — Extend ArchUnit rules for connector boundaries
-
-Goal:
-
-Prevent accidental cross-dependencies and adapter leakage.
-
-Rules to enforce:
-
-```text
-plugin.btmgen.common must not depend on Gradle APIs
-plugin.btmgen.common must not depend on Maven APIs
-plugin.btmgen.gradle must not depend on Maven APIs
-plugin.btmgen.maven must not depend on Gradle APIs
-domain must not depend on Gradle APIs
-domain must not depend on Maven APIs
-application must not depend on Gradle APIs
-application must not depend on Maven APIs
-application must not depend on concrete Joern CLI adapter classes
-application must not depend on H2 implementation classes
-```
-
-Additional parity rule:
-
-```text
-Maven Mojo classes and Gradle Task classes must not call each other.
-Both must call common/application services.
-```
-
-Acceptance criteria:
-
-```text
-[ ] ArchUnit catches Gradle API leakage into Maven/common/application/domain.
-[ ] ArchUnit catches Maven API leakage into Gradle/common/application/domain.
-[ ] ArchUnit catches direct task-to-mojo coupling.
-[ ] Existing architecture rules stay green.
-```
-
-Verification:
+or packaged form:
 
 ```bash
-./gradlew test --tests '*HexagonRulesTest' --console=plain --stacktrace
+forensic-analytics analyze --repo D:\Projects\wildfly --profile joern-btm
 ```
 
-### Slice 12 — Update README with equal Gradle/Maven usage
+## 9.2 Required CLI commands
 
-Goal:
-
-Document Gradle and Maven as equal connectors, not as feature-tiered variants.
-
-README updates:
+Initial command:
 
 ```text
-Build Tool Connector Parity
-Gradle quickstart
-Maven quickstart
-Gradle multi-project analysis
-Maven reactor analysis
-Gradle full analysis with Joern
-Maven full analysis with Joern
-Generated artifacts for both connectors
-Known limitations, if any
+analyze
 ```
 
-Remove or update outdated statements such as:
+Required options:
 
 ```text
-Maven reactor aggregation is not implemented yet
-Maven generated .btm remains the only generated build artifact
-Maven has no Joern parameters
+--repo
+--profile
+--output
+--joern-mode
 ```
 
-Only remove those statements after the corresponding implementation and tests are complete.
-
-Acceptance criteria:
+Optional options:
 
 ```text
-[ ] README contains equivalent Gradle and Maven examples.
-[ ] README does not claim parity before tests prove it.
-[ ] README documents Maven reactor usage.
-[ ] README documents Maven Joern usage.
-[ ] README documents generated Maven artifacts.
+--branch
+--commit
+--joern-image
+--joern-heap
+--timeout
 ```
 
-Verification:
+## 9.3 CLI must not contain business logic
+
+The CLI may:
+
+```text
+parse arguments
+build application request
+call use case
+print result
+return process exit code
+```
+
+The CLI must not:
+
+```text
+scan Java files directly
+run Joern directly
+write persistence directly
+implement analysis rules
+```
+
+## 9.4 Tests
+
+Required tests:
+
+```text
+parses valid analyze command
+rejects missing repo
+rejects missing profile
+returns non-zero exit code on failed analysis
+prints artifact location on success
+```
+
+## 9.5 Verification
+
+Create/update:
+
+```text
+docs/migration/SLICE_06_CLI_RESULT.md
+```
+
+---
+
+# Phase 10: Prepare gRPC Ingestion Boundary
+
+This phase is important because the plugin will later send data to the Engine.
+
+## 10.1 Module
+
+Use or create:
+
+```text
+forensic-analytics-ingestion-grpc
+```
+
+## 10.2 Responsibilities
+
+The gRPC ingestion module should receive analysis data from build adapters.
+
+Possible messages:
+
+```text
+AnalysisSessionStarted
+RepositoryMetadataSubmitted
+SourceRootSubmitted
+ScanEventSubmitted
+RuleArtifactSubmitted
+CoverageArtifactSubmitted
+TraceEventSubmitted
+AnalysisSessionCompleted
+AnalysisSessionFailed
+```
+
+## 10.3 Boundary rule
+
+The gRPC DTOs are transport contracts. They must not leak into the domain as mutable infrastructure objects.
+
+Mapping required:
+
+```text
+gRPC DTO -> application command -> domain model
+```
+
+## 10.4 Tests
+
+Required tests:
+
+```text
+maps ingestion request into application command
+rejects invalid repository metadata
+rejects missing analysis id
+handles completed session
+handles failed session
+```
+
+## 10.5 Verification
+
+Create/update:
+
+```text
+docs/migration/SLICE_07_GRPC_INGESTION_RESULT.md
+```
+
+---
+
+# Phase 11: Reduce `forensics_tracing` to Adapter Role
+
+Only begin this phase after the Engine can run at least one local analysis path.
+
+## 11.1 Goal
+
+`forensics_tracing` should become a build adapter.
+
+It may still generate local BTM files if required, but the core analysis logic should be owned by `forensic_analytics`.
+
+## 11.2 Plugin responsibilities after migration
+
+Allowed responsibilities:
+
+```text
+Gradle task registration
+Maven Mojo registration
+read plugin extension/configuration
+collect project metadata
+collect source roots
+collect build output directories
+invoke local Engine CLI or Engine client
+optionally upload data via gRPC
+write generated artifacts to build/target directories
+report user-facing build errors
+```
+
+Forbidden responsibilities after migration:
+
+```text
+owning semantic analysis core
+owning Joern runtime orchestration
+owning repository checkout orchestration
+owning graph/replay persistence
+owning UI/server behavior
+```
+
+## 11.3 Compatibility mode
+
+Do not break existing users immediately.
+
+Provide one of:
+
+```text
+legacy local mode
+engine mode disabled by default
+engine mode opt-in
+clear deprecation path
+```
+
+## 11.4 Tests
+
+In `forensics_tracing`, update or add tests proving:
+
+```text
+Gradle task still registers
+Maven goal still registers
+legacy behavior still works if kept
+engine request is built correctly
+source roots are sent correctly
+output paths are mapped correctly
+clear error if Engine is unavailable
+```
+
+## 11.5 Verification
+
+Run the full quality gate in `forensics_tracing`.
+
+Create/update:
+
+```text
+docs/migration/SLICE_08_PLUGIN_ADAPTER_RESULT.md
+```
+
+---
+
+# Phase 12: External E2E Testbed
+
+## 12.1 Goal
+
+Create a black-box testbed that proves the Engine works against external repositories.
+
+This must be independent from normal unit tests.
+
+## 12.2 Recommended structure
+
+In `forensic_analytics`:
+
+```text
+testbed/
+├── README.md
+├── consumers/
+│   ├── legacy-demo-shop/
+│   └── wildfly-runner/
+├── docker/
+│   └── joern-worker/
+├── python/
+│   ├── requirements.txt
+│   ├── pytest.ini
+│   ├── tests/
+│   │   ├── test_engine_against_legacy_demo_shop.py
+│   │   ├── test_engine_against_wildfly_smoke.py
+│   │   └── test_generated_artifacts.py
+│   └── tools/
+│       ├── command_runner.py
+│       ├── workspace.py
+│       └── artifact_assertions.py
+```
+
+## 12.3 Python test responsibilities
+
+Python should orchestrate black-box checks:
+
+```text
+prepare temporary workspace
+run Engine CLI
+run Joern container if enabled
+collect logs
+verify generated artifacts
+verify result metadata
+verify non-empty reports
+verify error diagnostics
+```
+
+## 12.4 Required first E2E scenario
+
+```text
+Input: local legacy-demo-shop repository
+Mode: no Joern or Joern disabled
+Expected: Engine runs AST/BTM analysis and creates artifacts
+```
+
+## 12.5 Required second E2E scenario
+
+```text
+Input: local legacy-demo-shop repository
+Mode: Joern container enabled
+Expected: Joern version check succeeds and semantic analysis step is invoked
+```
+
+## 12.6 WildFly scenario
+
+WildFly must start as smoke/performance scenario, not as mandatory unit gate.
+
+Expected first WildFly scenario:
+
+```text
+Input: D:\Projects\wildfly or /mnt/d/Projects/wildfly
+Mode: Joern container enabled
+Expected: Engine starts, validates repository, starts Joern container, reports progress or clear resource limitation
+```
+
+Do not require full WildFly semantic analysis in the normal quality gate until runtime and memory requirements are known.
+
+---
+
+# Phase 13: Documentation Update
+
+Update documentation in both repositories.
+
+## 13.1 `forensic_analytics` documentation
+
+Must explain:
+
+```text
+What the Engine is
+How to run local analysis
+How to configure Joern container mode
+How to analyze an external repository
+Where artifacts are written
+How to run E2E testbed
+Architecture overview
+Module overview
+```
+
+## 13.2 `forensics_tracing` documentation
+
+Must explain:
+
+```text
+Plugin is now a build adapter
+Standalone Engine lives in forensic_analytics
+How to run legacy/local plugin mode
+How to enable Engine mode if available
+How gRPC upload will work later
+```
+
+## 13.3 Migration documentation
+
+Update:
+
+```text
+docs/migration/MIGRATION_STATUS.md
+```
+
+Include:
+
+```text
+completed slices
+open slices
+known risks
+compatibility status
+next recommended step
+```
+
+---
+
+# Phase 14: Final Verification
+
+Run the full quality gate in both repositories.
+
+## 14.1 `forensic_analytics`
 
 ```bash
-./gradlew test --console=plain --stacktrace
+./gradlew clean test
+./gradlew check
 ```
 
-### Slice 13 — Add Maven reactor smoke fixture based on WildFly-like structure
+The test suite must run on JUnit 6.
 
-Goal:
+If `QUALITY.md` defines a stricter gate, run that stricter gate.
 
-Prove that the root POM aggregation case works before trying a real WildFly scan.
-
-Fixture requirements:
-
-```text
-root pom.xml with packaging=pom
-module-a with src/main/java
-module-b with src/main/java
-module-empty with no source roots
-module-test with src/test/java
-nested module path
-```
-
-Assertions:
-
-```text
-- root packaging=pom does not fail
-- empty module is ignored safely
-- module-a and module-b are scanned
-- includeTests=false excludes test roots
-- includeTests=true includes test roots
-- output is deterministic
-- Analysis Store contains module/source metadata
-```
-
-Acceptance criteria:
-
-```text
-[ ] Fixture behaves like a Maven reactor.
-[ ] Test proves root aggregation works.
-[ ] Test proves empty modules do not fail.
-[ ] Test proves source roots are deterministic and de-duplicated.
-```
-
-Verification:
+## 14.2 `forensics_tracing`
 
 ```bash
-./gradlew test --tests '*MavenReactorAggregationTest' --console=plain --stacktrace
+./gradlew clean test
+./gradlew check
 ```
 
-### Slice 14 — Optional real-project validation with WildFly checkout
+The test suite must run on JUnit 6.
 
-Goal:
+If `QUALITY.md` defines a stricter gate, run that stricter gate.
 
-Validate behavior against a large Maven reactor without making the normal test suite depend on WildFly.
+## 14.3 Optional plugin verification
 
-This must remain opt-in.
-
-Suggested command shape:
+If the plugin still publishes locally:
 
 ```bash
-./gradlew test -PwithLargeMavenFixture=true -PwildflyCheckout=/path/to/wildfly --tests '*LargeMavenReactorSmokeTest' --console=plain --stacktrace
+./gradlew publishToMavenLocal
 ```
 
-Rules:
+Then run a consumer smoke test if available.
 
-```text
-- Do not download WildFly during normal tests.
-- Do not require Joern installation for normal tests.
-- Do not commit WildFly sources.
-- Do not make performance-sensitive smoke tests part of the default unit test loop unless explicitly approved.
-```
+## 14.4 Optional E2E testbed
 
-Acceptance criteria:
-
-```text
-[ ] Large Maven reactor scan can be started from root.
-[ ] Root pom packaging does not fail.
-[ ] Source-root count is reported.
-[ ] Memory/performance warnings are documented if observed.
-[ ] Joern missing from PATH produces a clear configuration error, not a misleading Maven failure.
-```
-
-### Slice 15 — Final quality gate and commit
-
-Goal:
-
-Complete the workflow with full verification and a traceable commit.
-
-Commands:
+From the Python testbed:
 
 ```bash
-git status --short
+python -m pytest
+```
+
+If Docker is required and unavailable, report it as an environment blocker.
+
+---
+
+# Required Stop Conditions
+
+Codex must stop and report if any of the following occurs:
+
+```text
+Repository not found
+Unexpected Gradle version
+Missing Gradle Wrapper
+Unknown module structure
+Unclear ownership of a class or package
+Domain dependency would point outward
+Migration would require deleting functionality without replacement
+Tests fail for unknown reason
+Coverage gate fails and root cause is unclear
+Docker is required but unavailable
+Joern image cannot be resolved
+WildFly analysis requires resources beyond available environment
+```
+
+The report must include:
+
+```text
+what was attempted
+where it failed
+why continuing would be risky
+what decision is needed
+recommended next action
+```
+
+---
+
+# Commit Strategy
+
+Use small commits per slice.
+
+Recommended commit style:
+
+```text
+feat(engine): add forensic analytics engine foundation
+feat(domain): migrate analysis request model
+feat(application): add repository analysis use case
+feat(joern): add docker command builder
+feat(cli): add analyze command
+feat(ingestion): add grpc analysis session contract
+refactor(plugin): prepare engine adapter boundary
+test(e2e): add external repository analysis testbed
+docs(migration): document engine migration status
+```
+
+Before each commit:
+
+```bash
+git status
 git diff --stat
-./gradlew test --tests '*BuildToolConnectorParityTest' --console=plain --stacktrace
-./gradlew test --tests '*BtmGenerationAdapterValidationTest' --console=plain --stacktrace
-./gradlew test --tests '*MavenReactorAggregationTest' --console=plain --stacktrace
-./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage --console=plain --stacktrace
-./gradlew validatePlugins --console=plain --stacktrace
-```
-
-Before commit:
-
-```bash
-git status --short
 git diff
-git diff --cached
 ```
 
-Commit message must explain:
+Run the relevant test gate for the touched repository.
+
+---
+
+# Final Report Template
+
+At the end of each Codex run, write a German report:
+
+```markdown
+# Migration Report
+
+## Ziel
+
+## Bearbeiteter Slice
+
+## Geänderte Dateien
+
+## Architekturentscheidungen
+
+## Tests
+
+## Ausgeführte Commands
+
+## Ergebnis
+
+## Offene Risiken
+
+## Blocker
+
+## Nächster empfohlener Slice
+```
+
+---
+
+# First Codex Execution Task
+
+For the first execution, Codex must not migrate code yet.
+
+Start with:
 
 ```text
-what changed
-why connector parity is required
-how shared request/orchestration was used
-which Gradle capabilities were mirrored in Maven
-which Maven reactor behavior was added
-which tests were added
-which quality commands were executed
-known limitations
+Phase 0
+Phase 1
+Phase 2
+Phase 3
 ```
 
-Acceptance criteria:
+Expected first output:
 
 ```text
-[ ] All targeted parity tests pass.
-[ ] Full local quality gate passes or failure is documented with root cause.
-[ ] validatePlugins passes when Gradle plugin metadata/tasks changed.
-[ ] README, QUALITY.md, and AGENTS.md are consistent.
-[ ] Commit contains only related files.
+forensic_analytics/docs/migration/INSPECTION_REPORT.md
+forensic_analytics/docs/migration/RESPONSIBILITY_MAPPING.md
+forensic_analytics/MIGRATION_WORKPLAN.md
 ```
 
-## 9. Definition of Done
-
-This workflow is done when:
-
-```text
-[ ] AGENTS.md defines mandatory Gradle/Maven connector feature parity.
-[ ] QUALITY.md defines a connector parity quality gate.
-[ ] A capability matrix exists and is maintained.
-[ ] Shared request/result model covers all connector capabilities.
-[ ] Gradle adapter maps into the shared model.
-[ ] Maven adapter maps into the shared model.
-[ ] Maven module-local scan remains functional.
-[ ] Maven reactor aggregation is implemented.
-[ ] Maven root pom packaging is valid as aggregation context.
-[ ] Maven Analysis Store support matches Gradle.
-[ ] Maven Joern configuration matches Gradle.
-[ ] Maven full analysis can generate BTM + Analysis Store + Joern enrichment.
-[ ] Gradle and Maven produce equivalent BTM output for equivalent sources.
-[ ] Gradle and Maven produce equivalent artifact metadata for equivalent sources.
-[ ] ArchUnit prevents build-tool API leakage.
-[ ] Standard tests do not require a real Joern installation.
-[ ] README documents equal Gradle and Maven usage.
-[ ] Full quality gate has been executed and reported.
-```
-
-## 10. STOP conditions
-
-Stop and report if any of these conditions occur:
-
-```text
-1. The current repository baseline conflicts with the project-approved baseline.
-2. The shared runner/request model cannot represent a Gradle-only feature without a breaking rewrite.
-3. Maven plugin APIs would require a new dependency/version change not approved by the task.
-4. Maven reactor aggregation would require calling Gradle classes.
-5. Gradle full analysis and Maven full analysis cannot share the same core orchestration.
-6. Existing output would change semantically without explicit approval.
-7. Existing quality gates can only pass by lowering thresholds or disabling tests.
-8. Joern tests would require a real local Joern installation in the default test suite.
-9. Dependency verification blocks new dependencies and cannot be updated cleanly.
-10. Public README behavior cannot be verified from source/tests.
-```
-
-No speculative implementation beyond these stop conditions.
-
-## 11. Expected end state
-
-After this workflow, the project has two equal build-tool connectors:
-
-```text
-Gradle connector
-  -> shared request
-  -> shared analysis runner/use cases
-  -> BTM rules
-  -> Analysis Store
-  -> Manifest/checksums
-  -> optional Joern enrichment
-
-Maven connector
-  -> shared request
-  -> shared analysis runner/use cases
-  -> BTM rules
-  -> Analysis Store
-  -> Manifest/checksums
-  -> optional Joern enrichment
-```
-
-The repository-level rule becomes:
-
-```text
-A Java project analyzed through Maven must receive the same forensic analysis capability as a Java project analyzed through Gradle.
-```
-
-This prepares the later `forensic_analytics` server workflow because both Gradle and Maven builds will produce the same kind of static analysis package for gRPC upload, replay, and LLM-supported diagnostics.
+Only after these files are reviewed should implementation begin with Phase 4.
