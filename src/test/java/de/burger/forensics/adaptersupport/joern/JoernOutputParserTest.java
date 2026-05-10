@@ -10,11 +10,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class JoernOutputParserTest {
 
@@ -195,6 +197,117 @@ class JoernOutputParserTest {
 
         assertThat(result.successful()).isTrue();
         assertThat(result.stderr() + result.stdout()).contains("version");
+    }
+
+    @Test
+    void processExecutorResolvesWindowsPathextCommandNames() throws Exception {
+        assumeTrue(windows());
+        Path command = tempDir.resolve("joern.cmd");
+        Files.writeString(command, "@echo off\r\necho fake-joern\r\n", StandardCharsets.UTF_8);
+
+        List<String> resolved = ProcessJoernCommandExecutor.resolveCommand(
+                List.of("joern", "--version"),
+                Map.of("Path", tempDir.toString(), "PATHEXT", ".CMD"));
+
+        assertThat(resolved).hasSize(2);
+        assertThat(resolved.get(0)).isEqualToIgnoringCase(command.toAbsolutePath().normalize().toString());
+        assertThat(resolved.get(1)).isEqualTo("--version");
+    }
+
+    @Test
+    void processExecutorKeepsUnresolvedCommandNames() {
+        List<String> resolved = ProcessJoernCommandExecutor.resolveCommand(
+                List.of("joern", "--version"),
+                Map.of("PATH", tempDir.toString()));
+
+        assertThat(resolved).containsExactly("joern", "--version");
+    }
+
+    @Test
+    void processExecutorResolvesQuotedPathEntries() throws Exception {
+        Path command = tempDir.resolve("joern-custom");
+        Files.writeString(command, "fake", StandardCharsets.UTF_8);
+
+        List<String> resolved = ProcessJoernCommandExecutor.resolveCommand(
+                List.of("joern-custom", "--version"),
+                Map.of("PATH", "\"" + tempDir + "\""));
+
+        assertThat(resolved).containsExactly(command.toAbsolutePath().normalize().toString(), "--version");
+    }
+
+    @Test
+    void processExecutorKeepsPathLikeCommandNames() {
+        List<String> relativePath = ProcessJoernCommandExecutor.resolveCommand(
+                List.of("tools/joern", "--version"),
+                Map.of("PATH", tempDir.toString()));
+        Path absoluteCommand = tempDir.resolve("joern");
+        List<String> absolutePath = ProcessJoernCommandExecutor.resolveCommand(
+                List.of(absoluteCommand.toString(), "--version"),
+                Map.of("PATH", tempDir.toString()));
+
+        assertThat(relativePath).containsExactly("tools/joern", "--version");
+        assertThat(absolutePath).containsExactly(absoluteCommand.toString(), "--version");
+    }
+
+    @Test
+    void processExecutorUsesDefaultWindowsPathextWhenMissing() throws Exception {
+        assumeTrue(windows());
+        Path command = tempDir.resolve("joern.BAT");
+        Files.writeString(command, "@echo off\r\necho fake-joern\r\n", StandardCharsets.UTF_8);
+
+        List<String> resolved = ProcessJoernCommandExecutor.resolveCommand(
+                List.of("joern", "--version"),
+                Map.of("PATH", tempDir.toString()));
+
+        assertThat(resolved).hasSize(2);
+        assertThat(resolved.get(0)).isEqualToIgnoringCase(command.toAbsolutePath().normalize().toString());
+        assertThat(resolved.get(1)).isEqualTo("--version");
+    }
+
+    @Test
+    void processExecutorNormalizesWindowsPathextEntries() throws Exception {
+        assumeTrue(windows());
+        Path command = tempDir.resolve("joern.CMD");
+        Files.writeString(command, "@echo off\r\necho fake-joern\r\n", StandardCharsets.UTF_8);
+
+        List<String> resolved = ProcessJoernCommandExecutor.resolveCommand(
+                List.of("joern", "--version"),
+                Map.of("PATH", ";" + tempDir, "PATHEXT", "CMD;;EXE"));
+
+        assertThat(resolved).hasSize(2);
+        assertThat(resolved.get(0)).isEqualToIgnoringCase(command.toAbsolutePath().normalize().toString());
+        assertThat(resolved.get(1)).isEqualTo("--version");
+    }
+
+    @Test
+    void processExecutorKeepsExistingCommandExtensions() throws Exception {
+        Path command = tempDir.resolve("joern.cmd");
+        Files.writeString(command, "@echo off\r\necho fake-joern\r\n", StandardCharsets.UTF_8);
+
+        List<String> resolved = ProcessJoernCommandExecutor.resolveCommand(
+                List.of("joern.cmd", "--version"),
+                Map.of("PATH", tempDir.toString(), "PATHEXT", ".CMD"));
+
+        assertThat(resolved).containsExactly(command.toAbsolutePath().normalize().toString(), "--version");
+    }
+
+    @Test
+    void processExecutorKeepsCommandsWhenPathIsMissingOrBlank() {
+        List<String> missing = ProcessJoernCommandExecutor.resolveCommand(
+                List.of("joern", "--version"),
+                Map.of());
+        List<String> blank = ProcessJoernCommandExecutor.resolveCommand(
+                List.of("joern", "--version"),
+                Map.of("PATH", " "));
+
+        assertThat(missing).containsExactly("joern", "--version");
+        assertThat(blank).containsExactly("joern", "--version");
+    }
+
+    @Test
+    void processExecutorRejectsEmptyCommandsDuringResolution() {
+        assertThatThrownBy(() -> ProcessJoernCommandExecutor.resolveCommand(List.of(), Map.of()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

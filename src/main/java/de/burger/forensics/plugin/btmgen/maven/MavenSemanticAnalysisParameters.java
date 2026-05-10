@@ -16,9 +16,9 @@ record MavenSemanticAnalysisParameters(
         File sourceRoot,
         boolean includeTests,
         boolean joernEnabled,
-        File joernExecutable,
-        File joernParseExecutable,
-        File joernSliceExecutable,
+        String joernExecutable,
+        String joernParseExecutable,
+        String joernSliceExecutable,
         File joernWorkspaceDirectory,
         File joernOutputDirectory,
         String joernMaxHeap,
@@ -66,11 +66,12 @@ record MavenSemanticAnalysisParameters(
 
     ForensicsSemanticAnalysisRequest toAnalysisRequest(List<Path> sourceRoots) {
         Path buildDirectory = MavenBuildDirectories.buildDirectory(project);
+        Path baseDirectory = projectBaseDirectory();
         return new ForensicsSemanticAnalysisRequest(
                 joernEnabled,
-                resolveFile(joernExecutable, Path.of("joern")),
-                resolveFile(joernParseExecutable, Path.of("joern-parse")),
-                resolveFile(joernSliceExecutable, Path.of("joern-slice")),
+                resolveExecutable(joernExecutable, "joern", baseDirectory),
+                resolveExecutable(joernParseExecutable, "joern-parse", baseDirectory),
+                resolveExecutable(joernSliceExecutable, "joern-slice", baseDirectory),
                 resolveFile(joernWorkspaceDirectory, buildDirectory.resolve("forensics/joern/workspace")),
                 resolveFile(joernOutputDirectory, buildDirectory.resolve("forensics/joern")),
                 joernMaxHeap == null ? "" : joernMaxHeap,
@@ -94,5 +95,29 @@ record MavenSemanticAnalysisParameters(
             return defaultFile.toAbsolutePath().normalize();
         }
         return configuredFile.toPath().toAbsolutePath().normalize();
+    }
+
+    private Path projectBaseDirectory() {
+        return project.getBasedir() == null
+                ? Path.of(".").toAbsolutePath().normalize()
+                : project.getBasedir().toPath().toAbsolutePath().normalize();
+    }
+
+    private static Path resolveExecutable(String configuredExecutable, String defaultCommand, Path baseDirectory) {
+        String executable = configuredExecutable == null || configuredExecutable.isBlank()
+                ? defaultCommand
+                : configuredExecutable.trim();
+        Path path = Path.of(executable);
+        if (path.isAbsolute()) {
+            return path.normalize();
+        }
+        if (hasPathSeparator(executable)) {
+            return baseDirectory.resolve(path).toAbsolutePath().normalize();
+        }
+        return path;
+    }
+
+    private static boolean hasPathSeparator(String value) {
+        return value.contains("/") || value.contains("\\");
     }
 }

@@ -29,9 +29,9 @@ class MavenJoernConfigurationParityTest {
                 null,
                 false,
                 true,
-                tempDir.resolve("bin/joern").toFile(),
-                tempDir.resolve("bin/joern-parse").toFile(),
-                tempDir.resolve("bin/joern-slice").toFile(),
+                tempDir.resolve("bin/joern").toString(),
+                tempDir.resolve("bin/joern-parse").toString(),
+                tempDir.resolve("bin/joern-slice").toString(),
                 tempDir.resolve("work").toFile(),
                 tempDir.resolve("out").toFile(),
                 "-Xmx2g",
@@ -61,7 +61,7 @@ class MavenJoernConfigurationParityTest {
     }
 
     @Test
-    void mapsMavenJoernDefaultsToGradleEquivalentValues(@TempDir Path tempDir) {
+    void mapsMavenJoernDefaultsToPathCommands(@TempDir Path tempDir) {
         MavenSemanticAnalysisParameters parameters = new MavenSemanticAnalysisParameters(
                 projectWithBuildDirectory(tempDir),
                 null,
@@ -83,14 +83,41 @@ class MavenJoernConfigurationParityTest {
         ForensicsSemanticAnalysisRequest request = parameters.toAnalysisRequest(List.of(tempDir));
 
         assertThat(request.joernEnabled()).isFalse();
-        assertThat(request.joernExecutable()).isEqualTo(Path.of("joern").toAbsolutePath());
-        assertThat(request.joernParseExecutable()).isEqualTo(Path.of("joern-parse").toAbsolutePath());
-        assertThat(request.joernSliceExecutable()).isEqualTo(Path.of("joern-slice").toAbsolutePath());
+        assertThat(request.joernExecutable()).isEqualTo(Path.of("joern"));
+        assertThat(request.joernParseExecutable()).isEqualTo(Path.of("joern-parse"));
+        assertThat(request.joernSliceExecutable()).isEqualTo(Path.of("joern-slice"));
         assertThat(request.joernWorkspaceDirectory()).isEqualTo(tempDir.resolve("target/forensics/joern/workspace").toAbsolutePath());
         assertThat(request.joernOutputDirectory()).isEqualTo(tempDir.resolve("target/forensics/joern").toAbsolutePath());
         assertThat(request.joernMaxHeap()).isEmpty();
         assertThat(request.joernTimeoutSeconds()).isEqualTo(300);
         assertThat(request.joernFailOnError()).isTrue();
+    }
+
+    @Test
+    void mapsRelativeMavenJoernExecutablePathsAgainstProjectBaseDirectory(@TempDir Path tempDir) {
+        MavenSemanticAnalysisParameters parameters = new MavenSemanticAnalysisParameters(
+                projectWithBuildDirectory(tempDir),
+                null,
+                false,
+                true,
+                "tools/joern",
+                "tools/joern-parse",
+                "tools/joern-slice",
+                null,
+                null,
+                null,
+                300,
+                true,
+                null,
+                null,
+                null,
+                null);
+
+        ForensicsSemanticAnalysisRequest request = parameters.toAnalysisRequest(List.of(tempDir));
+
+        assertThat(request.joernExecutable()).isEqualTo(tempDir.resolve("tools/joern").toAbsolutePath());
+        assertThat(request.joernParseExecutable()).isEqualTo(tempDir.resolve("tools/joern-parse").toAbsolutePath());
+        assertThat(request.joernSliceExecutable()).isEqualTo(tempDir.resolve("tools/joern-slice").toAbsolutePath());
     }
 
     @Test

@@ -294,6 +294,7 @@ mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:analyze-aggregate -Dfor
 ```
 
 Maven Joern parameters use the same names with the `forensics.*` user-property prefix, for example `-Dforensics.joernExecutable=/opt/joern/joern`.
+The default Maven executable values are command names (`joern`, `joern-parse`, `joern-slice`) and are resolved through `PATH`; configured relative paths such as `tools/joern` are resolved against the Maven project base directory.
 The Maven defaults write Joern artifacts under `target/forensics/joern`.
 
 ### Step 5: Inspect the generated file
@@ -590,6 +591,7 @@ Property behavior:
 - `joernExecutable`, `joernParseExecutable`, `joernSliceExecutable`
   - defaults: `joern`, `joern-parse`, `joern-slice`
   - external CLI executables used by `analyzeForensicsSemantics` and the Maven semantic/full-analysis goals
+  - Maven keeps simple executable names as `PATH` commands; Maven relative paths containing `/` or `\` are resolved against the project base directory
 - `joernWorkspaceDirectory`
   - Gradle default: `build/forensics/joern/workspace`
   - Maven default: `target/forensics/joern/workspace`

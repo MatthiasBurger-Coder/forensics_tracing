@@ -11,13 +11,13 @@ abstract class AbstractMavenAnalysisMojo extends AbstractMavenBtmGenerationMojo 
     private boolean joernEnabled;
 
     @Parameter(property = "forensics.joernExecutable", defaultValue = "joern")
-    private File joernExecutable;
+    private String joernExecutable;
 
     @Parameter(property = "forensics.joernParseExecutable", defaultValue = "joern-parse")
-    private File joernParseExecutable;
+    private String joernParseExecutable;
 
     @Parameter(property = "forensics.joernSliceExecutable", defaultValue = "joern-slice")
-    private File joernSliceExecutable;
+    private String joernSliceExecutable;
 
     @Parameter(property = "forensics.joernWorkspaceDirectory", defaultValue = "${project.build.directory}/forensics/joern/workspace")
     private File joernWorkspaceDirectory;
