@@ -2,9 +2,18 @@
 
 ## 0. Source check result from current `main`
 
-This workflow was checked against the current `main` source state.
+This workflow was checked again against the currently visible GitHub `main` source state.
 
-Checked files and areas:
+Important source-state note:
+
+```text
+The uploaded local ZIP appears to be older than the GitHub main state.
+The ZIP checkout is on commit 938c051 and does not contain the current Maven adapter / Analysis Store parity work.
+The current GitHub main state contains a newer implementation with Maven aggregation and Maven Analysis Store support.
+Use GitHub main as the source of truth for this verification unless explicitly told to validate the uploaded ZIP only.
+```
+
+Checked areas:
 
 ```text
 AGENTS.md
@@ -13,18 +22,14 @@ README.md
 workflow.md
 src/main/java/de/burger/forensics/plugin/btmgen/gradle/**
 src/main/java/de/burger/forensics/plugin/btmgen/maven/**
+src/main/java/de/burger/forensics/plugin/btmgen/common/**
+src/main/java/de/burger/forensics/adapters/persistence/h2/**
 src/test/java/de/burger/forensics/plugin/btmgen/**
+src/test/java/de/burger/forensics/adapters/persistence/h2/**
 src/test/java/de/burger/forensics/quality/**
 ```
 
-Result:
-
-```text
-The workflow document exists in main, but the implementation is not complete.
-Several planned feature-parity requirements are still only described in workflow.md and are not yet implemented in production code, AGENTS.md, QUALITY.md, README.md, or parity tests.
-```
-
-Confirmed existing features in `main`:
+Confirmed features in GitHub `main`:
 
 ```text
 - Maven BtmGenMojo exists.
@@ -33,47 +38,69 @@ Confirmed existing features in `main`:
 - Maven BtmGenMojo supports module-local Analysis Store parameters.
 - Maven BtmGenMojo supports module-local manifest/checksum parameters.
 - Maven BtmGenAggregateMojo exists.
+- Maven BtmGenAggregateMojo uses MavenSession and reactor projects.
 - MavenReactorSourceRootCollector exists.
-- Maven aggregate BTM generation uses MavenSession reactor projects.
-- Maven clean-analysis goal exists for generated analysis artifacts.
-- Gradle GenerateBtmTask supports source root collection, scanSubprojects, Analysis Store settings, manifest, checksums, profiling, cache settings, and deterministic output settings.
-- Gradle Joern semantic enrichment tasks exist.
-- README documents that Gradle writes the static analysis package by default.
-- README documents optional Gradle Joern enrichment.
-- BtmGenerationAdapterValidationTest verifies deterministic BTM parity for the shared runner, Gradle task, and Maven Mojo in the simple module-local case.
-- HexagonRulesTest contains general boundary rules for domain/application and storage/Joern CLI dependencies.
+- Maven reactor aggregation collects existing compile source roots.
+- Maven reactor aggregation can include test compile source roots when includeTests=true.
+- Maven reactor aggregation ignores empty/non-existing source roots.
+- Maven clean-analysis goal exists.
+- Gradle GenerateBtmTask supports BTM generation, sourceRoots, scanSubprojects, includeTests, excludes, cache, profiling, Analysis Store, manifest, checksums, cleanup policy, and deterministic output controls.
+- Gradle BtmGenExtension exposes Joern configuration.
+- Gradle plugin registers analyzeForensicsSemantics, importForensicsSemantics, and forensicsAnalyze.
+- Shared BtmGenerationRunner writes BTM, Analysis Store rows, manifest, and checksums.
+- H2AnalysisStoreAdapter contains static analysis tables and semantic/Joern-related tables.
+- README documents Maven btmgen, btmgen-aggregate, clean-analysis, and Maven Analysis Store output.
 ```
 
-Missing or incomplete features in `main`:
+Still missing or incomplete in GitHub `main`:
 
 ```text
-- AGENTS.md does not yet contain the mandatory Build Tool Connector Feature Parity section.
-- QUALITY.md does not yet contain the Build Tool Connector Parity Gate.
-- Repository workflow.md does not yet contain the mandatory AGENTS.md alignment section that must be used before creating or changing workflow.md files.
-- Maven BtmGenMojo has no Joern parameters.
-- Maven semantic analysis goals are not present.
-- Maven full analysis / analyze-aggregate goal is not present.
-- Shared request model does not yet cover all Gradle/Maven parity fields such as Joern configuration and reactor identity.
-- BuildToolConnectorParityTest is not present.
-- MavenJoernConfigurationParityTest is not present.
-- MavenFullAnalysisParityTest is not present.
-- README baseline references Gradle 9.4.0, matching the project-approved Gradle baseline for this workflow.
+- Maven has no joernEnabled parameter.
+- Maven has no joernExecutable parameter.
+- Maven has no joernParseExecutable parameter.
+- Maven has no joernSliceExecutable parameter.
+- Maven has no joernWorkspaceDirectory parameter.
+- Maven has no joernOutputDirectory parameter.
+- Maven has no joernTimeoutSeconds parameter.
+- Maven has no joernFailOnError parameter.
+- Maven semantic analysis goals are not implemented.
+- Maven import-semantics goal is not implemented.
+- Maven analyze / analyze-aggregate goal is not implemented.
+- Maven cannot currently run full BTM + Analysis Store + Joern enrichment like Gradle forensicsAnalyze.
+- Shared request/orchestration still appears centered on BtmGenerationRequest and does not yet carry Joern execution configuration.
+- BuildToolConnectorParityTest is still not confirmed as present.
+- MavenJoernConfigurationParityTest is still not confirmed as present.
+- MavenFullAnalysisParityTest is still not confirmed as present.
+- AGENTS.md / QUALITY.md must be checked and updated so connector parity is a mandatory rule, not only workflow guidance.
 ```
 
-Conclusion:
+Answer to the current verification questions:
 
 ```text
-Not all planned new features are in main.
-The most important lost or not-yet-implemented items are the mandatory AGENTS.md/QUALITY.md parity rules and the actual Maven parity implementation for reactor aggregation, Analysis Store, manifest/checksums, and Joern.
+1. Gradle Plugin and Maven Plugin do not yet execute exactly the same actions.
+   They are equivalent for BTM generation and largely equivalent for Analysis Store output.
+   They are not equivalent for Joern/full semantic analysis.
+
+2. Not all planned features are included.
+   Maven reactor aggregation and Maven Analysis Store are included.
+   Maven Joern/full-analysis parity is still missing.
+
+3. The database can be inspected.
+   The generated H2 database is retained when cleanupPolicy keeps it, especially KEEP_ON_SUCCESS or KEEP_ALWAYS.
+   Default generated locations are build/forensics/analysis-store/analysis-store.mv.db for Gradle and target/forensics/analysis-store/analysis-store.mv.db for Maven.
 ```
 
 Implementation priority from this source check:
 
 ```text
-1. Align AGENTS.md, QUALITY.md, workflow.md, and README baseline/rules.
-2. Add executable parity guardrails before broad functional changes.
-3. Add Maven Joern/full-analysis parity.
-4. Add remaining parity tests and final quality gate.
+1. Add/verify mandatory connector parity rules in AGENTS.md.
+2. Add/verify connector parity quality gate in QUALITY.md.
+3. Add Maven Joern parameters.
+4. Add Maven analyze-semantics / import-semantics / analyze / analyze-aggregate goals.
+5. Extend shared orchestration/request model for full semantic analysis parity.
+6. Add Maven Joern/full-analysis parity tests.
+7. Add database inspection documentation to README.
+8. Run targeted parity tests and full quality gate.
 ```
 
 ## 1. Goal
@@ -215,7 +242,7 @@ Current project decision for this workflow:
 
 ```text
 JDK: 17
-Gradle: 9.4.0
+Gradle: 9.1
 JUnit: 5
 ArchUnit: enabled
 JaCoCo: enabled
