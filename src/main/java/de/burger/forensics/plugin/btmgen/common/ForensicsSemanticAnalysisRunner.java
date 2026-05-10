@@ -41,7 +41,7 @@ public class ForensicsSemanticAnalysisRunner {
 
     public ForensicsSemanticAnalysisRunner() {
         this(
-                (config, checksumService) -> new JoernCliSemanticAnalysisAdapter(config, checksumService),
+                JoernCliSemanticAnalysisAdapter::new,
                 H2AnalysisStoreAdapter::new);
     }
 

@@ -115,6 +115,8 @@ class MavenJoernConfigurationParityTest {
         setField(mojo, "joernOutputDirectory", joernOutput.toFile());
 
         mojo.execute();
+
+        assertThat(joernOutput.resolve("callgraph.json")).isRegularFile();
     }
 
     private static MavenProject projectWithBuildDirectory(Path projectDirectory) {

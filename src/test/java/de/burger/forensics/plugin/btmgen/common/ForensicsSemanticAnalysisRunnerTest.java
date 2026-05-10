@@ -31,8 +31,9 @@ class ForensicsSemanticAnalysisRunnerTest {
     @Test
     void rejectsDisabledSemanticAnalysis(@TempDir Path tempDir) {
         ForensicsSemanticAnalysisRunner runner = new ForensicsSemanticAnalysisRunner();
+        ForensicsSemanticAnalysisRequest request = request(tempDir, false, List.of(tempDir));
 
-        assertThatThrownBy(() -> runner.analyze(request(tempDir, false, List.of(tempDir))))
+        assertThatThrownBy(() -> runner.analyze(request))
                 .isInstanceOf(ForensicsSemanticAnalysisException.class)
                 .hasMessageContaining("joernEnabled=true");
     }
@@ -88,8 +89,7 @@ class ForensicsSemanticAnalysisRunnerTest {
         ForensicsSemanticAnalysisRunner runner = new ForensicsSemanticAnalysisRunner(
                 (config, checksumService) -> ignored -> semanticResult(),
                 H2AnalysisStoreAdapter::new);
-
-        assertThatThrownBy(() -> runner.analyze(new ForensicsSemanticAnalysisRequest(
+        ForensicsSemanticAnalysisRequest request = new ForensicsSemanticAnalysisRequest(
                 true,
                 Path.of("joern"),
                 Path.of("joern-parse"),
@@ -103,7 +103,9 @@ class ForensicsSemanticAnalysisRunnerTest {
                 forensicsDir.resolve("analysis-store"),
                 manifest,
                 forensicsDir.resolve("checksums.sha256"),
-                forensicsDir.resolve("generated.btm"))))
+                forensicsDir.resolve("generated.btm"));
+
+        assertThatThrownBy(() -> runner.analyze(request))
                 .isInstanceOf(ForensicsSemanticAnalysisException.class)
                 .hasMessageContaining("No source roots");
     }
