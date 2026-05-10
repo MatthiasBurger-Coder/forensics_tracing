@@ -48,42 +48,30 @@ Confirmed features in GitHub `main`:
 - Gradle BtmGenExtension exposes Joern configuration.
 - Gradle plugin registers analyzeForensicsSemantics, importForensicsSemantics, and forensicsAnalyze.
 - Shared BtmGenerationRunner writes BTM, Analysis Store rows, manifest, and checksums.
+- Shared ForensicsSemanticAnalysisRunner imports Joern semantic results into the Analysis Store.
 - H2AnalysisStoreAdapter contains static analysis tables and semantic/Joern-related tables.
 - README documents Maven btmgen, btmgen-aggregate, clean-analysis, and Maven Analysis Store output.
+- Maven exposes Joern configuration through semantic and full-analysis goals.
+- Maven analyze-semantics and import-semantics goals are implemented.
+- Maven analyze and analyze-aggregate goals run BTM generation plus Joern semantic enrichment.
+- BuildToolConnectorParityTest enforces that the capability catalog has no connector gaps.
+- MavenJoernConfigurationParityTest and MavenFullAnalysisParityTest cover Maven Joern/full-analysis parity without requiring a local Joern installation.
 ```
 
-Still missing or incomplete in GitHub `main`:
+Known remaining gaps in GitHub `main`:
 
 ```text
-- Maven has no joernEnabled parameter.
-- Maven has no joernExecutable parameter.
-- Maven has no joernParseExecutable parameter.
-- Maven has no joernSliceExecutable parameter.
-- Maven has no joernWorkspaceDirectory parameter.
-- Maven has no joernOutputDirectory parameter.
-- Maven has no joernTimeoutSeconds parameter.
-- Maven has no joernFailOnError parameter.
-- Maven semantic analysis goals are not implemented.
-- Maven import-semantics goal is not implemented.
-- Maven analyze / analyze-aggregate goal is not implemented.
-- Maven cannot currently run full BTM + Analysis Store + Joern enrichment like Gradle forensicsAnalyze.
-- Shared request/orchestration still appears centered on BtmGenerationRequest and does not yet carry Joern execution configuration.
-- BuildToolConnectorParityTest is still not confirmed as present.
-- MavenJoernConfigurationParityTest is still not confirmed as present.
-- MavenFullAnalysisParityTest is still not confirmed as present.
-- AGENTS.md / QUALITY.md must be checked and updated so connector parity is a mandatory rule, not only workflow guidance.
+- No known Gradle/Maven connector parity gaps remain after this workflow update.
 ```
 
 Answer to the current verification questions:
 
 ```text
-1. Gradle Plugin and Maven Plugin do not yet execute exactly the same actions.
-   They are equivalent for BTM generation and largely equivalent for Analysis Store output.
-   They are not equivalent for Joern/full semantic analysis.
+1. Gradle Plugin and Maven Plugin now execute the same connector-level forensic analysis actions.
+   They are equivalent for BTM generation, Analysis Store output, and Joern/full semantic analysis after this workflow update.
 
-2. Not all planned features are included.
-   Maven reactor aggregation and Maven Analysis Store are included.
-   Maven Joern/full-analysis parity is still missing.
+2. Planned connector parity features are included.
+   Maven reactor aggregation, Maven Analysis Store, and Maven Joern/full-analysis parity are included.
 
 3. The database can be inspected.
    The generated H2 database is retained when cleanupPolicy keeps it, especially KEEP_ON_SUCCESS or KEEP_ALWAYS.
@@ -242,7 +230,7 @@ Current project decision for this workflow:
 
 ```text
 JDK: 17
-Gradle: 9.1
+Gradle: 9.4.0
 JUnit: 5
 ArchUnit: enabled
 JaCoCo: enabled

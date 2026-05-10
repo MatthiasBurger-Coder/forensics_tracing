@@ -8,13 +8,13 @@
 This repository provides:
 
 - a Gradle plugin, `de.burger.forensics.btmgen`, that scans Java source code
-- a Maven plugin goal, `forensics:btmgen`, backed by the same generation core
+- Maven plugin goals, including `forensics:btmgen` and `forensics:analyze`, backed by the same generation core
 - generation of Byteman `.btm` rules
 - runtime tracing helpers centered around `de.burger.forensics.infrastructure.rt.RtTrace`
 - an application-facing tracing facade, `de.burger.forensics.application.tracing.Tracer`
 - optional AspectJ-based method logging via `de.burger.forensics.infrastructure.logging.MethodLoggingAspect`
 
-Internally the repository is split into pragmatic hexagonal layers (`domain`, `application`, `adapters`, `plugin`, `infrastructure`). The Gradle task and Maven Mojo sit in build-tool adapter packages and both delegate to the shared `BtmGenerationRunner`.
+Internally the repository is split into pragmatic hexagonal layers (`domain`, `application`, `adapters`, `plugin`, `infrastructure`). The Gradle tasks and Maven Mojos sit in build-tool adapter packages and delegate to shared build-tool-neutral runners.
 
 ## Gradle quickstart
 
@@ -132,6 +132,13 @@ mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:btmgen-aggregate
 ```
 
 The aggregate goal uses reactor module source roots. A root project with `pom` packaging is a valid aggregation context and does not need its own `src/main/java`.
+
+For full BTM generation plus Joern semantic enrichment, enable Joern and use the full-analysis goals:
+
+```bash
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:analyze -Dforensics.joernEnabled=true
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:analyze-aggregate -Dforensics.joernEnabled=true
+```
 
 Minimal `pom.xml` configuration:
 
@@ -251,7 +258,7 @@ gRPC publishing, server upload, replay, and LLM context generation are not imple
 ### Joern Semantic Enrichment
 
 Joern enrichment is optional and disabled by default. It is not part of the normal `build` lifecycle.
-Run the explicit aggregate task when a generated analysis package should be enriched with Joern artifacts and H2 semantic tables:
+Run the explicit Gradle aggregate task when a generated analysis package should be enriched with Joern artifacts and H2 semantic tables:
 
 ```bash
 ./gradlew forensicsAnalyze
@@ -276,6 +283,18 @@ btmGen {
 
 When enabled, the package additionally contains `build/forensics/joern/cpg.bin`, `callgraph.json`, `controlflow.json`, `dataflow.json`, and `slices.json`.
 The H2 store receives `joern_import_run`, graph, relation, data-flow, and `semantic_anchor` rows, and the manifest/checksum files include the Joern artifacts.
+
+Maven exposes the same semantic enrichment flow through module-local and reactor goals:
+
+```bash
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:analyze-semantics -Dforensics.joernEnabled=true
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:import-semantics -Dforensics.joernEnabled=true
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:analyze -Dforensics.joernEnabled=true
+mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:analyze-aggregate -Dforensics.joernEnabled=true
+```
+
+Maven Joern parameters use the same names with the `forensics.*` user-property prefix, for example `-Dforensics.joernExecutable=/opt/joern/joern`.
+The Maven defaults write Joern artifacts under `target/forensics/joern`.
 
 ### Step 5: Inspect the generated file
 
@@ -474,6 +493,10 @@ The Maven goals are:
 ```text
 forensics:btmgen
 forensics:btmgen-aggregate
+forensics:analyze-semantics
+forensics:import-semantics
+forensics:analyze
+forensics:analyze-aggregate
 forensics:clean-analysis
 ```
 
@@ -503,14 +526,24 @@ Supported Maven parameters use the `forensics.*` user-property prefix:
 - `pluginVersion`
 - `manifestFile`
 - `checksumsFile`
+- `joernEnabled`
+- `joernExecutable`
+- `joernParseExecutable`
+- `joernSliceExecutable`
+- `joernWorkspaceDirectory`
+- `joernOutputDirectory`
+- `joernMaxHeap`
+- `joernTimeoutSeconds`
+- `joernFailOnError`
 
-The first Maven implementation is intentionally module-local:
+Maven connector behavior:
 
-- it runs for the current Maven project/module
+- `btmgen`, `analyze-semantics`, `import-semantics`, and `analyze` run for the current Maven project/module
 - it uses Maven compile source roots by default
 - `includeTests=true` adds Maven test compile source roots
 - a configured `sourceRoot` overrides Maven project roots
 - `btmgen-aggregate` uses Maven reactor projects from `MavenSession`
+- `analyze-aggregate` uses Maven reactor projects from `MavenSession`
 - a reactor root with `pom` packaging does not need its own source roots
 - empty reactor modules are ignored safely
 - `analysisStoreEnabled=true` writes `manifest.json`, `checksums.sha256`, and the H2 analysis store by default
@@ -556,11 +589,13 @@ Property behavior:
   - enables explicit Joern semantic enrichment tasks; Joern still does not run during normal `build`
 - `joernExecutable`, `joernParseExecutable`, `joernSliceExecutable`
   - defaults: `joern`, `joern-parse`, `joern-slice`
-  - external CLI executables used by `analyzeForensicsSemantics`
+  - external CLI executables used by `analyzeForensicsSemantics` and the Maven semantic/full-analysis goals
 - `joernWorkspaceDirectory`
-  - default: `build/forensics/joern/workspace`
+  - Gradle default: `build/forensics/joern/workspace`
+  - Maven default: `target/forensics/joern/workspace`
 - `joernOutputDirectory`
-  - default: `build/forensics/joern`
+  - Gradle default: `build/forensics/joern`
+  - Maven default: `target/forensics/joern`
 - `joernTimeoutSeconds`
   - default: `300`
 - `joernFailOnError`
@@ -898,6 +933,14 @@ The test suite in `src/test/java` verifies the behavior described above. In part
   - Maven root `pom` aggregation
   - empty reactor module handling
   - `includeTests=true` reactor behavior
+
+- `MavenJoernConfigurationParityTest`
+  - Maven Joern parameter mapping into the shared semantic request
+  - Maven semantic import verification
+
+- `MavenFullAnalysisParityTest`
+  - Maven module and reactor full-analysis goals
+  - fake Joern semantic import without requiring a local Joern installation
 
 - `CleanForensicsAnalysisMojoTest`
   - Maven generated analysis artifact cleanup

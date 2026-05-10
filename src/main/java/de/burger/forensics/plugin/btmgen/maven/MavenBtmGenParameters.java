@@ -89,7 +89,7 @@ record MavenBtmGenParameters(
                 .build();
     }
 
-    private List<Path> sourceRoots() {
+    List<Path> sourceRoots() {
         LinkedHashSet<Path> roots = new LinkedHashSet<>();
         if (sourceRoot != null) {
             addExistingRoot(roots, sourceRoot.toPath());

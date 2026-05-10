@@ -58,5 +58,28 @@ public class HexagonRulesTest {
             noClasses().that().resideInAnyPackage("..domain..", "..application..")
                     .should().dependOnClassesThat()
                     .resideInAnyPackage("java.sql..", "org.h2..", "..adapters.joern..", "..adapters.persistence.h2..");
-}
 
+    @ArchTest
+    static final ArchRule domain_and_application_do_not_depend_on_build_tool_apis =
+            noClasses().that().resideInAnyPackage("..domain..", "..application..")
+                    .should().dependOnClassesThat()
+                    .resideInAnyPackage("org.gradle..", "org.apache.maven..");
+
+    @ArchTest
+    static final ArchRule common_btmgen_code_is_build_tool_neutral =
+            noClasses().that().resideInAPackage("..plugin.btmgen.common..")
+                    .should().dependOnClassesThat()
+                    .resideInAnyPackage("org.gradle..", "org.apache.maven..");
+
+    @ArchTest
+    static final ArchRule gradle_btmgen_code_does_not_depend_on_maven_apis =
+            noClasses().that().resideInAPackage("..plugin.btmgen.gradle..")
+                    .should().dependOnClassesThat()
+                    .resideInAnyPackage("org.apache.maven..", "..plugin.btmgen.maven..");
+
+    @ArchTest
+    static final ArchRule maven_btmgen_code_does_not_depend_on_gradle_apis =
+            noClasses().that().resideInAPackage("..plugin.btmgen.maven..")
+                    .should().dependOnClassesThat()
+                    .resideInAnyPackage("org.gradle..", "..plugin.btmgen.gradle..");
+}

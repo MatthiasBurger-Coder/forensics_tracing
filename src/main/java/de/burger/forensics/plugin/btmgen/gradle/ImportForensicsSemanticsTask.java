@@ -1,5 +1,7 @@
 package de.burger.forensics.plugin.btmgen.gradle;
 
+import de.burger.forensics.plugin.btmgen.common.ForensicsSemanticAnalysisException;
+import de.burger.forensics.plugin.btmgen.common.ForensicsSemanticImportVerifier;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.DirectoryProperty;
@@ -41,13 +43,14 @@ public abstract class ImportForensicsSemanticsTask extends DefaultTask {
 
     @TaskAction
     public void verifyImportedArtifacts() {
-        if (!getJoernEnabled().getOrElse(false)) {
-            throw new GradleException("Joern semantic import is disabled. Set btmGen.joernEnabled=true to run it.");
-        }
-        java.io.File outputDirectory = getJoernOutputDirectory().get().getAsFile();
-        java.io.File callgraph = new java.io.File(outputDirectory, "callgraph.json");
-        if (!callgraph.isFile()) {
-            throw new GradleException("Joern semantic artifacts are missing. Run analyzeForensicsSemantics first.");
+        try {
+            new ForensicsSemanticImportVerifier().verify(
+                    getJoernEnabled().getOrElse(false),
+                    getJoernOutputDirectory().get().getAsFile().toPath(),
+                    "btmGen.joernEnabled=true",
+                    "analyzeForensicsSemantics");
+        } catch (ForensicsSemanticAnalysisException exception) {
+            throw new GradleException(exception.getMessage(), exception);
         }
     }
 

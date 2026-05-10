@@ -128,6 +128,8 @@ Required local verification:
 ```bash
 ./gradlew test --tests '*BtmGenerationAdapterValidationTest' --dependency-verification strict --console=plain --stacktrace
 ./gradlew test --tests '*BuildToolConnectorParityTest' --dependency-verification strict --console=plain --stacktrace
+./gradlew test --tests '*MavenJoernConfigurationParityTest' --dependency-verification strict --console=plain --stacktrace
+./gradlew test --tests '*MavenFullAnalysisParityTest' --dependency-verification strict --console=plain --stacktrace
 ./gradlew test --tests '*MavenReactorAggregationTest' --dependency-verification strict --console=plain --stacktrace
 ./gradlew test --tests '*HexagonRulesTest' --dependency-verification strict --console=plain --stacktrace
 ./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage --dependency-verification strict --console=plain --stacktrace

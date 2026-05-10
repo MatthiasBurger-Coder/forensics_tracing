@@ -2,7 +2,6 @@ package de.burger.forensics.plugin.btmgen;
 
 import de.burger.forensics.plugin.btmgen.common.ConnectorCapability;
 import de.burger.forensics.plugin.btmgen.common.ConnectorCapabilityCatalog;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -34,7 +33,6 @@ class BuildToolConnectorParityTest {
                 .noneMatch(name -> name.contains("MAVEN"));
     }
 
-    @Disabled("Workflow parity slices must remove known Gradle/Maven connector gaps before this assertion is enabled.")
     @Test
     void everyCapabilityIsSupportedByBothBuildToolConnectors() {
         assertThat(ConnectorCapabilityCatalog.parityGaps()).isEmpty();

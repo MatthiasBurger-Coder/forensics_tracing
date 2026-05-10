@@ -28,10 +28,10 @@ public final class ConnectorCapabilityCatalog {
             parity(ConnectorCapability.MANIFEST, "Both connectors map manifest output."),
             parity(ConnectorCapability.CHECKSUMS, "Both connectors map checksum output."),
             parity(ConnectorCapability.BUILD_IDENTITY, "Both connectors map project identity into the shared request."),
-            mavenGap(ConnectorCapability.JOERN_CONFIGURATION, "Gradle exposes Joern configuration; Maven mapping is pending."),
-            mavenGap(ConnectorCapability.JOERN_SEMANTIC_ANALYSIS, "Gradle has analyzeForensicsSemantics; Maven semantic goal is pending."),
-            mavenGap(ConnectorCapability.JOERN_IMPORT, "Gradle has importForensicsSemantics; Maven import behavior is pending."),
-            mavenGap(ConnectorCapability.FULL_ANALYSIS_AGGREGATE, "Gradle has forensicsAnalyze; Maven full-analysis goal is pending."),
+            parity(ConnectorCapability.JOERN_CONFIGURATION, "Both connectors expose Joern configuration with Joern disabled by default."),
+            parity(ConnectorCapability.JOERN_SEMANTIC_ANALYSIS, "Both connectors delegate semantic analysis to ForensicsSemanticAnalysisRunner."),
+            parity(ConnectorCapability.JOERN_IMPORT, "Both connectors verify Joern semantic artifacts through the shared verifier."),
+            parity(ConnectorCapability.FULL_ANALYSIS_AGGREGATE, "Gradle forensicsAnalyze and Maven analyze/analyze-aggregate run full analysis."),
             parity(ConnectorCapability.CLEAN_GENERATED_ANALYSIS_ARTIFACTS, "Gradle and Maven both expose generated analysis artifact cleanup.")
     );
 
@@ -50,9 +50,5 @@ public final class ConnectorCapabilityCatalog {
 
     private static ConnectorCapabilityDescriptor parity(ConnectorCapability capability, String notes) {
         return new ConnectorCapabilityDescriptor(capability, true, true, notes);
-    }
-
-    private static ConnectorCapabilityDescriptor mavenGap(ConnectorCapability capability, String notes) {
-        return new ConnectorCapabilityDescriptor(capability, true, false, notes);
     }
 }
