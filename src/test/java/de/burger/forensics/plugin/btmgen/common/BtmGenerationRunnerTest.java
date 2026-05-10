@@ -39,6 +39,32 @@ class BtmGenerationRunnerTest {
     }
 
     @Test
+    void runnerWritesEngineRequestOnlyWhenEnabled(@TempDir Path tempDir) throws IOException {
+        RecordingStrategy strategy = new RecordingStrategy("CUSTOM");
+        Path outputFile = tempDir.resolve("build/forensics/template.btm");
+        Path engineRequestFile = tempDir.resolve("build/forensics/engine-request.json");
+        BtmGenerationRequest request = BtmGenerationRequest.builder()
+                .outputFile(outputFile)
+                .engineRequestEnabled(true)
+                .engineRequestFile(engineRequestFile)
+                .projectKey("project-a")
+                .pluginVersion("1.2.3")
+                .moduleName("module-a")
+                .modulePath(":module-a")
+                .templateRequest(new BtmTemplateRequest("CUSTOM", "com.example.Foo", "bar", "(I)V"))
+                .build();
+
+        new BtmGenerationRunner(StrategyRegistry.builder().register(strategy).build(), NoOpPluginLogPort.INSTANCE)
+                .generate(request);
+
+        String engineRequest = Files.readString(engineRequestFile);
+        assertTrue(engineRequest.contains("\"projectId\": \"project-a\""));
+        assertTrue(engineRequest.contains("\"modulePath\": \":module-a\""));
+        assertTrue(engineRequest.contains("\"payloadId\": \"byteman-rules\""));
+        assertTrue(engineRequest.contains("\"kind\": \"RULE_ARTIFACTS\""));
+    }
+
+    @Test
     void runnerScansSourceRootsWritesRulesAndProfile(@TempDir Path tempDir) throws IOException {
         Path srcDir = tempDir.resolve("src/main/java/com/example");
         Files.createDirectories(srcDir);

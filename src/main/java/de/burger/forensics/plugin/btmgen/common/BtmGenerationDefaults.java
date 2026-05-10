@@ -15,6 +15,7 @@ public final class BtmGenerationDefaults {
     public static final String DEFAULT_CACHE_DATABASE_FILE_NAME = "scan-cache";
     public static final String DEFAULT_MANIFEST_FILE_NAME = "manifest.json";
     public static final String DEFAULT_CHECKSUMS_FILE_NAME = "checksums.sha256";
+    public static final String DEFAULT_ENGINE_REQUEST_FILE_NAME = "engine-request.json";
     public static final String DEFAULT_ANALYSIS_STORE_DATABASE_FILE_NAME = "analysis-store";
     public static final String DEFAULT_CACHE_BACKEND = "h2";
     public static final String DEFAULT_TEMPLATE_ID = "METHOD_ENTER";
@@ -25,6 +26,7 @@ public final class BtmGenerationDefaults {
     public static final boolean DEFAULT_STRICT_PARSING = false;
     public static final boolean DEFAULT_STRICT_CONDITION_VALIDATION = false;
     public static final boolean DEFAULT_DEPENDENCY_AWARE_INVALIDATION = false;
+    public static final boolean DEFAULT_ENGINE_REQUEST_ENABLED = false;
     public static final boolean DEFAULT_INCLUDE_ENTRY_EXIT = true;
     public static final boolean DEFAULT_INCLUDE_TIMESTAMP_HEADER = false;
     public static final int DEFAULT_MIN_BRANCHES_PER_METHOD = 2;
@@ -59,6 +61,10 @@ public final class BtmGenerationDefaults {
 
     public static Path defaultChecksumsFile() {
         return FORENSICS_DIRECTORY.resolve(DEFAULT_CHECKSUMS_FILE_NAME);
+    }
+
+    public static Path defaultEngineRequestFile() {
+        return FORENSICS_DIRECTORY.resolve(DEFAULT_ENGINE_REQUEST_FILE_NAME);
     }
 
     public static String defaultCleanupPolicy() {

@@ -1,5 +1,6 @@
 package de.burger.forensics.plugin.btmgen.gradle;
 
+import de.burger.forensics.plugin.btmgen.common.BtmGenerationRequest;
 import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
 import de.burger.forensics.plugin.btmgen.render.api.RuleRenderStrategy;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistries;
@@ -370,6 +371,27 @@ class GenerateBtmTaskTest {
         excludePackagePrefixes.setAccessible(true);
 
         assertEquals(List.of("com.skip", "org.skip"), excludePackagePrefixes.invoke(task));
+    }
+
+    @Test
+    void mapsEngineRequestSettingsFromExtension(@TempDir Path tempDir) throws Exception {
+        var project = ProjectBuilder.builder().withProjectDir(tempDir.toFile()).withName("module-a").build();
+        var task = project.getTasks().register("generateBtmEngineRequest", GenerateBtmTask.class).get();
+        var extension = newExtension(project);
+        Path engineRequestFile = tempDir.resolve("build/forensics/custom-engine-request.json");
+        extension.getEngineRequestEnabled().set(true);
+        extension.getEngineRequestFile().set(engineRequestFile.toFile());
+        task.setExtension(extension);
+
+        Method toGenerationRequest = GenerateBtmTask.class.getDeclaredMethod("toGenerationRequest");
+        toGenerationRequest.setAccessible(true);
+
+        BtmGenerationRequest request = (BtmGenerationRequest) toGenerationRequest.invoke(task);
+
+        assertTrue(request.engineRequestEnabled());
+        assertEquals(engineRequestFile, request.engineRequestFile());
+        assertEquals("module-a", request.moduleName());
+        assertEquals(":", request.modulePath());
     }
 
     @Test

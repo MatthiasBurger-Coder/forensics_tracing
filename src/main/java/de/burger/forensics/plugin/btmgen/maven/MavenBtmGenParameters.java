@@ -29,6 +29,8 @@ record MavenBtmGenParameters(
         String pluginVersion,
         File manifestFile,
         File checksumsFile,
+        boolean engineRequestEnabled,
+        File engineRequestFile,
         boolean profilingEnabled,
         File profileReportFile,
         boolean strictParsing,
@@ -84,8 +86,12 @@ record MavenBtmGenParameters(
                 .cleanupPolicy(blankToDefault(cleanupPolicy, BtmGenerationDefaults.defaultCleanupPolicy()))
                 .projectKey(blankToDefault(projectKey, defaultProjectKey(project)))
                 .pluginVersion(blankToDefault(pluginVersion, defaultPluginVersion(project)))
+                .moduleName(blankToDefault(project.getArtifactId(), UNKNOWN_PROJECT_VALUE))
+                .modulePath(defaultModulePath(project))
                 .manifestFile(resolveFile(manifestFile, buildDirectory.resolve("forensics/manifest.json")))
                 .checksumsFile(resolveFile(checksumsFile, buildDirectory.resolve("forensics/checksums.sha256")))
+                .engineRequestEnabled(engineRequestEnabled)
+                .engineRequestFile(resolveFile(engineRequestFile, buildDirectory.resolve("forensics/engine-request.json")))
                 .build();
     }
 
@@ -139,5 +145,12 @@ record MavenBtmGenParameters(
 
     private static String defaultPluginVersion(MavenProject project) {
         return blankToDefault(project.getVersion(), UNKNOWN_PROJECT_VALUE);
+    }
+
+    private static String defaultModulePath(MavenProject project) {
+        if (project.getBasedir() == null) {
+            return UNKNOWN_PROJECT_VALUE;
+        }
+        return project.getBasedir().toPath().toAbsolutePath().normalize().toString();
     }
 }

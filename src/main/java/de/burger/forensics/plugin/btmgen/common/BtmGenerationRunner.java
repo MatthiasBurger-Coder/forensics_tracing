@@ -113,6 +113,7 @@ public final class BtmGenerationRunner {
 
         ScanProfile profile = profileCollector.profile();
         publishProfile(request, profile, output.validationReport());
+        publishEngineRequest(request);
         log.info("Generated " + dedupedRuleNames.size() + " rules -> " + outputFile.toAbsolutePath());
 
         return new BtmGenerationResult(
@@ -397,6 +398,16 @@ public final class BtmGenerationRunner {
             return;
         }
         new JsonScanProfileSinkAdapter(request.profileReportFile()).publish(profile, validationReport);
+    }
+
+    private void publishEngineRequest(BtmGenerationRequest request) {
+        if (!request.engineRequestEnabled()) {
+            return;
+        }
+        new EngineIngestionRequestWriter().write(
+                request.engineRequestFile(),
+                EngineIngestionRequest.from(request)
+        );
     }
 
     private String helperFqn(BtmGenerationRequest request) {

@@ -37,6 +37,8 @@ class MavenBtmGenParametersTest {
                 " ",
                 null,
                 null,
+                false,
+                null,
                 true,
                 null,
                 true,
@@ -60,6 +62,8 @@ class MavenBtmGenParametersTest {
         assertThat(request.profileReportFile()).isEqualTo(tempDir.resolve("target/forensics/scan-profile.json").toAbsolutePath());
         assertThat(request.manifestFile()).isEqualTo(tempDir.resolve("target/forensics/manifest.json").toAbsolutePath());
         assertThat(request.checksumsFile()).isEqualTo(tempDir.resolve("target/forensics/checksums.sha256").toAbsolutePath());
+        assertThat(request.engineRequestEnabled()).isFalse();
+        assertThat(request.engineRequestFile()).isEqualTo(tempDir.resolve("target/forensics/engine-request.json").toAbsolutePath());
         assertThat(request.cacheEnabled()).isTrue();
         assertThat(request.analysisStoreEnabled()).isTrue();
         assertThat(request.cacheBackend()).isEqualTo(BtmGenerationDefaults.DEFAULT_CACHE_BACKEND);
@@ -75,6 +79,8 @@ class MavenBtmGenParametersTest {
         assertThat(request.cleanupPolicy()).isEqualTo(BtmGenerationDefaults.defaultCleanupPolicy());
         assertThat(request.projectKey()).isEqualTo("de.burger.forensics:sample");
         assertThat(request.pluginVersion()).isEqualTo("1.0.0");
+        assertThat(request.moduleName()).isEqualTo("sample");
+        assertThat(request.modulePath()).isEqualTo(tempDir.toAbsolutePath().toString());
     }
 
     @Test
@@ -97,6 +103,8 @@ class MavenBtmGenParametersTest {
                 "1.2.3",
                 tempDir.resolve("custom/manifest.json").toFile(),
                 tempDir.resolve("custom/checksums.sha256").toFile(),
+                true,
+                tempDir.resolve("custom/engine-request.json").toFile(),
                 false,
                 tempDir.resolve("custom/profile.json").toFile(),
                 false,
@@ -120,6 +128,8 @@ class MavenBtmGenParametersTest {
         assertThat(request.profileReportFile()).isEqualTo(tempDir.resolve("custom/profile.json").toAbsolutePath());
         assertThat(request.manifestFile()).isEqualTo(tempDir.resolve("custom/manifest.json").toAbsolutePath());
         assertThat(request.checksumsFile()).isEqualTo(tempDir.resolve("custom/checksums.sha256").toAbsolutePath());
+        assertThat(request.engineRequestEnabled()).isTrue();
+        assertThat(request.engineRequestFile()).isEqualTo(tempDir.resolve("custom/engine-request.json").toAbsolutePath());
         assertThat(request.analysisStoreEnabled()).isFalse();
         assertThat(request.cleanupPolicy()).isEqualTo("KEEP_ALWAYS");
         assertThat(request.projectKey()).isEqualTo("custom-project");
@@ -142,6 +152,8 @@ class MavenBtmGenParametersTest {
                 "",
                 "",
                 null,
+                null,
+                false,
                 null,
                 false,
                 null,
@@ -250,6 +262,8 @@ class MavenBtmGenParametersTest {
                 "",
                 "",
                 null,
+                null,
+                false,
                 null,
                 false,
                 null,
