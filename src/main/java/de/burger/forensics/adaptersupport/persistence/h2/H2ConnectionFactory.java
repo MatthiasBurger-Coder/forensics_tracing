@@ -1,12 +1,14 @@
 package de.burger.forensics.adaptersupport.persistence.h2;
 
+import org.h2.Driver;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.Properties;
 
 /**
  * Opens H2 connections for file-backed forensics databases.
@@ -31,6 +33,6 @@ public final class H2ConnectionFactory {
                 throw new IllegalStateException("Failed to create H2 database directory " + parent + ".", e);
             }
         }
-        return DriverManager.getConnection(jdbcUrl);
+        return Driver.load().connect(jdbcUrl, new Properties());
     }
 }
