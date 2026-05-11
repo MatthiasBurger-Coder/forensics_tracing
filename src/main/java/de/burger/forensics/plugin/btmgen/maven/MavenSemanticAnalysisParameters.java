@@ -52,6 +52,8 @@ record MavenSemanticAnalysisParameters(
                 false,
                 null,
                 false,
+                null,
+                false,
                 false,
                 false,
                 null,

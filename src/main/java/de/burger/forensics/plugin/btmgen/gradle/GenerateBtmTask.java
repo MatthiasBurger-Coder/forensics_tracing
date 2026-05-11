@@ -122,8 +122,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
     @Input @Optional public abstract Property<@NotNull String> getCleanupPolicy();
     @Input @Optional public abstract Property<@NotNull String> getProjectKey();
     @Input @Optional public abstract Property<@NotNull String> getPluginVersion();
+    @Input @Optional public abstract Property<@NotNull String> getModuleName();
+    @Input @Optional public abstract Property<@NotNull String> getModulePath();
     @OutputFile @Optional public abstract RegularFileProperty getManifestFile();
     @OutputFile @Optional public abstract RegularFileProperty getChecksumsFile();
+    @Input @Optional public abstract Property<@NotNull Boolean> getEngineRequestEnabled();
+    @OutputFile @Optional public abstract RegularFileProperty getEngineRequestFile();
     @Input @Optional public abstract Property<@NotNull Boolean> getProfilingEnabled();
     @LocalState @Optional public abstract RegularFileProperty getProfileReportFile();
     @Input @Optional public abstract Property<@NotNull Boolean> getStrictParsing();
@@ -157,8 +161,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
         getCleanupPolicy().convention(ext.getCleanupPolicy());
         getProjectKey().convention(ext.getProjectKey().orElse(getProject().getName()));
         getPluginVersion().convention(getProject().getVersion().toString());
+        getModuleName().convention(getProject().getName());
+        getModulePath().convention(getProject().getPath());
         getManifestFile().set(getProjectLayout().file(ext.getManifestFile()));
         getChecksumsFile().set(getProjectLayout().file(ext.getChecksumsFile()));
+        getEngineRequestEnabled().convention(ext.getEngineRequestEnabled());
+        getEngineRequestFile().set(getProjectLayout().file(ext.getEngineRequestFile()));
         getProfilingEnabled().convention(ext.getProfilingEnabled());
         getProfileReportFile().set(getProjectLayout().file(ext.getProfileReportFile()));
         getStrictParsing().convention(ext.getStrictParsing());
@@ -203,8 +211,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
                 .cleanupPolicy(getCleanupPolicy().getOrElse("KEEP_ON_SUCCESS"))
                 .projectKey(getProjectKey().getOrElse(BuildIdentity.UNKNOWN))
                 .pluginVersion(getPluginVersion().getOrElse(BuildIdentity.UNKNOWN))
+                .moduleName(getModuleName().getOrElse(BuildIdentity.UNKNOWN))
+                .modulePath(getModulePath().getOrElse(BuildIdentity.UNKNOWN))
                 .manifestFile(getManifestFile().get().getAsFile().toPath())
-                .checksumsFile(getChecksumsFile().get().getAsFile().toPath());
+                .checksumsFile(getChecksumsFile().get().getAsFile().toPath())
+                .engineRequestEnabled(getEngineRequestEnabled().getOrElse(false))
+                .engineRequestFile(getEngineRequestFile().get().getAsFile().toPath());
 
         if (hasMinimalInputs()) {
             builder.templateRequest(new BtmTemplateRequest(
@@ -246,8 +258,12 @@ public abstract class GenerateBtmTask extends DefaultTask {
         conventionIfMissing(getCleanupPolicy(), "KEEP_ON_SUCCESS");
         conventionIfMissing(getProjectKey(), BuildIdentity.UNKNOWN);
         conventionIfMissing(getPluginVersion(), BuildIdentity.UNKNOWN);
+        conventionIfMissing(getModuleName(), BuildIdentity.UNKNOWN);
+        conventionIfMissing(getModulePath(), BuildIdentity.UNKNOWN);
         conventionIfMissing(getManifestFile(), layout.getBuildDirectory().file("forensics/manifest.json"));
         conventionIfMissing(getChecksumsFile(), layout.getBuildDirectory().file("forensics/checksums.sha256"));
+        conventionIfMissing(getEngineRequestEnabled(), false);
+        conventionIfMissing(getEngineRequestFile(), layout.getBuildDirectory().file("forensics/engine-request.json"));
         conventionIfMissing(getProfilingEnabled(), false);
         conventionIfMissing(getProfileReportFile(), layout.getBuildDirectory().file("forensics/scan-profile.json"));
         conventionIfMissing(getStrictParsing(), false);

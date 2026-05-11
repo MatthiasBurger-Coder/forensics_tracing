@@ -39,6 +39,8 @@ public class BtmGenExtension {
     private final Property<@NotNull String> projectKey;
     private final Property<@NotNull File> manifestFile;
     private final Property<@NotNull File> checksumsFile;
+    private final Property<@NotNull Boolean> engineRequestEnabled;
+    private final Property<@NotNull File> engineRequestFile;
     private final Property<@NotNull Boolean> profilingEnabled;
     private final Property<@NotNull File> profileReportFile;
     private final Property<@NotNull Boolean> strictParsing;
@@ -75,6 +77,8 @@ public class BtmGenExtension {
         this.projectKey = objects.property(String.class);
         this.manifestFile = objects.property(File.class);
         this.checksumsFile = objects.property(File.class);
+        this.engineRequestEnabled = objects.property(Boolean.class);
+        this.engineRequestFile = objects.property(File.class);
         this.profilingEnabled = objects.property(Boolean.class);
         this.profileReportFile = objects.property(File.class);
         this.strictParsing = objects.property(Boolean.class);
@@ -105,6 +109,8 @@ public class BtmGenExtension {
         this.cleanupPolicy.convention("KEEP_ON_SUCCESS");
         this.manifestFile.convention(new File("build/forensics/manifest.json"));
         this.checksumsFile.convention(new File("build/forensics/checksums.sha256"));
+        this.engineRequestEnabled.convention(false);
+        this.engineRequestFile.convention(new File("build/forensics/engine-request.json"));
         this.profilingEnabled.convention(false);
         this.profileReportFile.convention(new File("build/forensics/scan-profile.json"));
         this.strictParsing.convention(false);
@@ -209,6 +215,14 @@ public class BtmGenExtension {
 
     public Property<@NotNull File> getChecksumsFile() {
         return checksumsFile;
+    }
+
+    public Property<@NotNull Boolean> getEngineRequestEnabled() {
+        return engineRequestEnabled;
+    }
+
+    public Property<@NotNull File> getEngineRequestFile() {
+        return engineRequestFile;
     }
 
     public Property<@NotNull Boolean> getProfilingEnabled() {

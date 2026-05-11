@@ -106,6 +106,7 @@ class BtmGenPluginTest {
         assertTrue(task.getOutputFile().get().getAsFile().toPath().endsWith("forensics\\forensics.btm")
             || task.getOutputFile().get().getAsFile().toPath().endsWith("forensics/forensics.btm"));
         assertFalse(task.getStrictConditionValidation().get());
+        assertFalse(task.getEngineRequestEnabled().get());
     }
 
     @Test

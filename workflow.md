@@ -1,1353 +1,632 @@
-# Workflow: Migrate Forensics Core into `forensic_analytics` Engine
+# Workplan: `forensics_tracing` — Engine-Handoff nach `forensic_analytics` und Java-25/JUnit-6-Abschluss
 
-## Purpose
+## 1. Ziel
 
-This workflow guides Codex through the controlled migration from a plugin-centric architecture into a dedicated Forensics Engine architecture.
+Dieses Workplan-Dokument beschreibt die notwendigen Schritte im Repository `forensics_tracing`, damit die Migration zur Analytics-Plattform tatsächlich auf dem Hauptstand abgeschlossen wird.
 
-The goal is not to move everything at once. The goal is to extract the reusable analysis core into `forensic_analytics`, while keeping `forensics_tracing` as a thin Gradle/Maven adapter.
-
-## Repositories
-
-Codex is expected to work with two local repositories:
+Zielzustand:
 
 ```text
-forensics_tracing      # Existing Gradle/Maven plugin project
-forensic_analytics     # Target engine / analysis platform project
+Repository: forensics_tracing
+Rolle: Build-Tool-Adapter / Plugin-Producer
+Baseline: Java 25, JUnit 6, Gradle 9.4.0
+Handoff: erzeugt optional ein engine-request.json für forensic_analytics
+Legacy: lokale BTM-Erzeugung bleibt vorerst erhalten
+Main-Branch: enthält den Engine-Request-Handoff
 ```
 
-If one of these repositories is missing, Codex must stop and report the missing repository instead of guessing paths or creating an unrelated structure.
+`forensics_tracing` bleibt das Gradle-/Maven-Plugin. Es soll nicht zur Analytics-Engine werden.
 
-## Global Rules
+---
 
-* Use Java 25 for the Forensics core.
-* Use JUnit 6 for all tests.
-* Use Gradle 9.4.0 only.
-* Do not perform a big-bang migration.
-* Do not delete working functionality without a replacement plan.
-* Do not move Gradle or Maven plugin adapter code into the Engine unless explicitly required by this workflow.
-* Source code and source comments must be written in English.
-* User-facing reports must be written in German.
-* Preserve hexagonal architecture.
-* Domain modules must not depend on frameworks, Gradle, Maven, Joern CLI, Docker, gRPC, Spring, persistence, or UI technologies.
-* Application modules may depend on domain ports and use cases, but not on concrete infrastructure implementations.
-* Infrastructure adapters must depend inward on application/domain contracts.
-* If a class, method, responsibility, package, or architectural boundary is unclear, stop and report.
-* Do not silently guess.
-* Do not lower coverage thresholds.
-* Do not disable failing tests.
-* Do not remove tests to make the build pass.
-* Every behavior-relevant migration must have regression tests.
+## 2. Ausgangslage
 
-## Target Architecture
+Der Vergleich hat gezeigt:
 
-The target architecture separates the system into:
+* `forensics_tracing/main` enthält noch Java-17-/JUnit-5-Konfiguration.
+* `forensics_tracing/main` enthält den Engine-Request-Handoff noch nicht sichtbar.
+* Der Branch `feature/migration-slice-08-plugin-adapter-boundary` enthält bereits die relevanten Handoff-Klassen und Einstellungen.
+* Die Analytics-Seite kann ein `engine-request.json` bereits importieren.
+* Die vollständige Migration ist erst abgeschlossen, wenn der Handoff auf `main` liegt und mit `forensic_analytics/main` getestet wurde.
+
+---
+
+## 3. Non-Goals
+
+Nicht Teil dieses Workplans:
+
+* Keine Verschiebung von Gradle-Tasks oder Maven-Mojos nach `forensic_analytics`.
+* Keine Entfernung des lokalen Legacy-BTM-Modus.
+* Keine direkte gRPC-Client-Pflicht im Plugin.
+* Keine Einführung von Spring oder Serverlogik im Plugin.
+* Keine Big-Bang-Entfernung der vorhandenen Analysefunktionen.
+* Keine Senkung von Coverage- oder Architekturregeln.
+* Keine Deaktivierung von Dependency Verification.
+
+---
+
+## 4. Zielarchitektur für dieses Repository
 
 ```text
 forensics_tracing
-  -> Gradle plugin adapter
-  -> Maven plugin adapter
-  -> build-system integration
-  -> optional BTM generation adapter
-  -> later: gRPC client / Engine client
-
-forensic_analytics
-  -> Forensics Engine
-  -> repository checkout / source acquisition
-  -> JavaParser / AST analysis
-  -> Joern / CPG analysis via container adapter
-  -> graph / replay / report model
-  -> persistence
-  -> gRPC ingestion
-  -> CLI
-  -> server / API
-  -> later: UI integration
+  -> Gradle Plugin Adapter
+  -> Maven Mojo Adapter
+  -> lokale Legacy-BTM-Erzeugung
+  -> optionale Erzeugung engine-request.json
+  -> später optional: gRPC-Client oder Engine-CLI-Aufruf
 ```
 
-The plugin must become a producer or client. The Engine must become the owner of analysis orchestration.
-
-## High-Level Migration Strategy
-
-The migration must be done in slices:
+Erlaubt:
 
 ```text
-1. Inspect both repositories
-2. Classify existing responsibilities
-3. Create a migration work plan
-4. Prepare the Engine module structure
-5. Move neutral domain contracts
-6. Move application-level analysis orchestration
-7. Add Joern Docker adapter to the Engine
-8. Add repository checkout/source acquisition adapter
-9. Add CLI entry point
-10. Add gRPC ingestion contract/module
-11. Reduce plugin logic to adapter/client role
-12. Add external E2E testbed
-13. Verify complete quality gates
+Gradle Task
+Maven Mojo
+Extension/Parameter Mapping
+Consumer-Projekt-Erkennung
+SourceSet-/Reactor-Erkennung
+Lokale Artefakterzeugung
+Engine-Request-Datei als Handoff-Artefakt
 ```
 
-Each slice must compile and be verifiable before continuing.
+Nicht erlaubt:
+
+```text
+Analytics Server
+Graphdatenbank-Orchestrierung
+Replay-Engine
+LLM-Kontextlogik
+Joern-Docker-Ownership als Engine-Verantwortung
+UI oder API-Server
+```
 
 ---
 
-# Phase 0: Safety Preparation
+## 5. Slice 0 — Preflight
 
-## 0.1 Create or verify branches
+### Ziel
 
-Before any code changes, inspect branches in both repositories.
+Sicheren Arbeitszustand herstellen und beide relevanten Branches prüfen.
 
-```bash
-git status
-git branch --show-current
-```
-
-If the current branch is not appropriate for a migration, create a dedicated branch.
-
-Recommended branch names:
-
-```text
-forensic_analytics: feature/forensics-engine-foundation
-forensics_tracing:  feature/extract-engine-boundary
-```
-
-## 0.2 Inspect working tree state
-
-Run in both repositories:
+### Commands
 
 ```bash
 git status --short
-git diff --stat
-git diff
-```
-
-If unrelated changes exist, stop and report them. Do not overwrite or mix them into this migration.
-
-## 0.3 Verify Java and Gradle
-
-Run in both repositories:
-
-```bash
-java -version
+git branch --show-current
+git fetch --all --prune
+git branch --list
+git branch --list "feature/migration-slice-08-plugin-adapter-boundary"
+java --version
 ./gradlew --version
 ```
 
-Expected:
+Windows PowerShell:
 
-* Java 25 runtime suitable for the project baseline.
-* Gradle Wrapper available.
-* Gradle 9.4.0 according to project constraints.
-* JUnit 6 is used for tests.
+```powershell
+git status --short
+git branch --show-current
+git fetch --all --prune
+git branch --list
+git branch --list "feature/migration-slice-08-plugin-adapter-boundary"
+java --version
+.\gradlew.bat --version
+```
 
-If the wrapper is missing or the Gradle version differs, stop and report.
+### Akzeptanzkriterien
+
+```text
+[ ] Working Tree ist sauber oder alle lokalen Änderungen sind dokumentiert.
+[ ] Branch feature/migration-slice-08-plugin-adapter-boundary ist vorhanden.
+[ ] Gradle Wrapper ist ausführbar.
+[ ] Java 25 ist lokal verfügbar, falls die Baseline-Migration direkt mit umgesetzt wird.
+```
+
+### Stop-and-Report
+
+Stoppen, wenn:
+
+```text
+- Unklare lokale Änderungen vorhanden sind.
+- Der Handoff-Branch fehlt.
+- Der Gradle Wrapper nicht läuft.
+- Java 25 nicht verfügbar ist und die Baseline-Migration Teil des aktuellen Durchlaufs ist.
+```
 
 ---
 
-# Phase 1: Repository Inspection
+## 6. Slice 1 — Handoff-Branch gegen `main` prüfen
 
-## 1.1 Inspect `forensics_tracing`
+### Ziel
 
-Inspect at least:
+Ermitteln, ob `feature/migration-slice-08-plugin-adapter-boundary` sauber nach `main` übernommen werden kann.
+
+### Commands
+
+```bash
+git switch main
+git pull --ff-only
+git switch feature/migration-slice-08-plugin-adapter-boundary
+git pull --ff-only || true
+git diff --stat main...feature/migration-slice-08-plugin-adapter-boundary
+git diff main...feature/migration-slice-08-plugin-adapter-boundary -- src/main/java src/test/java build.gradle.kts gradle README.md QUALITY.md AGENTS.md
+```
+
+### Zu prüfende Handoff-Bestandteile
+
+Mindestens vorhanden sein müssen:
 
 ```text
-settings.gradle.kts
-build.gradle.kts
+EngineIngestionRequest
+EngineIngestionPayload
+EnginePayloadKind
+EngineIngestionRequestWriter
+engineRequestEnabled
+engineRequestFile
+Gradle Mapping
+Maven Mapping
+BuildToolConnectorParityTest Erweiterung
+EngineIngestionRequestWriterTest
+```
+
+### Akzeptanzkriterien
+
+```text
+[ ] Branch enthält Engine-Request-Modell.
+[ ] Branch enthält Engine-Request-Writer.
+[ ] Gradle kann engineRequestEnabled und engineRequestFile setzen.
+[ ] Maven kann forensics.engineRequestEnabled und forensics.engineRequestFile setzen.
+[ ] Payload-Kinds passen zu forensic_analytics.
+[ ] Legacy-Modus bleibt default.
+```
+
+---
+
+## 7. Slice 2 — Branch auf aktuellen `main` rebasen oder mergen
+
+### Ziel
+
+Den Handoff-Code konfliktfrei auf den aktuellen Hauptstand bringen.
+
+### Variante A: Rebase bevorzugt für saubere Historie
+
+```bash
+git switch feature/migration-slice-08-plugin-adapter-boundary
+git rebase main
+```
+
+### Variante B: Merge, falls Rebase nicht gewünscht ist
+
+```bash
+git switch feature/migration-slice-08-plugin-adapter-boundary
+git merge main
+```
+
+### Konfliktregeln
+
+Bei Konflikten:
+
+```text
+- Legacy-BTM-Verhalten erhalten.
+- Handoff-Code nicht entfernen.
+- Gradle- und Maven-Parität erhalten.
+- Keine Analytics-Engine-Klassen in das Plugin ziehen.
+- Keine Java-17-Konfiguration wiederherstellen, wenn Slice 4 direkt folgt.
+```
+
+### Targeted Verification
+
+```bash
+./gradlew test \
+  --tests '*BtmGenerationRequestTest' \
+  --tests '*BtmGenerationRunnerTest' \
+  --tests '*EngineIngestionRequestWriterTest' \
+  --tests '*BtmGenExtensionTest' \
+  --tests '*GenerateBtmTaskTest' \
+  --tests '*BtmGenPluginTest' \
+  --tests '*MavenBtmGenParametersTest' \
+  --tests '*BuildToolConnectorParityTest' \
+  --tests '*PluginAdapterArchitectureTest' \
+  --dependency-verification strict \
+  --console=plain \
+  --stacktrace
+```
+
+Windows:
+
+```powershell
+.\gradlew.bat test `
+  --tests '*BtmGenerationRequestTest' `
+  --tests '*BtmGenerationRunnerTest' `
+  --tests '*EngineIngestionRequestWriterTest' `
+  --tests '*BtmGenExtensionTest' `
+  --tests '*GenerateBtmTaskTest' `
+  --tests '*BtmGenPluginTest' `
+  --tests '*MavenBtmGenParametersTest' `
+  --tests '*BuildToolConnectorParityTest' `
+  --tests '*PluginAdapterArchitectureTest' `
+  --dependency-verification strict `
+  --console=plain `
+  --stacktrace
+```
+
+### Akzeptanzkriterien
+
+```text
+[ ] Handoff-Branch ist konfliktfrei aktuell.
+[ ] Targeted Tests laufen erfolgreich.
+[ ] Keine Plugin-Adapter-Verantwortung wurde nach Analytics verschoben.
+```
+
+---
+
+## 8. Slice 3 — Handoff auf `main` bringen
+
+### Ziel
+
+Den Engine-Request-Handoff in `forensics_tracing/main` übernehmen.
+
+### Vorgehen
+
+Empfohlen:
+
+```text
+1. PR von feature/migration-slice-08-plugin-adapter-boundary nach main öffnen oder aktualisieren.
+2. PR-Beschreibung mit What/Why/How/Verification ergänzen.
+3. CI prüfen.
+4. PR mergen.
+```
+
+Falls lokal gemergt werden soll:
+
+```bash
+git switch main
+git pull --ff-only
+git merge --no-ff feature/migration-slice-08-plugin-adapter-boundary
+```
+
+### Pflichtprüfung nach Merge auf `main`
+
+```bash
+git switch main
+git pull --ff-only
+rg -n "EngineIngestionRequest|engineRequestEnabled|engineRequestFile|EnginePayloadKind|engine-request" src README.md QUALITY.md AGENTS.md build.gradle.kts gradle || true
+```
+
+### Akzeptanzkriterien
+
+```text
+[ ] `main` enthält EngineIngestionRequest.
+[ ] `main` enthält EngineIngestionRequestWriter.
+[ ] `main` enthält Gradle- und Maven-Konfiguration für Engine Request.
+[ ] Dokumentation beschreibt engineRequestEnabled und engineRequestFile.
+[ ] Legacy default bleibt erhalten.
+```
+
+---
+
+## 9. Slice 4 — Java 25 / JUnit 6 Baseline-Migration in `forensics_tracing`
+
+### Ziel
+
+`forensics_tracing` ebenfalls auf die Systembaseline Java 25 / JUnit 6 bringen.
+
+Dieser Slice ist erforderlich, wenn das **gesamte System** dieselbe Baseline haben soll.
+
+### Dateien
+
+```text
 gradle/libs.versions.toml
+build.gradle.kts
+.github/workflows/*.yml
+.github/workflows/*.yaml
 QUALITY.md
 AGENTS.md
 README.md
-src/main/java
-src/test/java
+Commit.md
+gradle/verification-metadata.xml
 ```
 
-Also inspect any plugin-specific source sets or packages containing:
+### Zentrale Änderungen
 
-```text
-Gradle plugin implementation
-Maven Mojo implementation
-BTM generation
-JavaParser scanning
-Joern integration
-Analysis Store
-Semantic analysis
-Manifest/checksum logic
-Report/export logic
-Domain models
-Application services
+In `gradle/libs.versions.toml`:
+
+```toml
+junit = "6.0.3"
+jacoco = "0.8.14"
 ```
 
-## 1.2 Inspect `forensic_analytics`
-
-Inspect at least:
+Zusätzlich prüfen und bei Bedarf aktualisieren:
 
 ```text
-settings.gradle.kts
-build.gradle.kts
-gradle/libs.versions.toml
+AspectJ Weaver
+Mockito
+Byte Buddy
+JavaParser
+Lombok
+```
+
+In `build.gradle.kts`:
+
+```kotlin
+val javaBaseline = 25
+val java25 = javaToolchains.launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(javaBaseline))
+}
+```
+
+Alle aktiven Java-17-Stellen ersetzen:
+
+```text
+JavaLanguageVersion.of(17)
+JavaVersion.VERSION_17
+options.release.set(17)
+java17
+```
+
+JUnit Platform Launcher über den JUnit BOM führen und keine separate `junit-platform = "1.x"` Version behalten.
+
+### Suchbefehl
+
+```bash
+rg -n "Java 17|JDK 17|JUnit 5|junit5|java17|VERSION_17|release\.set\(17\)|JavaLanguageVersion\.of\(17\)|junit-platform\s*=|5\.13\.4|1\.11\.3|0\.8\.13" \
+  AGENTS.md QUALITY.md README.md Commit.md build.gradle.kts settings.gradle.kts gradle .github src || true
+```
+
+### Verification
+
+```bash
+./gradlew clean compileJava compileTestJava --dependency-verification lenient --console=plain --stacktrace
+./gradlew test --dependency-verification lenient --console=plain --stacktrace
+```
+
+Danach Dependency Verification aktualisieren, falls nötig:
+
+```bash
+./gradlew help --write-verification-metadata sha256 --dependency-verification lenient --console=plain
+./gradlew clean test --write-verification-metadata sha256 --dependency-verification lenient --console=plain --stacktrace
+```
+
+Strict Gate:
+
+```bash
+./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage \
+  --dependency-verification strict \
+  --console=plain \
+  --stacktrace
+
+./gradlew validatePlugins \
+  --dependency-verification strict \
+  --no-daemon \
+  --console=plain \
+  --stacktrace
+```
+
+### Akzeptanzkriterien
+
+```text
+[ ] Build und Tests laufen mit Java 25.
+[ ] Tests laufen mit JUnit 6.
+[ ] Kein aktiver JUnit-Platform-1.x-Katalogeintrag bleibt übrig.
+[ ] JaCoCo unterstützt Java-25-Bytecode.
+[ ] AspectJ-/Mockito-/ByteBuddy-Tests laufen unter Java 25.
+[ ] CI nutzt JDK 25.
+[ ] Dependency Verification läuft strict.
+```
+
+---
+
+## 10. Slice 5 — Engine-Request-Artefakt real erzeugen
+
+### Ziel
+
+Nachweisen, dass das Plugin ein von Analytics konsumierbares `engine-request.json` erzeugt.
+
+### Beispiel Gradle
+
+```bash
+./gradlew generateBtmRules \
+  -Pforensics.engineRequestEnabled=true \
+  -Pforensics.engineRequestFile=build/forensics/engine-request.json \
+  --dependency-verification strict \
+  --console=plain \
+  --stacktrace
+```
+
+Windows:
+
+```powershell
+.\gradlew.bat generateBtmRules `
+  -Pforensics.engineRequestEnabled=true `
+  -Pforensics.engineRequestFile=build/forensics/engine-request.json `
+  --dependency-verification strict `
+  --console=plain `
+  --stacktrace
+```
+
+### Erwartete Artefakte
+
+```text
+build/forensics/engine-request.json
+build/forensics/forensics.btm oder konfigurierte BTM-Datei
+optional manifest/checksums bei analysisStoreEnabled=true
+```
+
+### Inhaltliche Prüfung
+
+```bash
+cat build/forensics/engine-request.json
+```
+
+Erwartete Struktur:
+
+```json
+{
+  "schemaVersion": "...",
+  "buildIdentity": { ... },
+  "moduleIdentity": { ... },
+  "pluginIdentity": { ... },
+  "payloads": [
+    {
+      "payloadId": "byteman-rules",
+      "kind": "RULE_ARTIFACTS",
+      "contentType": "text/x-byteman",
+      "file": "...",
+      "attributes": { ... }
+    }
+  ]
+}
+```
+
+### Akzeptanzkriterien
+
+```text
+[ ] engine-request.json wird erzeugt.
+[ ] Payload-Dateien existieren real.
+[ ] Payload-Kinds passen exakt zu forensic_analytics.
+[ ] Relative und absolute Pfade sind importierbar.
+[ ] Legacy-BTM-Ausgabe bleibt erhalten.
+```
+
+---
+
+## 11. Slice 6 — Cross-Repo-Handoff-Smoke gegen `forensic_analytics`
+
+### Ziel
+
+Den erzeugten Request direkt mit `forensic_analytics` importieren.
+
+### Voraussetzung
+
+`forensic_analytics/main` ist lokal ausgecheckt und gebaut.
+
+### Commands in `forensic_analytics`
+
+```bash
+./gradlew :forensic-analytics-cli:run \
+  --args="ingest-request --request <path-to-forensics_tracing>/build/forensics/engine-request.json --output build/forensics/handoff-smoke" \
+  --dependency-verification strict \
+  --console=plain \
+  --stacktrace
+```
+
+Windows:
+
+```powershell
+.\gradlew.bat :forensic-analytics-cli:run `
+  --args="ingest-request --request D:\Projects\forensics_tracing\build\forensics\engine-request.json --output build\forensics\handoff-smoke" `
+  --dependency-verification strict `
+  --console=plain `
+  --stacktrace
+```
+
+### Erwartete Analytics-Ausgabe
+
+```text
+status=COMPLETED
+uploadedPayloads>=1
+engine-request-import-summary.txt vorhanden
+```
+
+### Akzeptanzkriterien
+
+```text
+[ ] Analytics kann den von forensics_tracing erzeugten Request lesen.
+[ ] Alle referenzierten Payload-Dateien werden geladen.
+[ ] Import endet mit COMPLETED.
+[ ] Summary enthält requestFile, status und uploadedPayloads.
+```
+
+---
+
+## 12. Slice 7 — Dokumentation und Status abschließen
+
+### Ziel
+
+Repository-Dokumentation in `forensics_tracing` auf den finalen Zustand bringen.
+
+### Zu aktualisieren
+
+```text
+README.md
 QUALITY.md
 AGENTS.md
-README.md
-src/main/java
-src/test/java
+workflow.md
+Commit.md
+optional docs/migration/MIGRATION_STATUS.md
 ```
 
-If it is already a multi-module project, inspect all modules.
-
-Special attention:
+### Inhalt muss erklären
 
 ```text
-gRPC ingestion module
-server/bootstrap module
-existing domain/application packages
-persistence setup
-CLI/server entry points
-Docker/testbed directories
+- forensics_tracing ist Build-Adapter / Plugin.
+- forensic_analytics ist Zielplattform / Engine.
+- Legacy-Modus bleibt default.
+- engineRequestEnabled aktiviert den lokalen Handoff.
+- engineRequestFile definiert die Handoff-Datei.
+- gRPC-Client ist noch nicht Teil dieses Schritts.
+- Java 25 / JUnit 6 gilt als aktive Baseline, falls Slice 4 umgesetzt wurde.
 ```
 
-## 1.3 Produce inspection report
-
-Create or update this file in `forensic_analytics`:
+### Akzeptanzkriterien
 
 ```text
-docs/migration/INSPECTION_REPORT.md
-```
-
-The report must be written in German and include:
-
-```text
-1. Current structure of forensics_tracing
-2. Current structure of forensic_analytics
-3. Existing reusable core logic
-4. Existing plugin-only logic
-5. Existing Engine/server logic
-6. Open architectural questions
-7. First risk assessment
-```
-
-Do not move code during Phase 1.
-
----
-
-# Phase 2: Responsibility Classification
-
-Create this file in `forensic_analytics`:
-
-```text
-docs/migration/RESPONSIBILITY_MAPPING.md
-```
-
-Classify every relevant responsibility from `forensics_tracing` into one of the following categories.
-
-## Category A: Must stay in `forensics_tracing`
-
-Examples:
-
-```text
-Gradle plugin id declaration
-Gradle plugin implementation class
-Gradle task classes
-Gradle extension classes
-Gradle TestKit tests
-Maven Mojo classes
-Maven plugin descriptor configuration
-Maven plugin harness tests
-Plugin publishing configuration
-Build lifecycle integration
-Consumer-project task wiring
-Local plugin output configuration
-```
-
-## Category B: Must move to `forensic_analytics`
-
-Examples:
-
-```text
-Analysis domain model
-Analysis request/result model
-Engine-neutral scan event model
-Semantic analysis abstractions
-Joern abstraction contracts
-BTM rule domain model if not plugin-specific
-Repository analysis orchestration
-Analysis persistence abstraction
-Graph/replay concepts
-Report/export model
-Finding model
-Correlation/replay event model
-Analysis profile model
-Repository checkout model
-```
-
-## Category C: Temporary duplication allowed
-
-Use only when necessary to avoid breaking the plugin while the Engine boundary is created.
-
-Examples:
-
-```text
-DTOs during gRPC boundary migration
-Simple value objects before shared contract exists
-Compatibility models used by both repositories during transition
-```
-
-Temporary duplication must include a removal note.
-
-## Category D: Later shared contract
-
-Examples:
-
-```text
-gRPC request/response DTOs
-Plugin-to-Engine request model
-Analysis result upload model
-Artifact reference model
-Correlation event model
-Repository metadata model
-Analysis profile schema
-```
-
-## Category E: Delete later
-
-Only classify something here if there is a verified replacement plan.
-
-Examples:
-
-```text
-Obsolete plugin-internal orchestration after Engine extraction
-Duplicate Joern command resolution after Docker adapter exists
-Deprecated local output models replaced by Engine artifact references
-```
-
-## Category F: Unclear / requires decision
-
-Any unclear item must be listed here with a concrete question.
-
-Do not proceed to code migration while important items remain unclear.
-
----
-
-# Phase 3: Migration Work Plan
-
-Create this file in `forensic_analytics`:
-
-```text
-MIGRATION_WORKPLAN.md
-```
-
-The work plan must be written in German.
-
-It must contain:
-
-```text
-1. Goal
-2. Non-goals
-3. Current architecture
-4. Target architecture
-5. Repository responsibility split
-6. Proposed module structure
-7. Slice plan
-8. Verification strategy
-9. Rollback strategy
-10. Known risks
-11. Decisions required from the user
-12. First implementation slice
-```
-
-## Required target module proposal
-
-The proposal should evaluate these modules:
-
-```text
-forensic-analytics-domain
-forensic-analytics-application
-forensic-analytics-engine
-forensic-analytics-ingestion-grpc
-forensic-analytics-adapter-git
-forensic-analytics-adapter-build-gradle
-forensic-analytics-adapter-build-maven
-forensic-analytics-adapter-javaparser
-forensic-analytics-adapter-joern-docker
-forensic-analytics-adapter-byteman
-forensic-analytics-persistence
-forensic-analytics-cli
-forensic-analytics-server
-forensic-analytics-bootstrap
-testbed
-```
-
-Do not create all modules automatically. First justify which modules are needed immediately and which should wait.
-
----
-
-# Phase 4: Prepare Engine Foundation
-
-This is the first implementation phase.
-
-Only implement the minimum foundation needed for the Engine boundary.
-
-## 4.1 Module creation
-
-In `forensic_analytics`, create only the modules needed for the first vertical slice.
-
-Recommended minimal start:
-
-```text
-forensic-analytics-domain
-forensic-analytics-application
-forensic-analytics-engine
-forensic-analytics-cli
-```
-
-Optional if already planned and required:
-
-```text
-forensic-analytics-ingestion-grpc
-```
-
-Do not create empty vanity modules without tests or clear purpose.
-
-## 4.2 Dependency direction
-
-The dependency direction must be:
-
-```text
-cli -> engine -> application -> domain
-```
-
-Forbidden:
-
-```text
-domain -> application
-domain -> engine
-domain -> cli
-domain -> infrastructure
-domain -> Gradle
-domain -> Maven
-domain -> Joern
-domain -> Docker
-domain -> Spring
-domain -> persistence
-```
-
-## 4.3 Minimal domain contracts
-
-Create only minimal contracts if needed, for example:
-
-```text
-AnalysisId
-RepositoryLocation
-RepositoryRevision
-AnalysisProfile
-AnalysisRequest
-AnalysisResult
-AnalysisFinding
-AnalysisArtifact
-```
-
-Rules:
-
-* Keep them framework-free.
-* Prefer immutable value objects or records where appropriate.
-* Do not model infrastructure concerns in the domain.
-* Comments must be in English.
-
-## 4.4 Minimal application contracts
-
-Create use-case ports only if needed, for example:
-
-```text
-RunRepositoryAnalysisUseCase
-LoadRepositoryPort
-StoreAnalysisResultPort
-RunSemanticAnalysisPort
-GenerateInstrumentationRulesPort
-```
-
-Do not implement Joern, Git, Docker, Maven, or Gradle behavior here.
-
-## 4.5 Verification
-
-Run in `forensic_analytics`:
-
-```bash
-./gradlew clean test
-./gradlew check
-```
-
-If `QUALITY.md` defines a stricter gate, run the stricter command.
-
-Create/update:
-
-```text
-docs/migration/SLICE_01_ENGINE_FOUNDATION_RESULT.md
-```
-
-The result must include:
-
-```text
-1. What was created
-2. Why it was created
-3. Files changed
-4. Tests added
-5. Commands executed
-6. Result
-7. Open risks
+[ ] README beschreibt Engine-Request-Handoff.
+[ ] QUALITY beschreibt Java 25/JUnit 6 oder klar den abweichenden Legacy-Status.
+[ ] AGENTS ist widerspruchsfrei.
+[ ] Migration Status nennt erledigte und offene Punkte.
 ```
 
 ---
 
-# Phase 5: Move Engine-Neutral Domain Model
-
-Only begin this phase after Phase 4 passes.
-
-## 5.1 Identify movable domain classes
-
-From `forensics_tracing`, identify classes that are independent of:
+## 13. Vollständige Definition of Done
 
 ```text
-Gradle
-Maven
-Joern CLI
-Docker
-File system specifics
-ProcessBuilder
-JUnit/TestKit
-Plugin lifecycle
-```
-
-Candidate areas:
-
-```text
-Analysis request/result model
-Scan event model
-Finding model
-Artifact model
-Rule model
-Manifest/checksum model if engine-neutral
-Correlation/replay model
-```
-
-## 5.2 Move with compatibility strategy
-
-Preferred order:
-
-```text
-1. Copy domain class into forensic_analytics
-2. Add tests in forensic_analytics
-3. Verify compile/test
-4. Mark original location in forensics_tracing as pending extraction
-5. Only remove or replace original after adapter boundary exists
-```
-
-Do not immediately break the plugin project.
-
-## 5.3 Tests
-
-For every migrated domain model, add tests covering:
-
-```text
-valid construction
-invalid construction
-identity/equality if relevant
-serialization expectations if relevant
-edge cases found in existing tests
-```
-
-## 5.4 Verification
-
-Run in `forensic_analytics`:
-
-```bash
-./gradlew clean test
-./gradlew check
-```
-
-Run in `forensics_tracing` to ensure it still works:
-
-```bash
-./gradlew clean test
-./gradlew check
-```
-
-If `QUALITY.md` in either repository defines stricter commands, use them.
-
-Create/update:
-
-```text
-docs/migration/SLICE_02_DOMAIN_MIGRATION_RESULT.md
+[ ] Handoff-Code liegt auf forensics_tracing/main.
+[ ] engine-request.json kann vom Plugin erzeugt werden.
+[ ] forensic_analytics kann das erzeugte engine-request.json importieren.
+[ ] Gradle- und Maven-Adapter besitzen Parität für Engine Request.
+[ ] Legacy-BTM-Modus funktioniert weiterhin.
+[ ] Java 25 / JUnit 6 ist umgesetzt oder bewusst als separater offener Punkt dokumentiert.
+[ ] Full Quality Gate läuft strict.
+[ ] validatePlugins läuft strict.
+[ ] Dokumentation ist aktualisiert.
+[ ] Keine Build-Tool-Adapter wurden in forensic_analytics verschoben.
 ```
 
 ---
 
-# Phase 6: Move Application-Level Orchestration
+## 14. Commit-Strategie
 
-Only begin after domain model migration is stable.
-
-## 6.1 Identify orchestration logic
-
-Find orchestration logic in `forensics_tracing` that is not inherently Gradle/Maven-specific.
-
-Candidate responsibilities:
+Empfohlene Commits:
 
 ```text
-Run complete analysis
-Select source roots
-Collect scan events
-Generate analysis result
-Create artifacts
-Coordinate semantic analysis
-Coordinate BTM generation
-Build analysis manifest
+feat(plugin): add engine request handoff for analytics
+build: migrate tracing plugin to Java 25 and JUnit 6
+test(plugin): verify analytics engine request generation
+docs(migration): document tracing to analytics handoff
 ```
 
-Do not move plugin lifecycle code.
-
-## 6.2 Define application use case
-
-In `forensic_analytics`, introduce a use case similar to:
+Wenn Java 25 / JUnit 6 zu groß ist, als eigener PR:
 
 ```text
-RunRepositoryAnalysisUseCase
-```
-
-The use case should coordinate ports, not concrete adapters.
-
-Possible ports:
-
-```text
-RepositorySourcePort
-JavaSourceScannerPort
-SemanticAnalysisPort
-InstrumentationRuleGeneratorPort
-AnalysisResultStorePort
-AnalysisArtifactWriterPort
-```
-
-## 6.3 Adapter neutrality rule
-
-The application layer must not call:
-
-```text
-ProcessBuilder
-docker
-joern
-mvn
-gradle
-git command line directly
-file-system-specific code unless behind a port
-```
-
-## 6.4 Tests
-
-Add application tests using fake adapters.
-
-Required test scenarios:
-
-```text
-analysis request is accepted
-source roots are passed to scanner port
-scanner results are included in result
-semantic analysis can be disabled
-semantic analysis can be enabled through port
-artifact references are returned
-failures are reported clearly
-```
-
-## 6.5 Verification
-
-Run both repository gates again.
-
-Create/update:
-
-```text
-docs/migration/SLICE_03_APPLICATION_ORCHESTRATION_RESULT.md
+PR 1: feat(plugin): add engine request handoff for analytics
+PR 2: build: migrate tracing plugin to Java 25 and JUnit 6
 ```
 
 ---
 
-# Phase 7: Add Joern Docker Adapter to `forensic_analytics`
+## 15. Finaler Report
 
-This phase introduces the Joern container approach.
-
-## 7.1 Goal
-
-Joern must not depend on the host JDK.
-
-The Engine must support a Docker-based Joern adapter so that large projects such as WildFly can be analyzed without relying on local Windows, WSL, or host-JDK setup.
-
-## 7.2 Module
-
-Create only if not already present:
+Am Ende muss der Agent berichten:
 
 ```text
-forensic-analytics-adapter-joern-docker
+- Branch/PR Status
+- Geänderte Dateien
+- Ob Handoff-Code auf main liegt
+- Ob Java 25/JUnit 6 umgesetzt wurde
+- Erzeugter engine-request.json Pfad
+- Analytics-Smoke-Test Ergebnis
+- Ausgeführte Commands
+- Fehlgeschlagene Commands
+- Sonar Status oder Skip-Grund
+- Offene Risiken
 ```
-
-## 7.3 Configuration model
-
-Create an infrastructure configuration model, not a domain model, for:
-
-```text
-container image
-container digest or tag
-workspace mount
-output mount
-heap setting
-timeout
-additional Joern arguments
-```
-
-Example conceptual properties:
-
-```properties
-forensics.joern.mode=container
-forensics.joern.container.image=ghcr.io/joernio/joern:<pinned-version>
-forensics.joern.heap=16G
-forensics.joern.workspace=/workspace
-forensics.joern.output=/forensics-output
-```
-
-Do not use `latest` or `nightly` as final production default.
-
-## 7.4 Docker command construction
-
-The adapter must build commands in a testable way.
-
-Do not hide command construction inside untestable string concatenation.
-
-Preferred design:
-
-```text
-JoernDockerCommandBuilder
-JoernDockerRunner
-JoernDockerSemanticAnalysisAdapter
-```
-
-Tests must verify command construction without requiring Docker.
-
-## 7.5 Initial behavior
-
-Support at least:
-
-```text
-joern --version
-joern-parse against mounted workspace
-output artifact path handling
-```
-
-## 7.6 Tests
-
-Required unit tests:
-
-```text
-builds docker command with workspace mount
-builds docker command with output mount
-adds heap setting
-uses pinned image
-rejects missing workspace path
-rejects missing image
-reports non-zero exit clearly
-```
-
-Optional integration test:
-
-```text
-run joern --version in container
-```
-
-This test must be disabled or tagged unless Docker availability is explicitly verified.
-
-## 7.7 Verification
-
-Run:
-
-```bash
-./gradlew clean test
-./gradlew check
-```
-
-Create/update:
-
-```text
-docs/migration/SLICE_04_JOERN_DOCKER_ADAPTER_RESULT.md
-```
-
----
-
-# Phase 8: Add Repository Source Adapter
-
-## 8.1 Goal
-
-The Engine must be able to analyze an external repository without requiring the repository to execute the Forensics plugin itself.
-
-## 8.2 Module
-
-Create only if needed:
-
-```text
-forensic-analytics-adapter-git
-```
-
-## 8.3 Responsibilities
-
-The adapter should support:
-
-```text
-local repository path
-optional remote clone URL
-branch selection
-tag selection
-commit selection
-checkout into controlled workspace
-clean workspace strategy
-```
-
-Initial implementation may support local path only.
-
-## 8.4 Tests
-
-Required tests:
-
-```text
-accepts existing local repository path
-rejects missing repository path
-normalizes repository path
-returns repository metadata
-```
-
-Optional later tests:
-
-```text
-clones remote repository
-checks out branch
-checks out tag
-checks out commit
-cleans workspace
-```
-
-## 8.5 Verification
-
-Create/update:
-
-```text
-docs/migration/SLICE_05_REPOSITORY_ADAPTER_RESULT.md
-```
-
----
-
-# Phase 9: Add CLI Entry Point
-
-## 9.1 Goal
-
-The first usable Engine entry point should be a CLI command.
-
-Conceptual target:
-
-```bash
-./gradlew :forensic-analytics-cli:run --args="analyze --repo D:\Projects\wildfly --profile joern-btm"
-```
-
-or packaged form:
-
-```bash
-forensic-analytics analyze --repo D:\Projects\wildfly --profile joern-btm
-```
-
-## 9.2 Required CLI commands
-
-Initial command:
-
-```text
-analyze
-```
-
-Required options:
-
-```text
---repo
---profile
---output
---joern-mode
-```
-
-Optional options:
-
-```text
---branch
---commit
---joern-image
---joern-heap
---timeout
-```
-
-## 9.3 CLI must not contain business logic
-
-The CLI may:
-
-```text
-parse arguments
-build application request
-call use case
-print result
-return process exit code
-```
-
-The CLI must not:
-
-```text
-scan Java files directly
-run Joern directly
-write persistence directly
-implement analysis rules
-```
-
-## 9.4 Tests
-
-Required tests:
-
-```text
-parses valid analyze command
-rejects missing repo
-rejects missing profile
-returns non-zero exit code on failed analysis
-prints artifact location on success
-```
-
-## 9.5 Verification
-
-Create/update:
-
-```text
-docs/migration/SLICE_06_CLI_RESULT.md
-```
-
----
-
-# Phase 10: Prepare gRPC Ingestion Boundary
-
-This phase is important because the plugin will later send data to the Engine.
-
-## 10.1 Module
-
-Use or create:
-
-```text
-forensic-analytics-ingestion-grpc
-```
-
-## 10.2 Responsibilities
-
-The gRPC ingestion module should receive analysis data from build adapters.
-
-Possible messages:
-
-```text
-AnalysisSessionStarted
-RepositoryMetadataSubmitted
-SourceRootSubmitted
-ScanEventSubmitted
-RuleArtifactSubmitted
-CoverageArtifactSubmitted
-TraceEventSubmitted
-AnalysisSessionCompleted
-AnalysisSessionFailed
-```
-
-## 10.3 Boundary rule
-
-The gRPC DTOs are transport contracts. They must not leak into the domain as mutable infrastructure objects.
-
-Mapping required:
-
-```text
-gRPC DTO -> application command -> domain model
-```
-
-## 10.4 Tests
-
-Required tests:
-
-```text
-maps ingestion request into application command
-rejects invalid repository metadata
-rejects missing analysis id
-handles completed session
-handles failed session
-```
-
-## 10.5 Verification
-
-Create/update:
-
-```text
-docs/migration/SLICE_07_GRPC_INGESTION_RESULT.md
-```
-
----
-
-# Phase 11: Reduce `forensics_tracing` to Adapter Role
-
-Only begin this phase after the Engine can run at least one local analysis path.
-
-## 11.1 Goal
-
-`forensics_tracing` should become a build adapter.
-
-It may still generate local BTM files if required, but the core analysis logic should be owned by `forensic_analytics`.
-
-## 11.2 Plugin responsibilities after migration
-
-Allowed responsibilities:
-
-```text
-Gradle task registration
-Maven Mojo registration
-read plugin extension/configuration
-collect project metadata
-collect source roots
-collect build output directories
-invoke local Engine CLI or Engine client
-optionally upload data via gRPC
-write generated artifacts to build/target directories
-report user-facing build errors
-```
-
-Forbidden responsibilities after migration:
-
-```text
-owning semantic analysis core
-owning Joern runtime orchestration
-owning repository checkout orchestration
-owning graph/replay persistence
-owning UI/server behavior
-```
-
-## 11.3 Compatibility mode
-
-Do not break existing users immediately.
-
-Provide one of:
-
-```text
-legacy local mode
-engine mode disabled by default
-engine mode opt-in
-clear deprecation path
-```
-
-## 11.4 Tests
-
-In `forensics_tracing`, update or add tests proving:
-
-```text
-Gradle task still registers
-Maven goal still registers
-legacy behavior still works if kept
-engine request is built correctly
-source roots are sent correctly
-output paths are mapped correctly
-clear error if Engine is unavailable
-```
-
-## 11.5 Verification
-
-Run the full quality gate in `forensics_tracing`.
-
-Create/update:
-
-```text
-docs/migration/SLICE_08_PLUGIN_ADAPTER_RESULT.md
-```
-
----
-
-# Phase 12: External E2E Testbed
-
-## 12.1 Goal
-
-Create a black-box testbed that proves the Engine works against external repositories.
-
-This must be independent from normal unit tests.
-
-## 12.2 Recommended structure
-
-In `forensic_analytics`:
-
-```text
-testbed/
-├── README.md
-├── consumers/
-│   ├── legacy-demo-shop/
-│   └── wildfly-runner/
-├── docker/
-│   └── joern-worker/
-├── python/
-│   ├── requirements.txt
-│   ├── pytest.ini
-│   ├── tests/
-│   │   ├── test_engine_against_legacy_demo_shop.py
-│   │   ├── test_engine_against_wildfly_smoke.py
-│   │   └── test_generated_artifacts.py
-│   └── tools/
-│       ├── command_runner.py
-│       ├── workspace.py
-│       └── artifact_assertions.py
-```
-
-## 12.3 Python test responsibilities
-
-Python should orchestrate black-box checks:
-
-```text
-prepare temporary workspace
-run Engine CLI
-run Joern container if enabled
-collect logs
-verify generated artifacts
-verify result metadata
-verify non-empty reports
-verify error diagnostics
-```
-
-## 12.4 Required first E2E scenario
-
-```text
-Input: local legacy-demo-shop repository
-Mode: no Joern or Joern disabled
-Expected: Engine runs AST/BTM analysis and creates artifacts
-```
-
-## 12.5 Required second E2E scenario
-
-```text
-Input: local legacy-demo-shop repository
-Mode: Joern container enabled
-Expected: Joern version check succeeds and semantic analysis step is invoked
-```
-
-## 12.6 WildFly scenario
-
-WildFly must start as smoke/performance scenario, not as mandatory unit gate.
-
-Expected first WildFly scenario:
-
-```text
-Input: D:\Projects\wildfly or /mnt/d/Projects/wildfly
-Mode: Joern container enabled
-Expected: Engine starts, validates repository, starts Joern container, reports progress or clear resource limitation
-```
-
-Do not require full WildFly semantic analysis in the normal quality gate until runtime and memory requirements are known.
-
----
-
-# Phase 13: Documentation Update
-
-Update documentation in both repositories.
-
-## 13.1 `forensic_analytics` documentation
-
-Must explain:
-
-```text
-What the Engine is
-How to run local analysis
-How to configure Joern container mode
-How to analyze an external repository
-Where artifacts are written
-How to run E2E testbed
-Architecture overview
-Module overview
-```
-
-## 13.2 `forensics_tracing` documentation
-
-Must explain:
-
-```text
-Plugin is now a build adapter
-Standalone Engine lives in forensic_analytics
-How to run legacy/local plugin mode
-How to enable Engine mode if available
-How gRPC upload will work later
-```
-
-## 13.3 Migration documentation
-
-Update:
-
-```text
-docs/migration/MIGRATION_STATUS.md
-```
-
-Include:
-
-```text
-completed slices
-open slices
-known risks
-compatibility status
-next recommended step
-```
-
----
-
-# Phase 14: Final Verification
-
-Run the full quality gate in both repositories.
-
-## 14.1 `forensic_analytics`
-
-```bash
-./gradlew clean test
-./gradlew check
-```
-
-The test suite must run on JUnit 6.
-
-If `QUALITY.md` defines a stricter gate, run that stricter gate.
-
-## 14.2 `forensics_tracing`
-
-```bash
-./gradlew clean test
-./gradlew check
-```
-
-The test suite must run on JUnit 6.
-
-If `QUALITY.md` defines a stricter gate, run that stricter gate.
-
-## 14.3 Optional plugin verification
-
-If the plugin still publishes locally:
-
-```bash
-./gradlew publishToMavenLocal
-```
-
-Then run a consumer smoke test if available.
-
-## 14.4 Optional E2E testbed
-
-From the Python testbed:
-
-```bash
-python -m pytest
-```
-
-If Docker is required and unavailable, report it as an environment blocker.
-
----
-
-# Required Stop Conditions
-
-Codex must stop and report if any of the following occurs:
-
-```text
-Repository not found
-Unexpected Gradle version
-Missing Gradle Wrapper
-Unknown module structure
-Unclear ownership of a class or package
-Domain dependency would point outward
-Migration would require deleting functionality without replacement
-Tests fail for unknown reason
-Coverage gate fails and root cause is unclear
-Docker is required but unavailable
-Joern image cannot be resolved
-WildFly analysis requires resources beyond available environment
-```
-
-The report must include:
-
-```text
-what was attempted
-where it failed
-why continuing would be risky
-what decision is needed
-recommended next action
-```
-
----
-
-# Commit Strategy
-
-Use small commits per slice.
-
-Recommended commit style:
-
-```text
-feat(engine): add forensic analytics engine foundation
-feat(domain): migrate analysis request model
-feat(application): add repository analysis use case
-feat(joern): add docker command builder
-feat(cli): add analyze command
-feat(ingestion): add grpc analysis session contract
-refactor(plugin): prepare engine adapter boundary
-test(e2e): add external repository analysis testbed
-docs(migration): document engine migration status
-```
-
-Before each commit:
-
-```bash
-git status
-git diff --stat
-git diff
-```
-
-Run the relevant test gate for the touched repository.
-
----
-
-# Final Report Template
-
-At the end of each Codex run, write a German report:
-
-```markdown
-# Migration Report
-
-## Ziel
-
-## Bearbeiteter Slice
-
-## Geänderte Dateien
-
-## Architekturentscheidungen
-
-## Tests
-
-## Ausgeführte Commands
-
-## Ergebnis
-
-## Offene Risiken
-
-## Blocker
-
-## Nächster empfohlener Slice
-```
-
----
-
-# First Codex Execution Task
-
-For the first execution, Codex must not migrate code yet.
-
-Start with:
-
-```text
-Phase 0
-Phase 1
-Phase 2
-Phase 3
-```
-
-Expected first output:
-
-```text
-forensic_analytics/docs/migration/INSPECTION_REPORT.md
-forensic_analytics/docs/migration/RESPONSIBILITY_MAPPING.md
-forensic_analytics/MIGRATION_WORKPLAN.md
-```
-
-Only after these files are reviewed should implementation begin with Phase 4.

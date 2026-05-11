@@ -47,6 +47,12 @@ abstract class AbstractMavenBtmGenerationMojo extends AbstractMojo {
     @Parameter(property = "forensics.checksumsFile", defaultValue = "${project.build.directory}/forensics/checksums.sha256")
     private File checksumsFile;
 
+    @Parameter(property = "forensics.engineRequestEnabled", defaultValue = "false")
+    private boolean engineRequestEnabled;
+
+    @Parameter(property = "forensics.engineRequestFile", defaultValue = "${project.build.directory}/forensics/engine-request.json")
+    private File engineRequestFile;
+
     @Parameter(property = "forensics.profilingEnabled", defaultValue = "false")
     private boolean profilingEnabled;
 
@@ -102,6 +108,8 @@ abstract class AbstractMavenBtmGenerationMojo extends AbstractMojo {
                 pluginVersion,
                 manifestFile,
                 checksumsFile,
+                engineRequestEnabled,
+                engineRequestFile,
                 profilingEnabled,
                 profileReportFile,
                 strictParsing,

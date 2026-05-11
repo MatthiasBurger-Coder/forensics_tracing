@@ -38,8 +38,12 @@ class BtmGenerationRequestTest {
                 .cleanupPolicy("KEEP_ALWAYS")
                 .projectKey("demo")
                 .pluginVersion("1.0")
+                .moduleName("module-a")
+                .modulePath(":module-a")
                 .manifestFile(Path.of("forensics/manifest.json"))
                 .checksumsFile(Path.of("forensics/checksums.sha256"))
+                .engineRequestEnabled(true)
+                .engineRequestFile(Path.of("forensics/engine-request.json"))
                 .templateRequest(new BtmTemplateRequest("CUSTOM", "com.example.Foo", "bar", "(I)V"))
                 .build();
 
@@ -67,8 +71,12 @@ class BtmGenerationRequestTest {
         assertEquals("KEEP_ALWAYS", request.cleanupPolicy());
         assertEquals("demo", request.projectKey());
         assertEquals("1.0", request.pluginVersion());
+        assertEquals("module-a", request.moduleName());
+        assertEquals(":module-a", request.modulePath());
         assertEquals(Path.of("forensics/manifest.json"), request.manifestFile());
         assertEquals(Path.of("forensics/checksums.sha256"), request.checksumsFile());
+        assertTrue(request.engineRequestEnabled());
+        assertEquals(Path.of("forensics/engine-request.json"), request.engineRequestFile());
         assertTrue(request.templateRequest().isPresent());
     }
 
@@ -99,8 +107,12 @@ class BtmGenerationRequestTest {
         assertEquals(BtmGenerationDefaults.defaultCleanupPolicy(), request.cleanupPolicy());
         assertEquals("UNKNOWN", request.projectKey());
         assertEquals("UNKNOWN", request.pluginVersion());
+        assertEquals("UNKNOWN", request.moduleName());
+        assertEquals("UNKNOWN", request.modulePath());
         assertEquals(BtmGenerationDefaults.defaultManifestFile(), request.manifestFile());
         assertEquals(BtmGenerationDefaults.defaultChecksumsFile(), request.checksumsFile());
+        assertFalse(request.engineRequestEnabled());
+        assertEquals(BtmGenerationDefaults.defaultEngineRequestFile(), request.engineRequestFile());
         assertTrue(request.templateRequest().isEmpty());
     }
 

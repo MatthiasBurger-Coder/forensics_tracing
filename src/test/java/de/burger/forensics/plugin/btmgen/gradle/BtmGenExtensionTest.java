@@ -33,6 +33,8 @@ class BtmGenExtensionTest {
         assertEquals("KEEP_ON_SUCCESS", extension.getCleanupPolicy().get());
         assertEquals(new File("build/forensics/manifest.json"), extension.getManifestFile().get());
         assertEquals(new File("build/forensics/checksums.sha256"), extension.getChecksumsFile().get());
+        assertTrue(!extension.getEngineRequestEnabled().get());
+        assertEquals(new File("build/forensics/engine-request.json"), extension.getEngineRequestFile().get());
     }
 
     @Test

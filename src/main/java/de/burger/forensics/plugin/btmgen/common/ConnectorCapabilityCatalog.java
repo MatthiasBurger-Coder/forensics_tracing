@@ -28,6 +28,7 @@ public final class ConnectorCapabilityCatalog {
             parity(ConnectorCapability.MANIFEST, "Both connectors map manifest output."),
             parity(ConnectorCapability.CHECKSUMS, "Both connectors map checksum output."),
             parity(ConnectorCapability.BUILD_IDENTITY, "Both connectors map project identity into the shared request."),
+            parity(ConnectorCapability.ENGINE_REQUEST, "Both connectors can build an opt-in engine ingestion request artifact."),
             parity(ConnectorCapability.JOERN_CONFIGURATION, "Both connectors expose Joern configuration with Joern disabled by default."),
             parity(ConnectorCapability.JOERN_SEMANTIC_ANALYSIS, "Both connectors delegate semantic analysis to ForensicsSemanticAnalysisRunner."),
             parity(ConnectorCapability.JOERN_IMPORT, "Both connectors verify Joern semantic artifacts through the shared verifier."),

@@ -246,6 +246,8 @@ btmGen {
     projectKey.set("legacy-demo-shop")
     manifestFile.set(file("build/forensics/manifest.json"))
     checksumsFile.set(file("build/forensics/checksums.sha256"))
+    engineRequestEnabled.set(true)
+    engineRequestFile.set(file("build/forensics/engine-request.json"))
 }
 ```
 
@@ -253,7 +255,7 @@ Supported cleanup policies are `DELETE_ON_SUCCESS`, `KEEP_ON_SUCCESS`, `KEEP_ON_
 Set `analysisStoreEnabled=false` to keep the previous Gradle behavior of writing only the `.btm` file.
 Run `./gradlew cleanForensicsAnalysisStore` to delete the generated analysis store, manifest, checksum file, and Joern work directories without wiring that cleanup into the normal `clean` lifecycle.
 For Maven builds, run `mvn de.burger.forensics:forensics-tracing:0.0.3-SNAPSHOT:clean-analysis` for the equivalent generated-artifact cleanup.
-gRPC publishing, server upload, replay, and LLM context generation are not implemented by this feature.
+When `engineRequestEnabled=true`, Gradle and Maven also write an `engine-request.json` artifact that describes the generated analysis payloads for a later `forensic_analytics` engine upload. The legacy local BTM and analysis-store outputs remain the default behavior. Direct gRPC publishing, server upload, replay, and LLM context generation are not implemented by this feature.
 
 ### Joern Semantic Enrichment
 
@@ -527,6 +529,8 @@ Supported Maven parameters use the `forensics.*` user-property prefix:
 - `pluginVersion`
 - `manifestFile`
 - `checksumsFile`
+- `engineRequestEnabled`
+- `engineRequestFile`
 - `joernEnabled`
 - `joernExecutable`
 - `joernParseExecutable`
@@ -582,6 +586,13 @@ Property behavior:
   - default for Gradle and Maven: `true`
   - when `true`, the task writes `manifest.json`, `checksums.sha256`, and an H2 analysis store next to the `.btm` file
   - when `false`, connector output stays limited to the `.btm` file and local scanner cache state when caching is enabled
+- `engineRequestEnabled`
+  - default for Gradle and Maven: `false`
+  - when `true`, connector output includes an `engine-request.json` handoff artifact for `forensic_analytics`
+  - the request describes stable payload IDs, payload kinds, content types, and local artifact files; it does not perform a network upload
+- `engineRequestFile`
+  - Gradle default: `build/forensics/engine-request.json`
+  - Maven default: `target/forensics/engine-request.json`
 - `cleanupPolicy`
   - default: `KEEP_ON_SUCCESS`
   - controls whether the H2 analysis store directory is retained after task execution

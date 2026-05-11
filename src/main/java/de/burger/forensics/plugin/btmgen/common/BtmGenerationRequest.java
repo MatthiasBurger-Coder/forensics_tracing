@@ -30,8 +30,12 @@ public record BtmGenerationRequest(
         String cleanupPolicy,
         String projectKey,
         String pluginVersion,
+        String moduleName,
+        String modulePath,
         Path manifestFile,
         Path checksumsFile,
+        boolean engineRequestEnabled,
+        Path engineRequestFile,
         Optional<BtmTemplateRequest> templateRequest
 ) {
 
@@ -51,8 +55,11 @@ public record BtmGenerationRequest(
         Objects.requireNonNull(cleanupPolicy, "cleanupPolicy");
         Objects.requireNonNull(projectKey, "projectKey");
         Objects.requireNonNull(pluginVersion, "pluginVersion");
+        Objects.requireNonNull(moduleName, "moduleName");
+        Objects.requireNonNull(modulePath, "modulePath");
         Objects.requireNonNull(manifestFile, "manifestFile");
         Objects.requireNonNull(checksumsFile, "checksumsFile");
+        Objects.requireNonNull(engineRequestFile, "engineRequestFile");
         Objects.requireNonNull(templateRequest, "templateRequest");
     }
 
@@ -82,8 +89,12 @@ public record BtmGenerationRequest(
         private String cleanupPolicy = BtmGenerationDefaults.defaultCleanupPolicy();
         private String projectKey = "UNKNOWN";
         private String pluginVersion = "UNKNOWN";
+        private String moduleName = "UNKNOWN";
+        private String modulePath = "UNKNOWN";
         private Path manifestFile = BtmGenerationDefaults.defaultManifestFile();
         private Path checksumsFile = BtmGenerationDefaults.defaultChecksumsFile();
+        private boolean engineRequestEnabled = BtmGenerationDefaults.DEFAULT_ENGINE_REQUEST_ENABLED;
+        private Path engineRequestFile = BtmGenerationDefaults.defaultEngineRequestFile();
         private Optional<BtmTemplateRequest> templateRequest = Optional.empty();
 
         public Builder sourceRoot(Path sourceRoot) {
@@ -196,6 +207,16 @@ public record BtmGenerationRequest(
             return this;
         }
 
+        public Builder moduleName(String moduleName) {
+            this.moduleName = Objects.requireNonNull(moduleName, "moduleName");
+            return this;
+        }
+
+        public Builder modulePath(String modulePath) {
+            this.modulePath = Objects.requireNonNull(modulePath, "modulePath");
+            return this;
+        }
+
         public Builder manifestFile(Path manifestFile) {
             this.manifestFile = Objects.requireNonNull(manifestFile, "manifestFile");
             return this;
@@ -203,6 +224,16 @@ public record BtmGenerationRequest(
 
         public Builder checksumsFile(Path checksumsFile) {
             this.checksumsFile = Objects.requireNonNull(checksumsFile, "checksumsFile");
+            return this;
+        }
+
+        public Builder engineRequestEnabled(boolean engineRequestEnabled) {
+            this.engineRequestEnabled = engineRequestEnabled;
+            return this;
+        }
+
+        public Builder engineRequestFile(Path engineRequestFile) {
+            this.engineRequestFile = Objects.requireNonNull(engineRequestFile, "engineRequestFile");
             return this;
         }
 
@@ -239,8 +270,12 @@ public record BtmGenerationRequest(
                     cleanupPolicy,
                     projectKey,
                     pluginVersion,
+                    moduleName,
+                    modulePath,
                     manifestFile,
                     checksumsFile,
+                    engineRequestEnabled,
+                    engineRequestFile,
                     templateRequest
             );
         }
