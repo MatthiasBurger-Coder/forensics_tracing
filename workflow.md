@@ -1,632 +1,1234 @@
-# Workplan: `forensics_tracing` — Engine-Handoff nach `forensic_analytics` und Java-25/JUnit-6-Abschluss
+# Workflow: Codex Multi-Agent & Skills Structure Setup
 
-## 1. Ziel
+## Ziel
 
-Dieses Workplan-Dokument beschreibt die notwendigen Schritte im Repository `forensics_tracing`, damit die Migration zur Analytics-Plattform tatsächlich auf dem Hauptstand abgeschlossen wird.
+Dieses Workflow-Dokument beschreibt einen automatisiert abarbeitbaren Codex-Workflow, um ein bestehendes Repository um eine saubere Multi-Agent- und Skill-Struktur zu erweitern.
 
-Zielzustand:
+Codex soll vorhandene Prozessdateien zuerst auswerten, daraus Regeln extrahieren und anschließend die neue Struktur kontrolliert anlegen.
 
-```text
-Repository: forensics_tracing
-Rolle: Build-Tool-Adapter / Plugin-Producer
-Baseline: Java 25, JUnit 6, Gradle 9.4.0
-Handoff: erzeugt optional ein engine-request.json für forensic_analytics
-Legacy: lokale BTM-Erzeugung bleibt vorerst erhalten
-Main-Branch: enthält den Engine-Request-Handoff
-```
+Die Arbeit erfolgt in klar getrennten Slices. Jeder Slice hat:
 
-`forensics_tracing` bleibt das Gradle-/Maven-Plugin. Es soll nicht zur Analytics-Engine werden.
+* Ziel
+* Eingaben
+* konkrete Arbeitsschritte
+* erwartete Ergebnisse
+* Validierung
+* Stop-Bedingungen
 
----
-
-## 2. Ausgangslage
-
-Der Vergleich hat gezeigt:
-
-* `forensics_tracing/main` enthält noch Java-17-/JUnit-5-Konfiguration.
-* `forensics_tracing/main` enthält den Engine-Request-Handoff noch nicht sichtbar.
-* Der Branch `feature/migration-slice-08-plugin-adapter-boundary` enthält bereits die relevanten Handoff-Klassen und Einstellungen.
-* Die Analytics-Seite kann ein `engine-request.json` bereits importieren.
-* Die vollständige Migration ist erst abgeschlossen, wenn der Handoff auf `main` liegt und mit `forensic_analytics/main` getestet wurde.
+Codex soll die Slices der Reihe nach abarbeiten. Rückfragen sind nur erlaubt, wenn eine Stop-Bedingung eintritt.
 
 ---
 
-## 3. Non-Goals
-
-Nicht Teil dieses Workplans:
-
-* Keine Verschiebung von Gradle-Tasks oder Maven-Mojos nach `forensic_analytics`.
-* Keine Entfernung des lokalen Legacy-BTM-Modus.
-* Keine direkte gRPC-Client-Pflicht im Plugin.
-* Keine Einführung von Spring oder Serverlogik im Plugin.
-* Keine Big-Bang-Entfernung der vorhandenen Analysefunktionen.
-* Keine Senkung von Coverage- oder Architekturregeln.
-* Keine Deaktivierung von Dependency Verification.
-
----
-
-## 4. Zielarchitektur für dieses Repository
+## Zielstruktur
 
 ```text
-forensics_tracing
-  -> Gradle Plugin Adapter
-  -> Maven Mojo Adapter
-  -> lokale Legacy-BTM-Erzeugung
-  -> optionale Erzeugung engine-request.json
-  -> später optional: gRPC-Client oder Engine-CLI-Aufruf
-```
-
-Erlaubt:
-
-```text
-Gradle Task
-Maven Mojo
-Extension/Parameter Mapping
-Consumer-Projekt-Erkennung
-SourceSet-/Reactor-Erkennung
-Lokale Artefakterzeugung
-Engine-Request-Datei als Handoff-Artefakt
-```
-
-Nicht erlaubt:
-
-```text
-Analytics Server
-Graphdatenbank-Orchestrierung
-Replay-Engine
-LLM-Kontextlogik
-Joern-Docker-Ownership als Engine-Verantwortung
-UI oder API-Server
+.
+├── AGENTS.md
+├── QUALITY.md
+├── workflow.md
+├── .codex/
+│   ├── config.toml
+│   └── agents/
+│       ├── repo_explorer.toml
+│       ├── architecture_reviewer.toml
+│       ├── quality_reviewer.toml
+│       ├── security_reviewer.toml
+│       ├── documentation_reviewer.toml
+│       ├── implementation_worker.toml
+│       └── commit_reviewer.toml
+└── .agents/
+    └── skills/
+        ├── slice_workflow/
+        │   └── SKILL.md
+        ├── quality_gate/
+        │   └── SKILL.md
+        ├── commit_message/
+        │   └── SKILL.md
+        ├── documentation_sync/
+        │   └── SKILL.md
+        └── migration_workflow/
+            └── SKILL.md
 ```
 
 ---
 
-## 5. Slice 0 — Preflight
+## Globale Arbeitsregeln für Codex
 
-### Ziel
+Codex muss während des gesamten Workflows folgende Regeln beachten:
 
-Sicheren Arbeitszustand herstellen und beide relevanten Branches prüfen.
+1. Bestehende Prozessdateien dürfen nicht blind überschrieben werden.
+2. Bestehende Projektregeln müssen zuerst gelesen und extrahiert werden.
+3. Projektregeln dürfen nicht erfunden werden.
+4. Bestehende Qualitätstore dürfen nicht abgeschwächt werden.
+5. Architekturregeln müssen erhalten bleiben.
+6. Hexagonale Architektur ist strikt zu bewahren, wenn sie im Projekt bereits vorgegeben ist.
+7. Änderungen erfolgen Slice für Slice.
+8. Kein Slice darf mehrere fachlich unabhängige Ziele vermischen.
+9. Codex darf keinen Commit erstellen, außer dies wird ausdrücklich verlangt.
+10. Bei unklaren, widersprüchlichen oder fehlenden Informationen muss Codex stoppen und die offenen Punkte dokumentieren.
+11. Analyse-Agenten dürfen parallel arbeiten.
+12. Schreibende Umsetzung erfolgt sequenziell und nur durch `implementation_worker`.
+13. Mehrere write-capable Agents dürfen niemals parallel denselben Working Tree verändern.
+14. Source-Code-Kommentare müssen auf Englisch sein.
+15. Antworten und Abschlussberichte an den Nutzer sollen auf Deutsch erfolgen.
 
-### Commands
+---
 
-```bash
-git status --short
-git branch --show-current
-git fetch --all --prune
-git branch --list
-git branch --list "feature/migration-slice-08-plugin-adapter-boundary"
-java --version
-./gradlew --version
-```
+## Autopilot-Regel
 
-Windows PowerShell:
+Codex soll diesen Workflow möglichst automatisch abarbeiten.
 
-```powershell
-git status --short
-git branch --show-current
-git fetch --all --prune
-git branch --list
-git branch --list "feature/migration-slice-08-plugin-adapter-boundary"
-java --version
-.\gradlew.bat --version
-```
+Das bedeutet:
 
-### Akzeptanzkriterien
+* Keine unnötigen Rückfragen.
+* Keine Bestätigungsfragen zwischen den Slices.
+* Keine spekulativen Erweiterungen.
+* Keine Änderungen außerhalb des beschriebenen Scopes.
+* Bei lösbaren Unsicherheiten: Repository prüfen und bestmöglich fortfahren.
+* Bei echten Blockern: stoppen, dokumentieren, keine riskante Änderung durchführen.
+
+Echte Blocker sind nur:
+
+* AGENTS.md oder QUALITY.md enthalten widersprüchliche harte Vorgaben.
+* Build-Konfiguration und QUALITY.md widersprechen sich so stark, dass kein korrektes Quality Gate ableitbar ist.
+* Bestehende `.codex`- oder `.agents`-Struktur enthält inkompatible Regeln.
+* Eine Datei müsste überschrieben werden, deren Inhalt nicht sicher integriert werden kann.
+* Das Repository ist nicht lesbar oder relevante Dateien können nicht geöffnet werden.
+
+---
+
+# Slice 0: Repository-Inventur
+
+## Ziel
+
+Codex verschafft sich einen vollständigen Überblick über vorhandene Prozess-, Qualitäts-, Architektur- und Build-Dateien.
+
+## Eingaben
+
+* Repository-Root
+* vorhandene Dokumentation
+* vorhandene Build-Dateien
+* vorhandene Codex-/Agent-Dateien, falls vorhanden
+
+## Arbeitsschritte
+
+1. Repository-Root prüfen.
+2. Vorhandene Prozessdateien suchen.
+3. Vorhandene Build-Dateien suchen.
+4. Vorhandene `.codex`-Struktur suchen.
+5. Vorhandene `.agents`-Struktur suchen.
+6. Relevante Dateien lesen.
+7. Eine interne Extraktionsübersicht erstellen.
+
+## Zu suchende Prozessdateien
 
 ```text
-[ ] Working Tree ist sauber oder alle lokalen Änderungen sind dokumentiert.
-[ ] Branch feature/migration-slice-08-plugin-adapter-boundary ist vorhanden.
-[ ] Gradle Wrapper ist ausführbar.
-[ ] Java 25 ist lokal verfügbar, falls die Baseline-Migration direkt mit umgesetzt wird.
+AGENTS.md
+QUALITY.md
+workflow.md
+WORKFLOW.md
+Commit.md
+COMMIT.md
+Commit-Prompt*.md
+migration_workplan.md
+MIGRATION*.md
+README.md
+CONTRIBUTING.md
+ARCHITECTURE.md
+docs/**/*.md
 ```
 
-### Stop-and-Report
+## Zu suchende Build-Dateien
+
+```text
+build.gradle
+build.gradle.kts
+settings.gradle
+settings.gradle.kts
+gradle/libs.versions.toml
+pom.xml
+```
+
+## Erwartetes Ergebnis
+
+Eine interne Übersicht mit:
+
+* gefundenen Prozessdateien
+* gefundenen Build-Dateien
+* bestehenden Agent-/Skill-Dateien
+* extrahierten Projektregeln
+* extrahierten Architekturregeln
+* extrahierten Qualitätsregeln
+* extrahierten Commit-Regeln
+* extrahierten Workflow-/Slice-Regeln
+* offenen Punkten
+* möglichen Widersprüchen
+
+## Validierung
+
+Codex muss im Abschlussbericht dieses Slices kurz dokumentieren:
+
+* welche Dateien gefunden wurden
+* welche Dateien besonders relevant sind
+* ob bereits eine `.codex`- oder `.agents`-Struktur existiert
+
+## Stop-Bedingungen
 
 Stoppen, wenn:
 
-```text
-- Unklare lokale Änderungen vorhanden sind.
-- Der Handoff-Branch fehlt.
-- Der Gradle Wrapper nicht läuft.
-- Java 25 nicht verfügbar ist und die Baseline-Migration Teil des aktuellen Durchlaufs ist.
-```
+* das Repository nicht gelesen werden kann
+* zentrale Prozessdateien zwar vorhanden sind, aber nicht geöffnet werden können
+* bereits bestehende `.codex`- oder `.agents`-Dateien nicht sicher eingeordnet werden können
 
 ---
 
-## 6. Slice 1 — Handoff-Branch gegen `main` prüfen
+# Slice 1: Regel-Extraktion und Ownership-Modell
 
-### Ziel
+## Ziel
 
-Ermitteln, ob `feature/migration-slice-08-plugin-adapter-boundary` sauber nach `main` übernommen werden kann.
+Codex ordnet die vorhandenen Regeln den richtigen Ziel-Dateien zu.
 
-### Commands
+## Ownership-Modell
 
-```bash
-git switch main
-git pull --ff-only
-git switch feature/migration-slice-08-plugin-adapter-boundary
-git pull --ff-only || true
-git diff --stat main...feature/migration-slice-08-plugin-adapter-boundary
-git diff main...feature/migration-slice-08-plugin-adapter-boundary -- src/main/java src/test/java build.gradle.kts gradle README.md QUALITY.md AGENTS.md
-```
+| Datei / Struktur            | Verantwortung                                      |
+| --------------------------- | -------------------------------------------------- |
+| `AGENTS.md`                 | dauerhafte Projektregeln für Codex                 |
+| `QUALITY.md`                | verbindliche Build-, Test- und Quality-Gate-Regeln |
+| `workflow.md`               | konkrete Aufgaben- oder Projektworkflows           |
+| `.codex/config.toml`        | projektbezogene Codex-Konfiguration                |
+| `.codex/agents/*.toml`      | spezialisierte Codex-Agentenrollen                 |
+| `.agents/skills/*/SKILL.md` | wiederverwendbare Codex-Workflows                  |
 
-### Zu prüfende Handoff-Bestandteile
+## Arbeitsschritte
 
-Mindestens vorhanden sein müssen:
+1. Regeln aus bestehenden Prozessdateien extrahieren.
+2. Regeln nach Ownership-Modell sortieren.
+3. Doppelte Regeln erkennen.
+4. Widersprüche erkennen.
+5. Bestehende harte Vorgaben markieren.
+6. Regeln identifizieren, die in `AGENTS.md` ergänzt werden müssen.
+7. Regeln identifizieren, die in Skills ausgelagert werden können.
 
-```text
-EngineIngestionRequest
-EngineIngestionPayload
-EnginePayloadKind
-EngineIngestionRequestWriter
-engineRequestEnabled
-engineRequestFile
-Gradle Mapping
-Maven Mapping
-BuildToolConnectorParityTest Erweiterung
-EngineIngestionRequestWriterTest
-```
+## Erwartetes Ergebnis
 
-### Akzeptanzkriterien
+Eine interne Mapping-Tabelle:
 
 ```text
-[ ] Branch enthält Engine-Request-Modell.
-[ ] Branch enthält Engine-Request-Writer.
-[ ] Gradle kann engineRequestEnabled und engineRequestFile setzen.
-[ ] Maven kann forensics.engineRequestEnabled und forensics.engineRequestFile setzen.
-[ ] Payload-Kinds passen zu forensic_analytics.
-[ ] Legacy-Modus bleibt default.
+Extracted rule -> Source file -> Target file/skill -> Action
 ```
+
+Beispiele:
+
+```text
+"Work slice by slice" -> AGENTS.md / workflow.md -> AGENTS.md + slice_workflow skill -> preserve
+"Run ./gradlew check" -> QUALITY.md -> QUALITY.md + quality_gate skill -> preserve
+"Commit message must explain what/why/how" -> Commit.md -> AGENTS.md + commit_message skill -> preserve
+```
+
+## Validierung
+
+Codex muss sicherstellen:
+
+* keine bestehende harte Regel wird entfernt
+* keine Qualitätsanforderung wird abgeschwächt
+* keine Architekturregel wird umgedeutet
+* keine neue Projektregel wird ohne Quelle erfunden
+
+## Stop-Bedingungen
+
+Stoppen, wenn:
+
+* Regeln einander widersprechen
+* nicht klar ist, ob eine bestehende Regel verbindlich oder veraltet ist
+* `QUALITY.md` und Build-Dateien unterschiedliche harte Quality Gates nahelegen
 
 ---
 
-## 7. Slice 2 — Branch auf aktuellen `main` rebasen oder mergen
+# Slice 2: AGENTS.md erstellen oder aktualisieren
 
-### Ziel
+## Ziel
 
-Den Handoff-Code konfliktfrei auf den aktuellen Hauptstand bringen.
+Codex erstellt oder aktualisiert `AGENTS.md` als zentrale Projektanweisung.
 
-### Variante A: Rebase bevorzugt für saubere Historie
+## Arbeitsschritte
 
-```bash
-git switch feature/migration-slice-08-plugin-adapter-boundary
-git rebase main
+1. Prüfen, ob `AGENTS.md` existiert.
+2. Wenn vorhanden: Inhalt erhalten und vorsichtig erweitern.
+3. Wenn nicht vorhanden: aus den extrahierten Regeln neu erstellen.
+4. Multi-Agent- und Skill-Struktur referenzieren.
+5. Stop-and-Report-Regel ergänzen.
+6. No-Guessing-Regel ergänzen.
+7. Commit-Disziplin ergänzen.
+8. Quality-Gate-Verweis ergänzen.
+9. Architekturregeln erhalten.
+
+## Pflichtstruktur für AGENTS.md
+
+```md
+# Project Agent Instructions
+
+## Repository Purpose
+
+Summarize the repository purpose based only on existing documentation.
+
+## Architecture Rules
+
+Extract architecture rules from existing docs.
+
+If hexagonal architecture is documented, preserve it strictly.
+
+Domain code must not depend on:
+
+- adapters
+- framework code
+- CLI
+- gRPC
+- persistence
+- UI
+- build tooling
+- external systems
+
+unless the existing project explicitly defines otherwise.
+
+## Language and Documentation Rules
+
+- The assistant should communicate with the user in German.
+- Source-code comments must be written in English.
+- Generated technical process files may be written in English unless an existing file clearly uses German and should remain German.
+
+## Working Mode
+
+- Work slice by slice.
+- Inspect before editing.
+- Plan before implementation.
+- Keep changes minimal and targeted.
+- Do not mix unrelated concerns in one slice.
+
+## Quality Gate
+
+- Read QUALITY.md before modifying code.
+- Run the documented quality gate after each completed implementation slice.
+- If the quality gate fails, stop and report:
+  - failing command
+  - failing test or check
+  - likely cause
+  - proposed next step
+
+## No-Guessing Rule
+
+- Do not invent missing files, classes, methods, APIs, packages, or commands.
+- Search the repository first.
+- If still unresolved, stop and report the uncertainty.
+
+## Commit Discipline
+
+- Do not commit unless explicitly asked.
+- Before preparing a commit, inspect git status and diff.
+- Commit messages must explain:
+  - what changed
+  - why it changed
+  - how it was verified
+  - known limitations
+
+## Multi-Agent Usage
+
+- Use read-only agents for exploration, architecture review, documentation review, security review, and quality review.
+- Use implementation_worker only for one approved slice at a time.
+- Do not let multiple write-capable agents modify the same working tree in parallel.
+
+## Available Codex Agents
+
+The project may define custom agents under `.codex/agents/`.
+
+## Available Skills
+
+The project may define reusable skills under `.agents/skills/`.
 ```
 
-### Variante B: Merge, falls Rebase nicht gewünscht ist
+## Validierung
 
-```bash
-git switch feature/migration-slice-08-plugin-adapter-boundary
-git merge main
-```
+Codex prüft:
 
-### Konfliktregeln
+* `AGENTS.md` existiert
+* vorhandene Regeln wurden nicht entfernt
+* neue Multi-Agent-Struktur ist referenziert
+* keine spekulativen Regeln wurden ergänzt
 
-Bei Konflikten:
+## Stop-Bedingungen
 
-```text
-- Legacy-BTM-Verhalten erhalten.
-- Handoff-Code nicht entfernen.
-- Gradle- und Maven-Parität erhalten.
-- Keine Analytics-Engine-Klassen in das Plugin ziehen.
-- Keine Java-17-Konfiguration wiederherstellen, wenn Slice 4 direkt folgt.
-```
+Stoppen, wenn:
 
-### Targeted Verification
-
-```bash
-./gradlew test \
-  --tests '*BtmGenerationRequestTest' \
-  --tests '*BtmGenerationRunnerTest' \
-  --tests '*EngineIngestionRequestWriterTest' \
-  --tests '*BtmGenExtensionTest' \
-  --tests '*GenerateBtmTaskTest' \
-  --tests '*BtmGenPluginTest' \
-  --tests '*MavenBtmGenParametersTest' \
-  --tests '*BuildToolConnectorParityTest' \
-  --tests '*PluginAdapterArchitectureTest' \
-  --dependency-verification strict \
-  --console=plain \
-  --stacktrace
-```
-
-Windows:
-
-```powershell
-.\gradlew.bat test `
-  --tests '*BtmGenerationRequestTest' `
-  --tests '*BtmGenerationRunnerTest' `
-  --tests '*EngineIngestionRequestWriterTest' `
-  --tests '*BtmGenExtensionTest' `
-  --tests '*GenerateBtmTaskTest' `
-  --tests '*BtmGenPluginTest' `
-  --tests '*MavenBtmGenParametersTest' `
-  --tests '*BuildToolConnectorParityTest' `
-  --tests '*PluginAdapterArchitectureTest' `
-  --dependency-verification strict `
-  --console=plain `
-  --stacktrace
-```
-
-### Akzeptanzkriterien
-
-```text
-[ ] Handoff-Branch ist konfliktfrei aktuell.
-[ ] Targeted Tests laufen erfolgreich.
-[ ] Keine Plugin-Adapter-Verantwortung wurde nach Analytics verschoben.
-```
+* vorhandene `AGENTS.md` nicht konfliktfrei erweitert werden kann
+* bestehende Regeln unklar oder widersprüchlich sind
 
 ---
 
-## 8. Slice 3 — Handoff auf `main` bringen
+# Slice 3: .codex/config.toml erstellen oder aktualisieren
 
-### Ziel
+## Ziel
 
-Den Engine-Request-Handoff in `forensics_tracing/main` übernehmen.
+Codex legt eine konservative projektbezogene Codex-Konfiguration an.
 
-### Vorgehen
-
-Empfohlen:
+## Ziel-Datei
 
 ```text
-1. PR von feature/migration-slice-08-plugin-adapter-boundary nach main öffnen oder aktualisieren.
-2. PR-Beschreibung mit What/Why/How/Verification ergänzen.
-3. CI prüfen.
-4. PR mergen.
+.codex/config.toml
 ```
 
-Falls lokal gemergt werden soll:
-
-```bash
-git switch main
-git pull --ff-only
-git merge --no-ff feature/migration-slice-08-plugin-adapter-boundary
-```
-
-### Pflichtprüfung nach Merge auf `main`
-
-```bash
-git switch main
-git pull --ff-only
-rg -n "EngineIngestionRequest|engineRequestEnabled|engineRequestFile|EnginePayloadKind|engine-request" src README.md QUALITY.md AGENTS.md build.gradle.kts gradle || true
-```
-
-### Akzeptanzkriterien
-
-```text
-[ ] `main` enthält EngineIngestionRequest.
-[ ] `main` enthält EngineIngestionRequestWriter.
-[ ] `main` enthält Gradle- und Maven-Konfiguration für Engine Request.
-[ ] Dokumentation beschreibt engineRequestEnabled und engineRequestFile.
-[ ] Legacy default bleibt erhalten.
-```
-
----
-
-## 9. Slice 4 — Java 25 / JUnit 6 Baseline-Migration in `forensics_tracing`
-
-### Ziel
-
-`forensics_tracing` ebenfalls auf die Systembaseline Java 25 / JUnit 6 bringen.
-
-Dieser Slice ist erforderlich, wenn das **gesamte System** dieselbe Baseline haben soll.
-
-### Dateien
-
-```text
-gradle/libs.versions.toml
-build.gradle.kts
-.github/workflows/*.yml
-.github/workflows/*.yaml
-QUALITY.md
-AGENTS.md
-README.md
-Commit.md
-gradle/verification-metadata.xml
-```
-
-### Zentrale Änderungen
-
-In `gradle/libs.versions.toml`:
+## Inhalt
 
 ```toml
-junit = "6.0.3"
-jacoco = "0.8.14"
+[agents]
+max_threads = 5
+max_depth = 1
 ```
 
-Zusätzlich prüfen und bei Bedarf aktualisieren:
+## Arbeitsschritte
+
+1. Ordner `.codex/` anlegen, falls nicht vorhanden.
+2. Prüfen, ob `.codex/config.toml` existiert.
+3. Falls nicht vorhanden: Datei mit Baseline-Konfiguration erstellen.
+4. Falls vorhanden: vorhandene Konfiguration erhalten und `[agents]` konservativ ergänzen.
+5. Keine spekulativen MCP-Server hinzufügen.
+6. Keine Credentials hinzufügen.
+7. Keine Provider- oder Profil-Konfiguration hinzufügen, sofern nicht bereits vorhanden und dokumentiert.
+
+## Validierung
+
+Codex prüft:
+
+* `.codex/config.toml` existiert
+* `[agents]` ist vorhanden
+* `max_threads = 5` ist gesetzt oder bewusst konservativer
+* `max_depth = 1` ist gesetzt
+
+Optional, falls Python verfügbar:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+import tomllib
+path = Path('.codex/config.toml')
+with path.open('rb') as f:
+    tomllib.load(f)
+print('config.toml validation passed.')
+PY
+```
+
+## Stop-Bedingungen
+
+Stoppen, wenn:
+
+* bestehende `.codex/config.toml` eine inkompatible Agent-Konfiguration enthält
+* bestehende Konfiguration nicht ohne Risiko geändert werden kann
+
+---
+
+# Slice 4: Custom Agents erstellen
+
+## Ziel
+
+Codex erstellt projektspezifische Custom Agents unter `.codex/agents/`.
+
+## Ziel-Ordner
 
 ```text
-AspectJ Weaver
-Mockito
-Byte Buddy
-JavaParser
-Lombok
+.codex/agents/
 ```
 
-In `build.gradle.kts`:
+## Arbeitsschritte
 
-```kotlin
-val javaBaseline = 25
-val java25 = javaToolchains.launcherFor {
-    languageVersion.set(JavaLanguageVersion.of(javaBaseline))
-}
-```
+1. Ordner `.codex/agents/` anlegen, falls nicht vorhanden.
+2. Bestehende Agent-Dateien prüfen.
+3. Fehlende Agent-Dateien erstellen.
+4. Vorhandene Agent-Dateien nicht blind überschreiben.
+5. Bei Namenskonflikten Inhalt vergleichen und vorsichtig mergen.
+6. Read-only-Agenten mit `sandbox_mode = "read-only"` markieren, sofern unterstützt.
 
-Alle aktiven Java-17-Stellen ersetzen:
+---
+
+## Agent: repo_explorer
+
+### Datei
 
 ```text
-JavaLanguageVersion.of(17)
-JavaVersion.VERSION_17
-options.release.set(17)
-java17
+.codex/agents/repo_explorer.toml
 ```
 
-JUnit Platform Launcher über den JUnit BOM führen und keine separate `junit-platform = "1.x"` Version behalten.
+### Inhalt
 
-### Suchbefehl
-
-```bash
-rg -n "Java 17|JDK 17|JUnit 5|junit5|java17|VERSION_17|release\.set\(17\)|JavaLanguageVersion\.of\(17\)|junit-platform\s*=|5\.13\.4|1\.11\.3|0\.8\.13" \
-  AGENTS.md QUALITY.md README.md Commit.md build.gradle.kts settings.gradle.kts gradle .github src || true
-```
-
-### Verification
-
-```bash
-./gradlew clean compileJava compileTestJava --dependency-verification lenient --console=plain --stacktrace
-./gradlew test --dependency-verification lenient --console=plain --stacktrace
-```
-
-Danach Dependency Verification aktualisieren, falls nötig:
-
-```bash
-./gradlew help --write-verification-metadata sha256 --dependency-verification lenient --console=plain
-./gradlew clean test --write-verification-metadata sha256 --dependency-verification lenient --console=plain --stacktrace
-```
-
-Strict Gate:
-
-```bash
-./gradlew clean test jacocoTestReport jacocoTestCoverageVerification checkPackageCoverage \
-  --dependency-verification strict \
-  --console=plain \
-  --stacktrace
-
-./gradlew validatePlugins \
-  --dependency-verification strict \
-  --no-daemon \
-  --console=plain \
-  --stacktrace
-```
-
-### Akzeptanzkriterien
-
-```text
-[ ] Build und Tests laufen mit Java 25.
-[ ] Tests laufen mit JUnit 6.
-[ ] Kein aktiver JUnit-Platform-1.x-Katalogeintrag bleibt übrig.
-[ ] JaCoCo unterstützt Java-25-Bytecode.
-[ ] AspectJ-/Mockito-/ByteBuddy-Tests laufen unter Java 25.
-[ ] CI nutzt JDK 25.
-[ ] Dependency Verification läuft strict.
+```toml
+name = "repo_explorer"
+description = "Explores repository structure, important files, modules, build setup, and existing process documentation without modifying code."
+sandbox_mode = "read-only"
+developer_instructions = """
+You are a repository exploration agent.
+Do not modify files.
+Inspect the repository structure, build files, documentation, and process files.
+Identify important modules, entry points, architectural boundaries, quality commands, and existing workflows.
+Return concise findings with file paths and relevance.
+Do not guess. If something cannot be found, report it explicitly.
+"""
 ```
 
 ---
 
-## 10. Slice 5 — Engine-Request-Artefakt real erzeugen
+## Agent: architecture_reviewer
 
-### Ziel
+### Datei
 
-Nachweisen, dass das Plugin ein von Analytics konsumierbares `engine-request.json` erzeugt.
+```text
+.codex/agents/architecture_reviewer.toml
+```
 
-### Beispiel Gradle
+### Inhalt
+
+```toml
+name = "architecture_reviewer"
+description = "Reviews architecture boundaries, dependency direction, ports, adapters, and migration risks."
+sandbox_mode = "read-only"
+developer_instructions = """
+You are a strict architecture reviewer.
+Do not modify files.
+Check whether the project follows its documented architecture rules.
+Pay special attention to hexagonal architecture, dependency direction, domain purity, ports, adapters, and framework leakage.
+Report violations with file paths, affected symbols, severity, and concrete remediation proposals.
+Do not invent architecture rules that are not present in the repository instructions.
+"""
+```
+
+---
+
+## Agent: quality_reviewer
+
+### Datei
+
+```text
+.codex/agents/quality_reviewer.toml
+```
+
+### Inhalt
+
+```toml
+name = "quality_reviewer"
+description = "Reviews tests, coverage, build verification, Gradle or Maven quality gates, and QUALITY.md consistency."
+sandbox_mode = "read-only"
+developer_instructions = """
+You are responsible for quality verification.
+Do not modify files.
+Read QUALITY.md and relevant build files before making claims.
+Identify the exact commands required to verify the project.
+Check whether documented quality commands match the actual build configuration.
+Report missing tests, weak assertions, stale commands, coverage gaps, and verification risks.
+Do not weaken existing quality gates.
+"""
+```
+
+---
+
+## Agent: security_reviewer
+
+### Datei
+
+```text
+.codex/agents/security_reviewer.toml
+```
+
+### Inhalt
+
+```toml
+name = "security_reviewer"
+description = "Reviews security-sensitive changes, dependency risks, unsafe defaults, secret handling, and test isolation."
+sandbox_mode = "read-only"
+developer_instructions = """
+You are a security review agent.
+Do not modify files.
+Review changes or plans for security-sensitive risks.
+Check dependency handling, secret handling, command execution, deserialization, network exposure, file-system access, and test isolation.
+Report concrete risks with file paths and remediation proposals.
+Avoid speculative claims. Mark uncertainty explicitly.
+"""
+```
+
+---
+
+## Agent: documentation_reviewer
+
+### Datei
+
+```text
+.codex/agents/documentation_reviewer.toml
+```
+
+### Inhalt
+
+```toml
+name = "documentation_reviewer"
+description = "Reviews README, workflow files, examples, AGENTS.md, QUALITY.md, and generated process documentation for consistency."
+sandbox_mode = "read-only"
+developer_instructions = """
+You review documentation consistency.
+Do not modify files unless explicitly assigned a documentation-only slice.
+Check README, AGENTS.md, QUALITY.md, workflow files, examples, and migration documents.
+Find stale commands, outdated examples, contradictory rules, missing setup steps, and unclear instructions.
+Return concrete documentation findings with file paths and proposed edits.
+"""
+```
+
+---
+
+## Agent: implementation_worker
+
+### Datei
+
+```text
+.codex/agents/implementation_worker.toml
+```
+
+### Inhalt
+
+```toml
+name = "implementation_worker"
+description = "Implements exactly one approved slice at a time with minimal, targeted changes."
+developer_instructions = """
+You are an implementation worker.
+Modify files only for the explicitly approved slice.
+Keep unrelated files untouched.
+Follow AGENTS.md, QUALITY.md, and the active workflow file.
+Prefer small, defensible changes.
+After editing, run the relevant checks from QUALITY.md where feasible.
+If requirements are unclear, conflicting, or unsupported by the repository, stop and report instead of guessing.
+"""
+```
+
+---
+
+## Agent: commit_reviewer
+
+### Datei
+
+```text
+.codex/agents/commit_reviewer.toml
+```
+
+### Inhalt
+
+```toml
+name = "commit_reviewer"
+description = "Reviews git status, staged and unstaged diffs, verification evidence, and prepares a traceable commit message."
+sandbox_mode = "read-only"
+developer_instructions = """
+You are a commit review agent.
+Do not modify files.
+Inspect git status, staged changes, unstaged changes, and relevant diffs.
+Verify whether the documented quality gate was run.
+Prepare a commit message that explains:
+- what changed
+- why it changed
+- how it was verified
+- known limitations or follow-up work
+Do not recommend committing if the quality gate failed or verification is missing.
+"""
+```
+
+## Validierung
+
+Codex prüft, ob alle Agent-Dateien vorhanden sind:
+
+```text
+.codex/agents/repo_explorer.toml
+.codex/agents/architecture_reviewer.toml
+.codex/agents/quality_reviewer.toml
+.codex/agents/security_reviewer.toml
+.codex/agents/documentation_reviewer.toml
+.codex/agents/implementation_worker.toml
+.codex/agents/commit_reviewer.toml
+```
+
+Optional, falls Python verfügbar:
 
 ```bash
-./gradlew generateBtmRules \
-  -Pforensics.engineRequestEnabled=true \
-  -Pforensics.engineRequestFile=build/forensics/engine-request.json \
-  --dependency-verification strict \
-  --console=plain \
-  --stacktrace
+python - <<'PY'
+from pathlib import Path
+import tomllib
+
+agent_dir = Path('.codex/agents')
+required = ['name', 'description', 'developer_instructions']
+
+for path in sorted(agent_dir.glob('*.toml')):
+    with path.open('rb') as f:
+        data = tomllib.load(f)
+    for key in required:
+        if key not in data:
+            raise SystemExit(f'{path} misses {key}')
+print('Agent TOML validation passed.')
+PY
 ```
 
-Windows:
+## Stop-Bedingungen
 
-```powershell
-.\gradlew.bat generateBtmRules `
-  -Pforensics.engineRequestEnabled=true `
-  -Pforensics.engineRequestFile=build/forensics/engine-request.json `
-  --dependency-verification strict `
-  --console=plain `
-  --stacktrace
-```
+Stoppen, wenn:
 
-### Erwartete Artefakte
+* bestehende Agent-Dateien inkompatible Rollen mit gleichem Namen enthalten
+* TOML-Dateien nicht valide geschrieben werden können
+* bestehende Agent-Instruktionen nicht sicher erhalten werden können
+
+---
+
+# Slice 5: Skills erstellen
+
+## Ziel
+
+Codex erstellt wiederverwendbare Skills unter `.agents/skills/`.
+
+## Ziel-Ordner
 
 ```text
-build/forensics/engine-request.json
-build/forensics/forensics.btm oder konfigurierte BTM-Datei
-optional manifest/checksums bei analysisStoreEnabled=true
+.agents/skills/
 ```
 
-### Inhaltliche Prüfung
+## Arbeitsschritte
+
+1. Ordner `.agents/skills/` anlegen, falls nicht vorhanden.
+2. Bestehende Skills prüfen.
+3. Fehlende Skills erstellen.
+4. Vorhandene Skills nicht blind überschreiben.
+5. Bei Namenskonflikten Inhalt vergleichen und vorsichtig mergen.
+6. Jeder Skill muss eine `SKILL.md` enthalten.
+
+---
+
+## Skill: slice_workflow
+
+### Datei
+
+```text
+.agents/skills/slice_workflow/SKILL.md
+```
+
+### Inhalt
+
+```md
+# Skill: Slice Workflow
+
+## Description
+
+Creates a structured slice-based implementation plan from a task, repository rules, and existing workflow documentation.
+
+## Instructions
+
+1. Read the user task.
+2. Read AGENTS.md.
+3. Read QUALITY.md.
+4. Inspect relevant repository files.
+5. Identify the smallest meaningful implementation slices.
+6. Order slices by dependency and risk.
+7. Define done criteria for each slice.
+8. Do not implement before the slice plan is complete.
+
+## Expected Inputs
+
+- user task
+- AGENTS.md
+- QUALITY.md
+- existing workflow files
+- relevant source files
+
+## Expected Outputs
+
+- ordered slice plan
+- affected files per slice
+- verification commands per slice
+- risks and open points
+
+## Stop Conditions
+
+Stop if:
+
+- requirements are contradictory
+- required files cannot be found
+- the quality gate is unclear
+- the requested change conflicts with architecture rules
+```
+
+---
+
+## Skill: quality_gate
+
+### Datei
+
+```text
+.agents/skills/quality_gate/SKILL.md
+```
+
+### Inhalt
+
+```md
+# Skill: Quality Gate
+
+## Description
+
+Identifies and executes the repository quality gate without weakening existing verification rules.
+
+## Instructions
+
+1. Read QUALITY.md.
+2. Inspect build files.
+3. Identify the correct build tool.
+4. Identify test, coverage, validation, and verification commands.
+5. Run checks where feasible.
+6. Summarize pass/fail results.
+7. Report exact failing commands.
+
+## Expected Inputs
+
+- QUALITY.md
+- build.gradle or build.gradle.kts
+- settings.gradle or settings.gradle.kts
+- pom.xml if present
+- current diff
+
+## Expected Outputs
+
+- commands executed
+- result summary
+- failing checks
+- suspected cause
+- recommended next step
+
+## Stop Conditions
+
+Stop if:
+
+- the documented quality gate is inconsistent with the build
+- a command fails
+- a test fails
+- required tooling is missing
+- thresholds would need to be changed
+```
+
+---
+
+## Skill: commit_message
+
+### Datei
+
+```text
+.agents/skills/commit_message/SKILL.md
+```
+
+### Inhalt
+
+```md
+# Skill: Commit Message
+
+## Description
+
+Creates a traceable commit message from git status, diffs, and verification evidence.
+
+## Instructions
+
+1. Inspect git status.
+2. Inspect staged and unstaged changes.
+3. Read relevant diffs.
+4. Check whether quality commands were run.
+5. Create a commit message explaining:
+   - what changed
+   - why it changed
+   - how it was verified
+   - known limitations
+
+## Expected Inputs
+
+- git status
+- git diff
+- verification results
+- related workflow or issue context
+
+## Expected Outputs
+
+- proposed commit title
+- detailed commit body
+- verification section
+- limitations section
+
+## Stop Conditions
+
+Stop if:
+
+- quality gate failed
+- verification is missing
+- staged and unstaged changes are mixed unexpectedly
+- unrelated changes are present
+```
+
+---
+
+## Skill: documentation_sync
+
+### Datei
+
+```text
+.agents/skills/documentation_sync/SKILL.md
+```
+
+### Inhalt
+
+```md
+# Skill: Documentation Sync
+
+## Description
+
+Keeps project documentation, examples, workflow files, and process instructions consistent with the current implementation.
+
+## Instructions
+
+1. Inspect README.md.
+2. Inspect AGENTS.md.
+3. Inspect QUALITY.md.
+4. Inspect workflow files.
+5. Inspect examples.
+6. Compare documented commands with build files.
+7. Identify stale examples, outdated commands, and contradictory instructions.
+8. Propose documentation-only slices.
+
+## Expected Inputs
+
+- README.md
+- AGENTS.md
+- QUALITY.md
+- workflow files
+- examples
+- build files
+
+## Expected Outputs
+
+- documentation findings
+- stale sections
+- proposed corrections
+- documentation-only slice plan
+
+## Stop Conditions
+
+Stop if:
+
+- implementation behavior cannot be verified
+- documentation contradicts itself
+- a command cannot be validated
+```
+
+---
+
+## Skill: migration_workflow
+
+### Datei
+
+```text
+.agents/skills/migration_workflow/SKILL.md
+```
+
+### Inhalt
+
+```md
+# Skill: Migration Workflow
+
+## Description
+
+Plans and executes repository or module migrations in small, verifiable slices while preserving architecture and quality rules.
+
+## Instructions
+
+1. Inspect the source project.
+2. Inspect the target project.
+3. Identify reusable implementation parts.
+4. Identify incompatible assumptions.
+5. Create a migration slice plan.
+6. Preserve architecture boundaries.
+7. Run the quality gate after each implementation slice.
+8. Document risks and open points.
+
+## Expected Inputs
+
+- source repository
+- target repository
+- migration task
+- AGENTS.md
+- QUALITY.md
+- migration_workplan.md if present
+
+## Expected Outputs
+
+- migration plan
+- ordered slices
+- files to move or adapt
+- verification plan
+- risks and unresolved questions
+
+## Stop Conditions
+
+Stop if:
+
+- source and target architecture conflict
+- required source files cannot be found
+- target quality gate is unclear
+- migration would require speculative behavior changes
+```
+
+## Validierung
+
+Codex prüft:
+
+```text
+.agents/skills/slice_workflow/SKILL.md
+.agents/skills/quality_gate/SKILL.md
+.agents/skills/commit_message/SKILL.md
+.agents/skills/documentation_sync/SKILL.md
+.agents/skills/migration_workflow/SKILL.md
+```
+
+Zusätzlich muss jede `SKILL.md` enthalten:
+
+* `# Skill:`
+* `## Description`
+* `## Instructions`
+* `## Expected Inputs`
+* `## Expected Outputs`
+* `## Stop Conditions`
+
+## Stop-Bedingungen
+
+Stoppen, wenn:
+
+* bestehende Skills mit gleichem Namen inkompatible Bedeutung haben
+* vorhandene Skill-Inhalte nicht sicher integriert werden können
+
+---
+
+# Slice 6: Dokumentationsabgleich
+
+## Ziel
+
+Codex gleicht die neu angelegte Struktur mit vorhandener Dokumentation ab.
+
+## Arbeitsschritte
+
+1. `AGENTS.md` erneut lesen.
+2. `QUALITY.md` erneut lesen.
+3. `README.md` prüfen, falls vorhanden.
+4. Bestehende `workflow.md` prüfen, falls vorhanden.
+5. Prüfen, ob die neue Multi-Agent-Struktur irgendwo erwähnt werden sollte.
+6. Keine umfangreichen README-Umbauten durchführen, außer die bestehende Dokumentation wäre sonst offensichtlich falsch.
+7. Falls größere Dokumentationsänderungen nötig wären: als offenen Folge-Slice dokumentieren, nicht automatisch großflächig ändern.
+
+## Erwartetes Ergebnis
+
+* kleine notwendige Referenzen ergänzt
+* keine übermäßige Dokumentationsumschreibung
+* offene Dokumentationsaufgaben dokumentiert
+
+## Validierung
+
+Codex prüft:
+
+* `AGENTS.md` verweist auf `.codex/agents/`
+* `AGENTS.md` verweist auf `.agents/skills/`
+* `QUALITY.md` wurde nicht abgeschwächt
+* README wurde nicht unnötig umgeschrieben
+
+## Stop-Bedingungen
+
+Stoppen, wenn:
+
+* bestehende Dokumentation dem neuen Setup widerspricht
+* README oder andere zentrale Dokumentation großflächig angepasst werden müsste
+
+---
+
+# Slice 7: Technische Validierung
+
+## Ziel
+
+Codex validiert die erzeugte Struktur technisch so weit wie möglich, ohne einen teuren Full Build zu erzwingen.
+
+## Arbeitsschritte
+
+1. Prüfen, ob alle Ziel-Dateien existieren.
+2. TOML-Dateien syntaktisch prüfen, falls möglich.
+3. Skill-Dateien auf Pflichtabschnitte prüfen.
+4. Markdown-Dateien auf grobe Vollständigkeit prüfen.
+5. Keine teuren Builds ausführen, sofern nur Dokumentation und Codex-Konfiguration geändert wurden.
+
+## Pflichtprüfung
 
 ```bash
-cat build/forensics/engine-request.json
+find .codex -type f | sort
+find .agents/skills -type f | sort
 ```
 
-Erwartete Struktur:
-
-```json
-{
-  "schemaVersion": "...",
-  "buildIdentity": { ... },
-  "moduleIdentity": { ... },
-  "pluginIdentity": { ... },
-  "payloads": [
-    {
-      "payloadId": "byteman-rules",
-      "kind": "RULE_ARTIFACTS",
-      "contentType": "text/x-byteman",
-      "file": "...",
-      "attributes": { ... }
-    }
-  ]
-}
-```
-
-### Akzeptanzkriterien
-
-```text
-[ ] engine-request.json wird erzeugt.
-[ ] Payload-Dateien existieren real.
-[ ] Payload-Kinds passen exakt zu forensic_analytics.
-[ ] Relative und absolute Pfade sind importierbar.
-[ ] Legacy-BTM-Ausgabe bleibt erhalten.
-```
-
----
-
-## 11. Slice 6 — Cross-Repo-Handoff-Smoke gegen `forensic_analytics`
-
-### Ziel
-
-Den erzeugten Request direkt mit `forensic_analytics` importieren.
-
-### Voraussetzung
-
-`forensic_analytics/main` ist lokal ausgecheckt und gebaut.
-
-### Commands in `forensic_analytics`
+## Optionale TOML-Prüfung
 
 ```bash
-./gradlew :forensic-analytics-cli:run \
-  --args="ingest-request --request <path-to-forensics_tracing>/build/forensics/engine-request.json --output build/forensics/handoff-smoke" \
-  --dependency-verification strict \
-  --console=plain \
-  --stacktrace
+python - <<'PY'
+from pathlib import Path
+import tomllib
+
+paths = [Path('.codex/config.toml')]
+paths.extend(sorted(Path('.codex/agents').glob('*.toml')))
+
+for path in paths:
+    with path.open('rb') as f:
+        tomllib.load(f)
+print('TOML validation passed.')
+PY
 ```
 
-Windows:
+## Optionale Skill-Prüfung
 
-```powershell
-.\gradlew.bat :forensic-analytics-cli:run `
-  --args="ingest-request --request D:\Projects\forensics_tracing\build\forensics\engine-request.json --output build\forensics\handoff-smoke" `
-  --dependency-verification strict `
-  --console=plain `
-  --stacktrace
+```bash
+python - <<'PY'
+from pathlib import Path
+
+required_sections = [
+    '# Skill:',
+    '## Description',
+    '## Instructions',
+    '## Expected Inputs',
+    '## Expected Outputs',
+    '## Stop Conditions',
+]
+
+for path in sorted(Path('.agents/skills').glob('*/SKILL.md')):
+    text = path.read_text(encoding='utf-8')
+    for section in required_sections:
+        if section not in text:
+            raise SystemExit(f'{path} misses {section}')
+print('Skill validation passed.')
+PY
 ```
 
-### Erwartete Analytics-Ausgabe
+## Erwartetes Ergebnis
 
-```text
-status=COMPLETED
-uploadedPayloads>=1
-engine-request-import-summary.txt vorhanden
-```
+* Struktur vorhanden
+* TOML syntaktisch valide
+* Skills vollständig
+* keine unnötigen Build-Kommandos ausgeführt
 
-### Akzeptanzkriterien
+## Stop-Bedingungen
 
-```text
-[ ] Analytics kann den von forensics_tracing erzeugten Request lesen.
-[ ] Alle referenzierten Payload-Dateien werden geladen.
-[ ] Import endet mit COMPLETED.
-[ ] Summary enthält requestFile, status und uploadedPayloads.
-```
+Stoppen, wenn:
+
+* TOML ungültig ist
+* Pflichtdateien fehlen
+* Skills unvollständig sind
 
 ---
 
-## 12. Slice 7 — Dokumentation und Status abschließen
+# Slice 8: Abschlussbericht erstellen
 
-### Ziel
+## Ziel
 
-Repository-Dokumentation in `forensics_tracing` auf den finalen Zustand bringen.
+Codex erstellt einen nachvollziehbaren Abschlussbericht ohne Commit.
 
-### Zu aktualisieren
+## Arbeitsschritte
 
-```text
-README.md
-QUALITY.md
-AGENTS.md
-workflow.md
-Commit.md
-optional docs/migration/MIGRATION_STATUS.md
-```
+1. `git status` prüfen.
+2. Geänderte Dateien auflisten.
+3. Neu erstellte Dateien auflisten.
+4. Kurz erklären, welche Regeln extrahiert wurden.
+5. Kurz erklären, welche Regeln nicht auflösbar waren.
+6. Validierungsergebnisse dokumentieren.
+7. Empfohlenen Folgeprompt ausgeben.
+8. Nicht committen.
 
-### Inhalt muss erklären
-
-```text
-- forensics_tracing ist Build-Adapter / Plugin.
-- forensic_analytics ist Zielplattform / Engine.
-- Legacy-Modus bleibt default.
-- engineRequestEnabled aktiviert den lokalen Handoff.
-- engineRequestFile definiert die Handoff-Datei.
-- gRPC-Client ist noch nicht Teil dieses Schritts.
-- Java 25 / JUnit 6 gilt als aktive Baseline, falls Slice 4 umgesetzt wurde.
-```
-
-### Akzeptanzkriterien
+## Abschlussbericht muss enthalten
 
 ```text
-[ ] README beschreibt Engine-Request-Handoff.
-[ ] QUALITY beschreibt Java 25/JUnit 6 oder klar den abweichenden Legacy-Status.
-[ ] AGENTS ist widerspruchsfrei.
-[ ] Migration Status nennt erledigte und offene Punkte.
+Summary
+- Created files
+- Modified files
+- Preserved existing rules
+- Extracted quality commands
+- Open points
+- Validation results
+- Recommended next prompt
 ```
+
+## Empfohlener Folgeprompt
+
+```text
+Read AGENTS.md, QUALITY.md, .codex/agents, and .agents/skills.
+
+Use repo_explorer, architecture_reviewer, quality_reviewer, security_reviewer, and documentation_reviewer in read-only mode first.
+
+Consolidate their findings.
+Create an implementation slice plan.
+Do not modify code until Slice 1 is clearly defined.
+
+Use implementation_worker only for Slice 1.
+After Slice 1, run the required checks from QUALITY.md.
+Summarize the diff, verification result, risks, and open points.
+Do not continue with Slice 2 unless explicitly instructed.
+```
+
+## Stop-Bedingungen
+
+Stoppen, wenn:
+
+* `git status` nicht ausgeführt werden kann
+* Änderungen nicht nachvollziehbar sind
+* Validierung fehlgeschlagen ist
 
 ---
 
-## 13. Vollständige Definition of Done
+# Gesamte Abschlusskriterien
 
-```text
-[ ] Handoff-Code liegt auf forensics_tracing/main.
-[ ] engine-request.json kann vom Plugin erzeugt werden.
-[ ] forensic_analytics kann das erzeugte engine-request.json importieren.
-[ ] Gradle- und Maven-Adapter besitzen Parität für Engine Request.
-[ ] Legacy-BTM-Modus funktioniert weiterhin.
-[ ] Java 25 / JUnit 6 ist umgesetzt oder bewusst als separater offener Punkt dokumentiert.
-[ ] Full Quality Gate läuft strict.
-[ ] validatePlugins läuft strict.
-[ ] Dokumentation ist aktualisiert.
-[ ] Keine Build-Tool-Adapter wurden in forensic_analytics verschoben.
-```
+Der Workflow ist vollständig abgeschlossen, wenn:
 
----
-
-## 14. Commit-Strategie
-
-Empfohlene Commits:
-
-```text
-feat(plugin): add engine request handoff for analytics
-build: migrate tracing plugin to Java 25 and JUnit 6
-test(plugin): verify analytics engine request generation
-docs(migration): document tracing to analytics handoff
-```
-
-Wenn Java 25 / JUnit 6 zu groß ist, als eigener PR:
-
-```text
-PR 1: feat(plugin): add engine request handoff for analytics
-PR 2: build: migrate tracing plugin to Java 25 and JUnit 6
-```
+* `AGENTS.md` existiert.
+* `AGENTS.md` referenziert `.codex/agents/`.
+* `AGENTS.md` referenziert `.agents/skills/`.
+* `.codex/config.toml` existiert.
+* `.codex/agents/repo_explorer.toml` existiert.
+* `.codex/agents/architecture_reviewer.toml` existiert.
+* `.codex/agents/quality_reviewer.toml` existiert.
+* `.codex/agents/security_reviewer.toml` existiert.
+* `.codex/agents/documentation_reviewer.toml` existiert.
+* `.codex/agents/implementation_worker.toml` existiert.
+* `.codex/agents/commit_reviewer.toml` existiert.
+* `.agents/skills/slice_workflow/SKILL.md` existiert.
+* `.agents/skills/quality_gate/SKILL.md` existiert.
+* `.agents/skills/commit_message/SKILL.md` existiert.
+* `.agents/skills/documentation_sync/SKILL.md` existiert.
+* `.agents/skills/migration_workflow/SKILL.md` existiert.
+* vorhandene Prozessdokumentation wurde erhalten oder sauber referenziert.
+* keine Qualitätsregeln wurden abgeschwächt.
+* keine Architekturregeln wurden entfernt.
+* offene Punkte wurden dokumentiert.
+* kein Commit wurde erstellt.
 
 ---
 
-## 15. Finaler Report
+# Startprompt für Codex
 
-Am Ende muss der Agent berichten:
+Diesen Prompt kann der Nutzer direkt in Codex verwenden:
 
 ```text
-- Branch/PR Status
-- Geänderte Dateien
-- Ob Handoff-Code auf main liegt
-- Ob Java 25/JUnit 6 umgesetzt wurde
-- Erzeugter engine-request.json Pfad
-- Analytics-Smoke-Test Ergebnis
-- Ausgeführte Commands
-- Fehlgeschlagene Commands
-- Sonar Status oder Skip-Grund
-- Offene Risiken
+Work through workflow.md automatically slice by slice.
+
+Follow the Autopilot Rule:
+- Do not ask for confirmation between slices.
+- Do not commit.
+- Do not overwrite existing process files blindly.
+- Preserve existing rules.
+- Stop only if a defined Stop Condition occurs.
+
+Start with Slice 0 and continue until Slice 8 is complete.
+
+At the end, provide:
+- created files
+- modified files
+- preserved rules
+- validation results
+- open points
+- recommended next prompt
 ```
