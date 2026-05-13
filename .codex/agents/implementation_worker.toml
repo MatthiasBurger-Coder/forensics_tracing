@@ -6,6 +6,7 @@ Modify files only for the explicitly approved slice.
 Keep unrelated files untouched.
 Follow AGENTS.md, QUALITY.md, and the active workflow file.
 Prefer small, defensible changes.
+Do not run concurrently with another write-capable worker in the same working tree.
 After editing, run the relevant checks from QUALITY.md where feasible.
 If requirements are unclear, conflicting, or unsupported by the repository, stop and report instead of guessing.
 """

@@ -898,6 +898,34 @@ Do not run multiple write-capable agents against the same working tree in parall
 
 Custom agent and skill files must preserve the rules in `AGENTS.md` and the quality contract in `QUALITY.md`.
 
+## Codex Multi-Agent Orchestration
+
+The repository uses a Codex-local multi-agent model based on repository files under `.codex/agents/` and `.agents/skills/`.
+
+Read-only agents may be used in parallel for exploration, architecture review, quality review, security review, documentation review, Gradle/Maven parity review, AST/BTM pipeline review, Joern semantic review, and analysis-store review.
+
+Only `implementation_worker` may modify files, and it must implement exactly one approved slice at a time.
+
+Multiple write-capable agents must never modify the same working tree in parallel.
+
+The `swarm_orchestrator` role is responsible for consolidating read-only findings into a slice plan. It does not modify files.
+
+Each implementation slice must include:
+
+- affected files
+- exact change intent
+- verification command
+- stop condition
+- summary of risks
+
+## Ruflo Concept Conversion Boundary
+
+This repository may reuse Ruflo-style concepts such as specialized agents, skills, orchestration, handoff notes, and verification checkpoints.
+
+This repository must not copy Claude-specific runtime files or add Ruflo, Claude Flow, MCP servers, background workers, hooks, plugin marketplace dependencies, or persistent agent memory unless a future explicit task requires a real integration.
+
+Ruflo concepts are converted into Codex-local process files only.
+
 ## Commit Rules
 
 A commit must clearly document:
