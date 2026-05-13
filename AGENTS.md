@@ -882,6 +882,22 @@ Commit prompts should reference `AGENTS.md` instead of duplicating architecture 
 
 This avoids rule drift between automation instructions and repository-level engineering rules.
 
+## Project Agent and Skill Files
+
+Project-local Codex configuration may live under `.codex/config.toml`.
+
+Project-specific custom agent role definitions may live under `.codex/agents/`.
+
+Reusable project workflow skills may live under `.agents/skills/`.
+
+Read-only agent roles are intended for exploration, architecture review, quality review, security review, documentation review, and commit review.
+
+Write-capable implementation work must be limited to one approved slice at a time.
+
+Do not run multiple write-capable agents against the same working tree in parallel.
+
+Custom agent and skill files must preserve the rules in `AGENTS.md` and the quality contract in `QUALITY.md`.
+
 ## Commit Rules
 
 A commit must clearly document:
