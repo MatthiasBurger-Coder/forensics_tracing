@@ -1,201 +1,197 @@
-Migration Epic: Auslagern der Analyse in den Dienst forensic_analytics
-Hintergrund
-Das bisherige forensics_tracing‑Plugin enthält Scanner‑, Analyse‑ und Rule‑Generation‑Logik in einem monolithischen Gradle‑/Maven‑Plugin. Der Build‑Task generateBtmRules durchsucht lokal den Quellcode, extrahiert Informationen über Kontrollflüsse und generiert Byteman‑Regeln sowie einen Analyse‑Store (H2‑Datenbank). Diese Funktionalität soll in den neuen Dienst forensic_analytics ausgelagert werden. Die Entscheidung dient der Entkopplung, einer besseren Skalierbarkeit und der Möglichkeit, Analysen zentral zu orchestrieren. Gleichzeitig soll das Runtime‑Logging (z. B. via RtTrace) in near‑realtime an den Server gestreamt werden, damit dieser die Ereignisse sofort auswerten kann.
-Zielsetzung und Scope
-Dieses Epic beschreibt die Migration der Scan‑ und Analyse‑Komponenten aus dem Plugin in den Dienst forensic_analytics und definiert die Schnittstellen zwischen beiden Systemen.
-Kernziele:
-    1. Remote‑Analyse: Der Server übernimmt das komplette Scannen des Quellcodes, die semantische Analyse und die Generierung der .btm‑Dateien. Das Plugin übermittelt nur Repository‑Informationen und Konfigurationsparameter.
-    2. Asynchrone Ergebnisauslieferung: Die generierten Byteman‑Skripte werden als Datenstrom über gRPC vom Server zum Plugin zurückgesendet. Eine gRPC‑Server‑Streaming‑Methode liefert mehrere BtmFileChunk‑Nachrichten, bis alle Artefakte übertragen sind; der gRPC‑Standard definiert einen solchen serverseitigen Stream mit dem Schlüsselwort stream vor dem Rückgabetyp[1].
-    3. Near‑Realtime‑Logging: Das Runtime‑Logging (JSON‑Zeilen aus RtTrace bzw. Tracer) wird über eine gRPC‑Client‑Streaming‑Verbindung an den Dienst gesendet, sodass dieser aktuelle Systemereignisse beobachten kann.
-    4. REST‑Fassade für Steuerbefehle: Die Interaktion zur Initiierung der Analyse und zur Abfrage des Job‑Status erfolgt über REST‑Endpunkte; REST kontaktiert intern die gRPC‑Services, wie im Open‑Liberty‑Beispiel beschrieben[2].
-Kommunikationsschnittstellen
-REST‑Endpunkte
-HTTP Verb
-Endpoint
-Beschreibung
-POST
-/analysis/start
-Startet einen Analysejob. Der Request‑Body enthält das Repository (URL, Branch, Commit‑SHA) sowie Scanner‑Parameter (z. B. Include/Exclude‑Listen, minimale Branch‑Anzahl). Die Antwort liefert eine jobId.
-GET
-/analysis/status/{jobId}
-Liefert den aktuellen Status (IN_PROGRESS, FAILED, FINISHED) und optional Fortschritt.
-GET
-/analysis/result/{jobId}
-Optionaler REST‑Download der Ergebnisse (z. B. manifest.json); primär erfolgt die Übermittlung per gRPC.
-gRPC‑Service (Protobuf‑Auszug)
-syntax = "proto3";
-package analytics.v1;
+# Migration Epic: Move Analysis to the Forensics Analytics Service
 
-message StartAnalysisRequest {
-  string repo_url = 1;
-  string branch   = 2;
-  map<string,string> settings = 3;
+## Background
+
+The previous `forensics_tracing` plugin mixed build-tool integration with local
+scanner, analysis, rule-generation, and persistence logic. Gradle tasks and
+Maven goals could scan source code locally, derive control-flow information,
+generate Byteman rules, and write a local H2 analysis store.
+
+The active repository boundary is different: Gradle and Maven plugin entry
+points are thin adapters that submit build context to the Forensics Analytics
+server over gRPC. Legacy local analysis code may remain in this repository only
+as migration-audit inventory until its server-side migration is proven.
+
+## Scope
+
+This epic tracks the migration of source scanning, semantic analysis, rule
+generation, analysis storage, and runtime analytics ownership out of the
+build-tool plugin and into the Forensics Analytics service.
+
+The plugin remains responsible for collecting build identity, collecting
+configured submission metadata, creating gRPC requests, sending payloads, and
+failing with useful messages when the server rejects a request.
+
+The server remains responsible for forensic analysis decisions, semantic
+enrichment, generated artifacts, storage, indexing, reporting, and downstream
+analytics behavior.
+
+## Goals
+
+1. Keep Gradle and Maven plugins as thin gRPC submission adapters.
+2. Submit build identity and diagnostic payloads through the checked-in gRPC
+   ingestion contract.
+3. Keep source parsing, source analysis, rule generation, semantic enrichment,
+   persistent analysis stores, and generated analysis packages out of active
+   plugin behavior.
+4. Retain legacy local analysis packages only as migration-audit inventory until
+   server-side migration evidence exists.
+5. Maintain test coverage for Gradle task wiring, Maven Mojo mapping, gRPC
+   request mapping, response handling, and architecture boundaries.
+
+## Non-Goals
+
+- Reintroducing local analysis behavior through Gradle or Maven entry points.
+- Adding REST orchestration to this repository.
+- Generating local Byteman output files from active plugin tasks.
+- Adding fallback task names, compatibility wrappers, or alternate RPC behavior
+  without an explicit verified task.
+- Moving server-side domain decisions into the plugin.
+
+## Current gRPC Contract
+
+The checked-in client contract is:
+
+```text
+src/main/proto/forensic_ingestion.proto
+```
+
+The active service is:
+
+```text
+ForensicIngestionService
+```
+
+The standard submission flow is:
+
+1. `StartAnalysisSession`
+2. client-streaming `UploadAnalysisData`
+3. `CompleteAnalysisSession`
+
+If a submission fails after a session starts, the client may call
+`AbortAnalysisSession` with a failure reason.
+
+### RPC Summary
+
+| RPC | Type | Purpose |
+| --- | --- | --- |
+| `StartAnalysisSession` | unary | Opens a server-side ingestion session for the current build. |
+| `UploadAnalysisData` | client streaming | Uploads one or more `AnalysisDataEnvelope` payloads for the session. |
+| `CompleteAnalysisSession` | unary | Marks the session as complete after upload succeeds. |
+| `AbortAnalysisSession` | unary | Aborts the session when the client cannot finish submission. |
+
+### Contract Excerpt
+
+```proto
+service ForensicIngestionService {
+  rpc StartAnalysisSession(StartAnalysisSessionRequest)
+      returns (StartAnalysisSessionResponse);
+
+  rpc UploadAnalysisData(stream AnalysisDataEnvelope)
+      returns (UploadAnalysisDataResponse);
+
+  rpc CompleteAnalysisSession(CompleteAnalysisSessionRequest)
+      returns (CompleteAnalysisSessionResponse);
+
+  rpc AbortAnalysisSession(AbortAnalysisSessionRequest)
+      returns (AbortAnalysisSessionResponse);
 }
+```
 
-message StartAnalysisResponse { string job_id = 1; }
+## Submitted Context
 
-message JobStatusRequest { string job_id = 1; }
-message JobStatusResponse {
-  enum Status { UNKNOWN = 0; IN_PROGRESS = 1; FINISHED = 2; FAILED = 3; }
-  Status status = 1;
-  string message = 2;
-}
+The plugin sends build and plugin identity data that lets the server associate
+uploaded payloads with a build, module, repository, and plugin version.
 
-message JobRequest { string job_id = 1; }
-message BtmFileChunk {
-  string file_name = 1;
-  bytes data      = 2;
-  bool last_chunk = 3;
-}
+| Message | Key fields |
+| --- | --- |
+| `BuildIdentity` | `project_id`, `repository_url`, `branch_name`, `commit_hash`, `build_id`, `scan_timestamp` |
+| `ModuleIdentity` | `module_name`, `module_path` |
+| `PluginIdentity` | `plugin_name`, `plugin_version` |
+| `AnalysisPayloadDescriptor` | `payload_id`, `kind`, `content_type`, `attributes` |
 
-message LogEntry {
-  string job_id    = 1;
-  string timestamp = 2;
-  string level     = 3;
-  string message   = 4;
-}
+The active plugin currently submits a lightweight build-context diagnostic
+payload. Server-owned analysis payload formats must be added through explicit
+contract changes and tests.
 
-service AnalysisControlService {
-  rpc Start(StartAnalysisRequest) returns (StartAnalysisResponse);
-  rpc Status(JobStatusRequest)   returns (JobStatusResponse);
-}
+## Gradle Plugin Flow
 
-service AnalysisResultService {
-  // Server‑seitiger Stream: Client sendet Job‑Id, Server liefert viele Chunk‑Nachrichten[1].
-  rpc GetBtmFiles(JobRequest) returns (stream BtmFileChunk);
-  // Client‑seitiger Stream für near‑realtime‑Logs.
-  rpc SendLogs(stream LogEntry) returns (google.protobuf.Empty);
-}
-Die REST‑Controller von forensic_analytics delegieren die Anfragen an diese gRPC‑Services. Wie in der Open‑Liberty‑Referenz gezeigt, können unterschiedliche Streaming‑Arten (unary, server streaming, client streaming, bidirectional) hinter HTTP‑Endpunkten versteckt werden[2].
-Ablauf aus Sicht des Build‑Plugins
-    1. Konfiguration: Der Anwender trägt seine Scanner‑Parameter (Quellordner, Include/Exclude, minimale Branch‑Anzahl etc.) in der gewohnten Gradle‑Extension btmGen oder Maven‑Konfiguration ein. Diese Parameter werden in ein JSON‑Request‑Objekt umgewandelt.
-    2. Analyse starten: Der neue Task remoteGenerateBtmRules sendet einen HTTP‑POST an /analysis/start mit Repository‑URL (z. B. Git‑Remote), Branch‑Name und Konfiguration. Die Antwort enthält jobId.
-    3. Status polling: Während der Analyse ruft das Plugin regelmäßig /analysis/status/{jobId} auf, um Fortschritt und Fehler abzufragen. Bei aktivierter Debug‑Option initialisiert das Plugin zusätzlich einen gRPC‑Client‑Stream (SendLogs) und übergibt den gRPC‑Stub an die Laufzeitbibliothek RtTrace/Tracer. Diese senden Log‑Einträge in Echtzeit.
-    4. Ergebnisse empfangen: Sobald der Server FINISHED meldet, ruft das Plugin die gRPC‑Methode GetBtmFiles auf. Ein StreamObserver<BtmFileChunk> sammelt die Byte‑Chunks und schreibt sie in lokale Dateien (forensics.btm, manifest.json, checksums.sha256 usw.). Der Stream endet, wenn last_chunk = true.
-    5. Task abschließen: Nach erfolgreichem Download werden die generierten Regeln im Build‑Verzeichnis bereitgestellt und der Task beendet sich erfolgreich. Bei Fehlern (HTTP‑4xx/5xx, gRPC‑Fehler) schlägt der Task fehl.
-Implementierungsaufgaben
-    1. Anpassung des Plugins
-    2. Implementierung eines REST‑Clients (z. B. mithilfe von OkHttp) zur Kommunikation mit /analysis/start und /analysis/status.
-    3. Erzeugung eines gRPC‑Kanals und eines stubs (AnalysisResultServiceStub) zur Nutzung von GetBtmFiles und SendLogs.
-    4. Aktualisierung der Build‑Scripts: neuer Task remoteGenerateBtmRules, Übergabe der Plugin‑Konfiguration im Request‑Body, Ausgabeort für heruntergeladene Dateien.
-    5. Server‑Implementierung
-    6. Erweiterung von forensic_analytics um die gRPC‑Services aus dem oben stehenden Protobuf.
-    7. Implementierung eines REST‑Controllers, der die gRPC‑Services aufruft. Der Controller handelt die gängigen HTTP‑Response‑Codes (202 bei laufenden Jobs, 500 bei Fehlern).
-    8. Integration eines Job‑Schedulers, der das Repository auscheckt, die Scanner‑Logik aus forensics_tracing aufruft und die Ergebnisse in .btm‑Dateien serialisiert.
-    9. Bereitstellung einer Streaming‑Schnittstelle für Log‑Einträge, die intern in die Analyse‑Datenbank geschrieben oder visualisiert werden.
-    10. Tests und Migration
-    11. Erstellung von Integrationstests für REST‑Endpunkte und gRPC‑Streams (z. B. mithilfe von grpc-java-testing).
-    12. Backwards‑Kompatibilität: Für einen Übergangszeitraum kann das ursprüngliche lokale Analyse‑Verhalten via Flag reaktiviert werden.
-    13. Dokumentation und Beispielanwendungen (Updates der README und AGENTS.md).
-Offene Punkte
-    • Authentifizierung & Sicherheit: Die REST‑ und gRPC‑Schnittstellen müssen abgesichert werden (z. B. mittels Bearer‑Token oder Mutual TLS). Die Übertragung von Quellcode sollte verschlüsselt erfolgen.
-    • Skalierung: Der Server muss mehrere parallele Jobs verarbeiten können; ggf. Bedarf an Queueing (z. B. RabbitMQ) und Horizontal‑Scaling.
-    • Fehlerbehandlung: Bei Verbindungsabbrüchen sollte der gRPC‑Stream fortsetzbar sein (Resumption). REST‑Antworten sollten klare Fehlermeldungen liefern.
-    • Semantische Graphen: Optionales Feature, um Joern‑Graphen zu generieren und an den Server zu übertragen. Dies muss ebenfalls in die API integriert werden.
+1. The consuming build applies plugin ID `de.burger.forensics.btmgen`.
+2. The build configures the `forensicsTracing` extension.
+3. The user runs `submitForensicsAnalysis`, or the aggregate task
+   `forensicsAnalyze`.
+4. The task creates a gRPC client for the configured server host, port,
+   plaintext setting, and deadline.
+5. The task starts an ingestion session, uploads the build-context payload, and
+   completes the session.
+6. The task fails with a descriptive Gradle exception if the server rejects the
+   request or the gRPC call fails.
 
-Dieser Entwurf bildet die Grundlage für die weitere Ausarbeitung und Umsetzung der Migration. Die beschriebenen Kommunikationspfade stützen sich auf Standard‑gRPC‑ und REST‑Konzepte. Serverseitige Streaming‑RPCs liefern eine Folge von Nachrichten an den Client[1], während REST‑Controller diese Streams hinter HTTP‑Endpunkten kapseln können[2]. Weitere Iterationen sollen die Details (z. B. Fehlercodes, Authentifizierung, konkrete Datenmodelle) präzisieren.
+## Maven Plugin Flow
 
-[1] Basics tutorial | Java | gRPC
-https://grpc.io/docs/languages/java/basics/
-[2]  Streaming messages between client and server services using gRPC remote procedure calls 
-https://openliberty.io/guides/grpc-intro.htmlMigration Epic: Auslagern der Analyse in den Dienst forensic_analytics
-Hintergrund
-Das bisherige forensics_tracing‑Plugin enthält Scanner‑, Analyse‑ und Rule‑Generation‑Logik in einem monolithischen Gradle‑/Maven‑Plugin. Der Build‑Task generateBtmRules durchsucht lokal den Quellcode, extrahiert Informationen über Kontrollflüsse und generiert Byteman‑Regeln sowie einen Analyse‑Store (H2‑Datenbank). Diese Funktionalität soll in den neuen Dienst forensic_analytics ausgelagert werden. Die Entscheidung dient der Entkopplung, einer besseren Skalierbarkeit und der Möglichkeit, Analysen zentral zu orchestrieren. Gleichzeitig soll das Runtime‑Logging (z. B. via RtTrace) in near‑realtime an den Server gestreamt werden, damit dieser die Ereignisse sofort auswerten kann.
-Zielsetzung und Scope
-Dieses Epic beschreibt die Migration der Scan‑ und Analyse‑Komponenten aus dem Plugin in den Dienst forensic_analytics und definiert die Schnittstellen zwischen beiden Systemen.
-Kernziele:
-    1. Remote‑Analyse: Der Server übernimmt das komplette Scannen des Quellcodes, die semantische Analyse und die Generierung der .btm‑Dateien. Das Plugin übermittelt nur Repository‑Informationen und Konfigurationsparameter.
-    2. Asynchrone Ergebnisauslieferung: Die generierten Byteman‑Skripte werden als Datenstrom über gRPC vom Server zum Plugin zurückgesendet. Eine gRPC‑Server‑Streaming‑Methode liefert mehrere BtmFileChunk‑Nachrichten, bis alle Artefakte übertragen sind; der gRPC‑Standard definiert einen solchen serverseitigen Stream mit dem Schlüsselwort stream vor dem Rückgabetyp[1].
-    3. Near‑Realtime‑Logging: Das Runtime‑Logging (JSON‑Zeilen aus RtTrace bzw. Tracer) wird über eine gRPC‑Client‑Streaming‑Verbindung an den Dienst gesendet, sodass dieser aktuelle Systemereignisse beobachten kann.
-    4. REST‑Fassade für Steuerbefehle: Die Interaktion zur Initiierung der Analyse und zur Abfrage des Job‑Status erfolgt über REST‑Endpunkte; REST kontaktiert intern die gRPC‑Services, wie im Open‑Liberty‑Beispiel beschrieben[2].
-Kommunikationsschnittstellen
-REST‑Endpunkte
-HTTP Verb
-Endpoint
-Beschreibung
-POST
-/analysis/start
-Startet einen Analysejob. Der Request‑Body enthält das Repository (URL, Branch, Commit‑SHA) sowie Scanner‑Parameter (z. B. Include/Exclude‑Listen, minimale Branch‑Anzahl). Die Antwort liefert eine jobId.
-GET
-/analysis/status/{jobId}
-Liefert den aktuellen Status (IN_PROGRESS, FAILED, FINISHED) und optional Fortschritt.
-GET
-/analysis/result/{jobId}
-Optionaler REST‑Download der Ergebnisse (z. B. manifest.json); primär erfolgt die Übermittlung per gRPC.
-gRPC‑Service (Protobuf‑Auszug)
-syntax = "proto3";
-package analytics.v1;
+1. The consuming build configures the Maven plugin with prefix `forensics`.
+2. The user runs `forensics:submit-analysis`.
+3. The Mojo maps Maven project metadata and configured parameters into the same
+   gRPC submission model used by Gradle.
+4. The Mojo starts an ingestion session, uploads the build-context payload, and
+   completes the session.
+5. The Mojo fails with a descriptive `MojoExecutionException` if submission
+   fails.
 
-message StartAnalysisRequest {
-  string repo_url = 1;
-  string branch   = 2;
-  map<string,string> settings = 3;
-}
+Legacy Maven goals may remain as thin submission aliases only when explicitly
+required. They must not perform local analysis, semantic import, BTM generation,
+or local store cleanup as active plugin behavior.
 
-message StartAnalysisResponse { string job_id = 1; }
+## Migration Work Items
 
-message JobStatusRequest { string job_id = 1; }
-message JobStatusResponse {
-  enum Status { UNKNOWN = 0; IN_PROGRESS = 1; FINISHED = 2; FAILED = 3; }
-  Status status = 1;
-  string message = 2;
-}
+### Plugin Repository
 
-message JobRequest { string job_id = 1; }
-message BtmFileChunk {
-  string file_name = 1;
-  bytes data      = 2;
-  bool last_chunk = 3;
-}
+1. Keep Gradle task classes limited to task input declaration, build metadata
+   collection, request creation, and gRPC submission.
+2. Keep Maven Mojo classes limited to parameter mapping, request creation, and
+   gRPC submission.
+3. Keep gRPC client classes free of Gradle and Maven API dependencies.
+4. Maintain tests near the affected Gradle, Maven, and gRPC packages.
+5. Maintain ArchUnit rules that protect the build-tool boundary.
+6. Document legacy local analysis code as migration-audit inventory only.
 
-message LogEntry {
-  string job_id    = 1;
-  string timestamp = 2;
-  string level     = 3;
-  string message   = 4;
-}
+### Server Repository
 
-service AnalysisControlService {
-  rpc Start(StartAnalysisRequest) returns (StartAnalysisResponse);
-  rpc Status(JobStatusRequest)   returns (JobStatusResponse);
-}
+1. Own repository checkout, source scanning, semantic analysis, rule generation,
+   analysis storage, reporting, and runtime analytics.
+2. Implement server-side ingestion handling for the payload kinds accepted by
+   `forensic_ingestion.proto`.
+3. Define any result-delivery API explicitly in the server contract before the
+   plugin consumes it.
+4. Provide migration evidence before legacy local analysis inventory is removed
+   from this repository.
 
-service AnalysisResultService {
-  // Server‑seitiger Stream: Client sendet Job‑Id, Server liefert viele Chunk‑Nachrichten[1].
-  rpc GetBtmFiles(JobRequest) returns (stream BtmFileChunk);
-  // Client‑seitiger Stream für near‑realtime‑Logs.
-  rpc SendLogs(stream LogEntry) returns (google.protobuf.Empty);
-}
-Die REST‑Controller von forensic_analytics delegieren die Anfragen an diese gRPC‑Services. Wie in der Open‑Liberty‑Referenz gezeigt, können unterschiedliche Streaming‑Arten (unary, server streaming, client streaming, bidirectional) hinter HTTP‑Endpunkten versteckt werden[2].
-Ablauf aus Sicht des Build‑Plugins
-    1. Konfiguration: Der Anwender trägt seine Scanner‑Parameter (Quellordner, Include/Exclude, minimale Branch‑Anzahl etc.) in der gewohnten Gradle‑Extension btmGen oder Maven‑Konfiguration ein. Diese Parameter werden in ein JSON‑Request‑Objekt umgewandelt.
-    2. Analyse starten: Der neue Task remoteGenerateBtmRules sendet einen HTTP‑POST an /analysis/start mit Repository‑URL (z. B. Git‑Remote), Branch‑Name und Konfiguration. Die Antwort enthält jobId.
-    3. Status polling: Während der Analyse ruft das Plugin regelmäßig /analysis/status/{jobId} auf, um Fortschritt und Fehler abzufragen. Bei aktivierter Debug‑Option initialisiert das Plugin zusätzlich einen gRPC‑Client‑Stream (SendLogs) und übergibt den gRPC‑Stub an die Laufzeitbibliothek RtTrace/Tracer. Diese senden Log‑Einträge in Echtzeit.
-    4. Ergebnisse empfangen: Sobald der Server FINISHED meldet, ruft das Plugin die gRPC‑Methode GetBtmFiles auf. Ein StreamObserver<BtmFileChunk> sammelt die Byte‑Chunks und schreibt sie in lokale Dateien (forensics.btm, manifest.json, checksums.sha256 usw.). Der Stream endet, wenn last_chunk = true.
-    5. Task abschließen: Nach erfolgreichem Download werden die generierten Regeln im Build‑Verzeichnis bereitgestellt und der Task beendet sich erfolgreich. Bei Fehlern (HTTP‑4xx/5xx, gRPC‑Fehler) schlägt der Task fehl.
-Implementierungsaufgaben
-    1. Anpassung des Plugins
-    2. Implementierung eines REST‑Clients (z. B. mithilfe von OkHttp) zur Kommunikation mit /analysis/start und /analysis/status.
-    3. Erzeugung eines gRPC‑Kanals und eines stubs (AnalysisResultServiceStub) zur Nutzung von GetBtmFiles und SendLogs.
-    4. Aktualisierung der Build‑Scripts: neuer Task remoteGenerateBtmRules, Übergabe der Plugin‑Konfiguration im Request‑Body, Ausgabeort für heruntergeladene Dateien.
-    5. Server‑Implementierung
-    6. Erweiterung von forensic_analytics um die gRPC‑Services aus dem oben stehenden Protobuf.
-    7. Implementierung eines REST‑Controllers, der die gRPC‑Services aufruft. Der Controller handelt die gängigen HTTP‑Response‑Codes (202 bei laufenden Jobs, 500 bei Fehlern).
-    8. Integration eines Job‑Schedulers, der das Repository auscheckt, die Scanner‑Logik aus forensics_tracing aufruft und die Ergebnisse in .btm‑Dateien serialisiert.
-    9. Bereitstellung einer Streaming‑Schnittstelle für Log‑Einträge, die intern in die Analyse‑Datenbank geschrieben oder visualisiert werden.
-    10. Tests und Migration
-    11. Erstellung von Integrationstests für REST‑Endpunkte und gRPC‑Streams (z. B. mithilfe von grpc-java-testing).
-    12. Backwards‑Kompatibilität: Für einen Übergangszeitraum kann das ursprüngliche lokale Analyse‑Verhalten via Flag reaktiviert werden.
-    13. Dokumentation und Beispielanwendungen (Updates der README und AGENTS.md).
-Offene Punkte
-    • Authentifizierung & Sicherheit: Die REST‑ und gRPC‑Schnittstellen müssen abgesichert werden (z. B. mittels Bearer‑Token oder Mutual TLS). Die Übertragung von Quellcode sollte verschlüsselt erfolgen.
-    • Skalierung: Der Server muss mehrere parallele Jobs verarbeiten können; ggf. Bedarf an Queueing (z. B. RabbitMQ) und Horizontal‑Scaling.
-    • Fehlerbehandlung: Bei Verbindungsabbrüchen sollte der gRPC‑Stream fortsetzbar sein (Resumption). REST‑Antworten sollten klare Fehlermeldungen liefern.
-    • Semantische Graphen: Optionales Feature, um Joern‑Graphen zu generieren und an den Server zu übertragen. Dies muss ebenfalls in die API integriert werden.
+### Tests and Verification
 
-Dieser Entwurf bildet die Grundlage für die weitere Ausarbeitung und Umsetzung der Migration. Die beschriebenen Kommunikationspfade stützen sich auf Standard‑gRPC‑ und REST‑Konzepte. Serverseitige Streaming‑RPCs liefern eine Folge von Nachrichten an den Client[1], während REST‑Controller diese Streams hinter HTTP‑Endpunkten kapseln können[2]. Weitere Iterationen sollen die Details (z. B. Fehlercodes, Authentifizierung, konkrete Datenmodelle) präzisieren.
+1. Use in-process gRPC servers for client tests unless a real server integration
+   test is explicitly requested.
+2. Verify server rejection handling for Gradle tasks and Maven Mojos.
+3. Verify request mapping against `forensic_ingestion.proto`.
+4. Verify architecture rules for Gradle, Maven, and gRPC package boundaries.
+5. Run the repository quality gate after behavior changes.
 
-[1] Basics tutorial | Java | gRPC
-https://grpc.io/docs/languages/java/basics/
-[2]  Streaming messages between client and server services using gRPC remote procedure calls 
-https://openliberty.io/guides/grpc-intro.html
+## Open Questions
+
+- Authentication and transport security: production submissions need a verified
+  TLS and credential model.
+- Payload schema evolution: additional payload kinds require proto updates,
+  generated class regeneration, and matching tests.
+- Result delivery: generated artifacts are server-owned; any plugin download
+  behavior needs a separate, explicit server contract.
+- Retry and resume behavior: interrupted client-streaming uploads need a defined
+  server-side policy before client retries are added.
+- Migration evidence: legacy local analysis packages should remain until the
+  server-side replacement can be proven.
+
+## References
+
+- [gRPC Java basics][grpc-java-basics]
+- [Open Liberty gRPC streaming guide][open-liberty-grpc]
+
+[grpc-java-basics]: https://grpc.io/docs/languages/java/basics/
+[open-liberty-grpc]: https://openliberty.io/guides/grpc-intro.html
