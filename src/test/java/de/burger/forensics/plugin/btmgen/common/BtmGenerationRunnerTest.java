@@ -3,6 +3,7 @@ package de.burger.forensics.plugin.btmgen.common;
 import de.burger.forensics.plugin.btmgen.render.api.RuleParams;
 import de.burger.forensics.plugin.btmgen.render.api.RuleRenderStrategy;
 import de.burger.forensics.plugin.btmgen.render.spi.StrategyRegistry;
+import de.burger.forensics.domain.model.analysis.AnalysisStoreCleanupPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -12,6 +13,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -62,6 +64,39 @@ class BtmGenerationRunnerTest {
         assertTrue(engineRequest.contains("\"modulePath\": \":module-a\""));
         assertTrue(engineRequest.contains("\"payloadId\": \"byteman-rules\""));
         assertTrue(engineRequest.contains("\"kind\": \"RULE_ARTIFACTS\""));
+    }
+
+    @Test
+    void runnerPersistsAnalysisStoreArtifactsForTemplateGeneration(@TempDir Path tempDir) throws IOException {
+        RecordingStrategy strategy = new RecordingStrategy("CUSTOM");
+        Path sourceRoot = tempDir.resolve("src/main/java");
+        Files.createDirectories(sourceRoot.resolve("com/example"));
+        Files.writeString(sourceRoot.resolve("com/example/Sample.java"), "package com.example; class Sample {}\n");
+        Path outputFile = tempDir.resolve("build/forensics/template.btm");
+        Path analysisStoreDirectory = tempDir.resolve("build/forensics/analysis-store");
+        Path manifestFile = tempDir.resolve("build/forensics/manifest.json");
+        Path checksumsFile = tempDir.resolve("build/forensics/checksums.sha256");
+        BtmGenerationRequest request = BtmGenerationRequest.builder()
+                .sourceRoot(sourceRoot)
+                .outputFile(outputFile)
+                .analysisStoreEnabled(true)
+                .analysisStoreDirectory(analysisStoreDirectory)
+                .manifestFile(manifestFile)
+                .checksumsFile(checksumsFile)
+                .cleanupPolicy(AnalysisStoreCleanupPolicy.DELETE_ON_SUCCESS.name())
+                .projectKey("project-a")
+                .pluginVersion("1.2.3")
+                .templateRequest(new BtmTemplateRequest("CUSTOM", "com.example.Foo", "bar", Optional.empty()))
+                .build();
+
+        BtmGenerationResult result = new BtmGenerationRunner(StrategyRegistry.builder().register(strategy).build(),
+                NoOpPluginLogPort.INSTANCE).generate(request);
+
+        assertEquals(1, result.generatedRuleCount());
+        assertTrue(Files.readString(outputFile).contains("# analysisRunId:"));
+        assertTrue(Files.readString(manifestFile).contains("\"projectKey\": \"project-a\""));
+        assertFalse(Files.readString(checksumsFile).isBlank());
+        assertFalse(Files.exists(analysisStoreDirectory));
     }
 
     @Test

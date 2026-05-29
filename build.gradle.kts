@@ -9,10 +9,14 @@ plugins {
     `java-gradle-plugin`
     id("com.gradle.plugin-publish") version "2.0.0"
     id("jacoco")
-    alias(libs.plugins.sonar.qube.gradle.plugin)
     alias(libs.plugins.freefair.lombok.plugin)
+    alias(libs.plugins.protobuf)
     alias(libs.plugins.maven.plugin.development)
+    alias(libs.plugins.sonar.qube.gradle.plugin)
 }
+
+group = providers.gradleProperty("GROUP").orNull ?: "de.burger.forensics"
+version = providers.gradleProperty("VERSION").orNull ?: "0.0.3-SNAPSHOT"
 
 val aspectjAgent by configurations.creating
 val mavenPluginDescriptorDependencies by configurations.creating {
@@ -28,23 +32,32 @@ dependencies {
     implementation(libs.aspectj.rt)
     implementation(libs.javaparser.symbol.solver.core)
     implementation(libs.h2)
+    implementation(libs.grpc.netty.shaded)
+    implementation(libs.grpc.protobuf)
+    implementation(libs.grpc.stub)
+    implementation(libs.protobuf.java)
+
+    compileOnly(libs.byteman)
+    compileOnly(libs.jakarta.annotation.api)
+    compileOnly(libs.javax.annotation.api)
+    compileOnly(libs.lombok)
+    compileOnly(libs.maven.plugin.api)
+    compileOnly(libs.maven.plugin.annotations)
+    compileOnly(libs.maven.core)
+
+    annotationProcessor(libs.lombok)
+
+    runtimeOnly(libs.aspectj.weaver)
 
     mavenPluginDescriptorDependencies(libs.slf4j.api)
     mavenPluginDescriptorDependencies(libs.aspectj.rt)
     mavenPluginDescriptorDependencies(libs.javaparser.symbol.solver.core)
     mavenPluginDescriptorDependencies(libs.h2)
     mavenPluginDescriptorDependencies(libs.aspectj.weaver)
-
-    compileOnly(libs.byteman)
-    compileOnly(libs.jakarta.annotation.api)
-    compileOnly(libs.lombok)
-    compileOnly(libs.maven.plugin.api)
-    compileOnly(libs.maven.plugin.annotations)
-    compileOnly(libs.maven.core)
-
-    runtimeOnly(libs.aspectj.weaver)
-
-    annotationProcessor(libs.lombok)
+    mavenPluginDescriptorDependencies(libs.grpc.netty.shaded)
+    mavenPluginDescriptorDependencies(libs.grpc.protobuf)
+    mavenPluginDescriptorDependencies(libs.grpc.stub)
+    mavenPluginDescriptorDependencies(libs.protobuf.java)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(platform(libs.mockito.bom))
@@ -58,6 +71,7 @@ dependencies {
     testImplementation(libs.mockito.junit.jupiter)
     testImplementation(libs.archunit.junit)
     testImplementation(libs.byte.buddy.agent)
+    testImplementation(libs.grpc.inprocess)
     testImplementation(libs.maven.plugin.api)
     testImplementation(libs.maven.plugin.annotations)
     testImplementation(libs.maven.core)
@@ -81,31 +95,46 @@ configurations.all {
     exclude(group = "org.slf4j", module = "slf4j-log4j12")
 }
 
-val java17 = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(17)) }
-plugins.withType<JavaPlugin>().configureEach {
-    extensions.configure<JavaPluginExtension> {
-        toolchain.languageVersion.set(JavaLanguageVersion.of(17))
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-        withSourcesJar()
+protobuf {
+    protoc {
+        artifact = libs.protobuf.protoc.get().toString()
     }
-
-    tasks.withType<JavaCompile>().configureEach {
-        options.encoding = "UTF-8"
-        options.release.set(17)
-        options.compilerArgs.addAll(listOf("-Xlint:all"))
+    plugins {
+        create("grpc") {
+            artifact = libs.protoc.gen.grpc.java.get().toString()
+        }
+    }
+    generateProtoTasks {
+        all().configureEach {
+            plugins {
+                create("grpc")
+            }
+        }
     }
 }
 
-// Relax Javadoc doclint to avoid failing the build on strict checks
+val java17 = javaToolchains.launcherFor {
+    languageVersion.set(JavaLanguageVersion.of(17))
+}
+
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+    options.release.set(17)
+    options.compilerArgs.addAll(listOf("-Xlint:all"))
+}
+
 tasks.withType<Javadoc>().configureEach {
     enabled = false
 }
 
-val testLogFile = layout.buildDirectory.file("test-logs/forensics-btmgen.log")
-
 abstract class AspectJWeaverAgentArgumentProvider : CommandLineArgumentProvider {
-
     @get:Classpath
     abstract val agentClasspath: ConfigurableFileCollection
 
@@ -113,14 +142,9 @@ abstract class AspectJWeaverAgentArgumentProvider : CommandLineArgumentProvider 
         val weaverJar = agentClasspath.files.firstOrNull { it.name.startsWith("aspectjweaver") }
             ?: throw GradleException("aspectjweaver*.jar not found. Add 'aspectjAgent(libs.aspectj.weaver)'.")
 
-        return listOf(
-            "-javaagent:${quoteIfNeeded(weaverJar.absolutePath)}",
-            "-XX:+PrintCommandLineFlags"
-        )
+        val path = weaverJar.absolutePath
+        return listOf("-javaagent:${if (path.any { it.isWhitespace() }) "\"$path\"" else path}")
     }
-
-    private fun quoteIfNeeded(path: String): String =
-        if (path.any { it.isWhitespace() }) "\"$path\"" else path
 }
 
 tasks.withType<Test>().configureEach {
@@ -131,46 +155,18 @@ tasks.withType<Test>().configureEach {
             agentClasspath.from(aspectjAgent)
         }
     )
-
+    jvmArgs("-Xshare:off")
+    finalizedBy(tasks.jacocoTestReport)
     maxParallelForks = 1
+    systemProperty("org.aspectj.weaver.showWeaveInfo", "false")
+    systemProperty("aj.weaving.verbose", "false")
+    systemProperty("org.aspectj.weaver.loadtime.configuration", "classpath:META-INF/aop.xml")
+    systemProperty("forensics.aspect.enabled", "true")
     testLogging {
         events("FAILED", "SKIPPED")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
-        showStandardStreams = true // Keep AspectJ output visible in the test console.
-    }
-}
-
-tasks.test {
-    useJUnitPlatform()
-
-    // Mirror AspectJ output into a dedicated test log file.
-    systemProperty("forensics.btmgen.logToFile", "true")
-    systemProperty("forensics.btmgen.logFile", testLogFile.get().asFile.absolutePath)
-
-    // Reduce AspectJ weaver noise during tests.
-    systemProperty("org.aspectj.weaver.showWeaveInfo", "false")
-    systemProperty("aj.weaving.verbose", "false")
-
-    // Load the main aop.xml explicitly to keep weaving configuration deterministic.
-    systemProperty("org.aspectj.weaver.loadtime.configuration", "classpath:META-INF/aop.xml")
-
-    // Keep the repository-specific feature toggle enabled in tests.
-    systemProperty("forensics.aspect.enabled", "true")
-
-    // Keep test logging verbose enough for agent and weaving failures.
-    testLogging {
-        events("FAILED", "SKIPPED", "STANDARD_OUT", "STANDARD_ERROR")
-        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         showStandardStreams = true
     }
-}
-
-
-configurations.named("compileClasspath") {
-    exclude(group = "ch.qos.logback", module = "logback-classic")
-}
-configurations.named("runtimeClasspath") {
-    exclude(group = "ch.qos.logback", module = "logback-classic")
 }
 
 tasks.jar {
@@ -178,18 +174,12 @@ tasks.jar {
         attributes(
             "Implementation-Title" to "forensics-tracing",
             "Implementation-Version" to project.version,
-            "Automatic-Module-Name" to "de.burger.it.forensics.tracing"
+            "Automatic-Module-Name" to "de.burger.forensics.tracing"
         )
     }
 }
 
-// Project coordinates for publishing
-// Use Gradle properties if provided, otherwise fall back to sensible defaults
-group = providers.gradleProperty("GROUP").orNull ?: "de.burger.forensics"
-version = providers.gradleProperty("VERSION").orNull ?: "0.0.3-SNAPSHOT"
-
 gradlePlugin {
-    // Top-level metadata for the plugin bundle
     website.set(
         providers.gradleProperty("POM_URL").orNull
             ?: "https://github.com/burger-matthias/forensics_tracing"
@@ -199,56 +189,17 @@ gradlePlugin {
             ?: "https://github.com/burger-matthias/forensics_tracing.git"
     )
     plugins {
-        create("btmGenPlugin").apply {
-            // This ID must match what tests use
+        create("forensicsTracingPlugin").apply {
             id = providers.gradleProperty("PLUGIN_ID").orNull
                 ?: "de.burger.forensics.btmgen"
-            // Point to the actual implementation class in the project
             implementationClass = providers.gradleProperty("PLUGIN_IMPL_CLASS").orNull
                 ?: "de.burger.forensics.plugin.btmgen.gradle.BtmGenPlugin"
-
-            displayName = "Forensics BTM Generator Gradle Plugin"
+            displayName = "Forensics Tracing Gradle Plugin"
             description = providers.gradleProperty("POM_DESCRIPTION").orNull
-                ?: "Generates Byteman tracing rules from Java sources."
-
-            // Tags must be configured here (no pluginBundle in 2.x)
-            val pluginTags: List<String> = listOf("forensics", "tracing", "byteman", "java")
-            tags.set(pluginTags)
+                ?: "Submits Gradle build analysis requests to the Forensics Analytics server over gRPC."
+            tags.set(listOf("forensics", "tracing", "grpc", "java"))
         }
     }
-}
-
-// Resolve Mockito/ByteBuddy agent jar path from the test runtime classpath lazily
-val mockitoAgentJar: Provider<String> = configurations.named("testRuntimeClasspath").map { cfg ->
-    fun File.isJarNamed(prefix: String) = name.startsWith(prefix) && name.endsWith(".jar")
-
-    val jar = cfg.files.firstOrNull { it.isJarNamed("mockito-inline") }
-        ?: cfg.files.firstOrNull { it.isJarNamed("byte-buddy-agent") }
-
-    jar?.absolutePath ?: ""
-}
-
-tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
-
-    // Disabling CDS avoids noisy warnings when agents append to the bootstrap classpath.
-    jvmArgs("-Xshare:off")
-    finalizedBy(tasks.jacocoTestReport)
-
-    // Keep the report directory lazy for Gradle configuration avoidance.
-    val reportsDir = layout.buildDirectory.dir("reports/spock")
-
-    // Pass the resolved report directory lazily to the test JVM.
-    systemProperty(
-        "com.athaydes.spockframework.report.outputDir",
-        reportsDir.map { it.asFile.absolutePath }.get()
-    )
-
-    // Optional report metadata.
-    systemProperty("com.athaydes.spockframework.report.projectName", "Customer Service Specs")
-    systemProperty("com.athaydes.spockframework.report.projectVersion", "2.0-SNAPSHOT")
-    systemProperty("com.athaydes.spockframework.report.outputFormats", "html")
-    systemProperty("com.athaydes.spockframework.report.showCodeBlocks", "true")
 }
 
 jacoco {
@@ -263,16 +214,6 @@ tasks.jacocoTestReport {
         csv.required.set(false)
         html.required.set(true)
     }
-    // Exclude the application entry point from coverage reports.
-    classDirectories.setFrom(
-        files(
-            classDirectories.files.map {
-                fileTree(it) {
-                    exclude("de/burger/it/Main*")
-                }
-            }
-        )
-    )
 }
 
 abstract class PackageCoverageReportTask : DefaultTask() {
@@ -302,7 +243,6 @@ abstract class PackageCoverageReportTask : DefaultTask() {
             if (totalLines == 0) BigDecimal.ONE else coveredLines.toBigDecimal().divide(totalLines.toBigDecimal(), 4, RoundingMode.HALF_UP)
         val branchCoverage: BigDecimal? =
             if (!hasBranches || totalBranches == 0) null else coveredBranches.toBigDecimal().divide(totalBranches.toBigDecimal(), 4, RoundingMode.HALF_UP)
-
         val impact: Int = missedLines + missedBranches
     }
 
@@ -323,56 +263,44 @@ abstract class PackageCoverageReportTask : DefaultTask() {
         val document = documentBuilder.parse(xmlFile)
         val packageNodes = document.getElementsByTagName("package")
 
+        val generatedPackages = setOf(
+            "de.burger.forensics.analytics.ingestion.v1"
+        )
         val packages = buildList {
             for (index in 0 until packageNodes.length) {
                 val node = packageNodes.item(index)
-                val attrs = node.attributes
-                val name = attrs.getNamedItem("name")?.nodeValue ?: "unknown"
                 val counters = (0 until node.childNodes.length)
                     .map { node.childNodes.item(it) }
                     .filter { it.nodeName == "counter" }
-
+                val attrs = node.attributes
+                val name = attrs.getNamedItem("name")?.nodeValue ?: "unknown"
+                val packageName = name.replace('/', '.')
+                if (packageName in generatedPackages) {
+                    continue
+                }
                 val lineCounter = counters.firstOrNull { it.attributes.getNamedItem("type")?.nodeValue == "LINE" }
                 val branchCounter = counters.firstOrNull { it.attributes.getNamedItem("type")?.nodeValue == "BRANCH" }
-
                 val missedLines = lineCounter?.attributes?.getNamedItem("missed")?.nodeValue?.toIntOrNull() ?: 0
                 val coveredLines = lineCounter?.attributes?.getNamedItem("covered")?.nodeValue?.toIntOrNull() ?: 0
                 val missedBranches = branchCounter?.attributes?.getNamedItem("missed")?.nodeValue?.toIntOrNull() ?: 0
                 val coveredBranches = branchCounter?.attributes?.getNamedItem("covered")?.nodeValue?.toIntOrNull() ?: 0
-                val hasBranches = branchCounter != null
-
-                add(
-                    PackageCoverage(
-                        name = name.replace('/', '.'),
-                        missedLines = missedLines,
-                        coveredLines = coveredLines,
-                        missedBranches = missedBranches,
-                        coveredBranches = coveredBranches,
-                        hasBranches = hasBranches
-                    )
-                )
+                add(PackageCoverage(packageName, missedLines, coveredLines, missedBranches, coveredBranches, branchCounter != null))
             }
         }.sortedWith(compareByDescending<PackageCoverage> { it.impact }.thenBy { it.name })
 
         val report = reportFile.get().asFile
         report.parentFile.mkdirs()
-
         val lineThresholdValue = lineThreshold.get()
         val branchThresholdValue = branchThreshold.get()
-
         val failures = packages.filter { pkg ->
-            val lineFails = pkg.lineCoverage < lineThresholdValue
-            val branchFails = pkg.branchCoverage?.let { it < branchThresholdValue } ?: false
-            lineFails || branchFails
+            pkg.lineCoverage < lineThresholdValue || (pkg.branchCoverage?.let { it < branchThresholdValue } ?: false)
         }
 
         report.bufferedWriter().use { writer ->
             writer.appendLine("Package coverage report")
             writer.appendLine("Line threshold: ${(lineThresholdValue * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)}%")
             writer.appendLine("Branch threshold: ${(branchThresholdValue * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)}%")
-            writer.appendLine(
-                "packageName\tlineCoverage\tbranchCoverage\tmissedLines\tmissedBranches\ttotalLines\ttotalBranches"
-            )
+            writer.appendLine("packageName\tlineCoverage\tbranchCoverage\tmissedLines\tmissedBranches\ttotalLines\ttotalBranches")
             packages.forEach { pkg ->
                 val linePercent = (pkg.lineCoverage * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP)
                 val branchPercent = pkg.branchCoverage?.let { (it * BigDecimal(100)).setScale(2, RoundingMode.HALF_UP) }
@@ -412,6 +340,7 @@ tasks.register<PackageCoverageReportTask>("checkPackageCoverage") {
     lineThreshold.set(BigDecimal("0.80"))
     branchThreshold.set(BigDecimal("0.80"))
 }
+
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     violationRules {
         rule {
@@ -422,16 +351,6 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
             }
         }
     }
-    // Exclude the application entry point from coverage verification.
-    classDirectories.setFrom(
-        files(
-            classDirectories.files.map {
-                fileTree(it) {
-                    exclude("de/burger/it/Main*")
-                }
-            }
-        )
-    )
     dependsOn(tasks.test)
 }
 
@@ -448,14 +367,12 @@ sonar {
         .firstOrNull { it.isNotEmpty() }
 
     if (sonarToken == null) {
-        // Skip Sonar when no token is configured to avoid failing local or CI builds.
         tasks.named("sonar").configure { enabled = false }
     }
     properties {
         property("sonar.projectKey", "MatthiasBurger-Coder_forensics_tracing")
         property("sonar.organization", "matthiasburger-coder")
         property("sonar.host.url", "https://sonarcloud.io")
-        // Keep Sonar aligned with the JaCoCo XML report location.
         property(
             "sonar.coverage.jacoco.xmlReportPaths",
             layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml").get().asFile.absolutePath

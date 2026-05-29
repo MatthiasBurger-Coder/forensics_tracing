@@ -60,4 +60,23 @@ class SourceFingerprintServiceTest {
         assertThat(result.sourceFiles()).extracting(file -> file.relativePath())
                 .containsExactly("a/b/Sample.java");
     }
+
+    @Test
+    void acceptsSingleJavaFileRootsAndIgnoresMissingOrNonJavaRoots() throws IOException {
+        Path javaFile = tempDir.resolve("Single.java");
+        Path textFile = tempDir.resolve("notes.txt");
+        Files.writeString(javaFile, "class Single {}\n");
+        Files.writeString(textFile, "ignored");
+
+        List<Path> roots = new java.util.ArrayList<>();
+        roots.add(javaFile);
+        roots.add(textFile);
+        roots.add(tempDir.resolve("missing"));
+        roots.add(null);
+
+        SourceFingerprintResult result = new SourceFingerprintService().fingerprint(roots);
+
+        assertThat(result.sourceFiles()).extracting(file -> file.relativePath())
+                .containsExactly("Single.java");
+    }
 }

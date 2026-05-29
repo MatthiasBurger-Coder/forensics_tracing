@@ -3,7 +3,8 @@ package de.burger.forensics.plugin.btmgen.common;
 import java.util.List;
 
 /**
- * Current build-tool connector capability inventory.
+ * Legacy build-tool connector capability inventory retained for migration verification.
+ * Active Gradle and Maven entry points submit build context over gRPC instead.
  */
 public final class ConnectorCapabilityCatalog {
 

@@ -5,16 +5,15 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 
 @Mojo(
-        name = "btmgen-aggregate",
-        defaultPhase = LifecyclePhase.GENERATE_RESOURCES,
+        name = "submit-analysis",
+        defaultPhase = LifecyclePhase.VERIFY,
         requiresProject = true,
         requiresDependencyResolution = ResolutionScope.NONE,
-        aggregator = true,
         threadSafe = true
 )
-public class BtmGenAggregateMojo extends AbstractMavenForensicsSubmissionMojo {
+public class SubmitAnalysisMojo extends AbstractMavenForensicsSubmissionMojo {
     @Override
     protected String goalName() {
-        return "btmgen-aggregate";
+        return "submit-analysis";
     }
 }

@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package de.burger.forensics.analytics.ingestion.v1;
+
+option java_multiple_files = true;
+option java_package = "de.burger.forensics.analytics.ingestion.v1";
+option java_outer_classname = "ForensicIngestionProto";
+
+service ForensicIngestionService {
+  rpc StartAnalysisSession(StartAnalysisSessionRequest)
+      returns (StartAnalysisSessionResponse);
+
+  rpc UploadAnalysisData(stream AnalysisDataEnvelope)
+      returns (UploadAnalysisDataResponse);
+
+  rpc CompleteAnalysisSession(CompleteAnalysisSessionRequest)
+      returns (CompleteAnalysisSessionResponse);
+
+  rpc AbortAnalysisSession(AbortAnalysisSessionRequest)
+      returns (AbortAnalysisSessionResponse);
+}
+
+message StartAnalysisSessionRequest {
+  BuildIdentity build_identity = 1;
+  PluginIdentity plugin_identity = 2;
+  string schema_version = 3;
+}
+
+message StartAnalysisSessionResponse {
+  string session_id = 1;
+  IngestionStatus status = 2;
+  string message = 3;
+}
+
+message AnalysisDataEnvelope {
+  string session_id = 1;
+  BuildIdentity build_identity = 2;
+  ModuleIdentity module_identity = 3;
+  PluginIdentity plugin_identity = 4;
+  string schema_version = 5;
+  string payload_type = 6 [deprecated = true];
+  bytes payload = 7;
+  AnalysisPayloadDescriptor payload_descriptor = 8;
+}
+
+message UploadAnalysisDataResponse {
+  string session_id = 1;
+  IngestionStatus status = 2;
+  int64 received_items = 3;
+  string message = 4;
+}
+
+message CompleteAnalysisSessionRequest {
+  string session_id = 1;
+}
+
+message CompleteAnalysisSessionResponse {
+  string session_id = 1;
+  IngestionStatus status = 2;
+  string message = 3;
+}
+
+message AbortAnalysisSessionRequest {
+  string session_id = 1;
+  string reason = 2;
+}
+
+message AbortAnalysisSessionResponse {
+  string session_id = 1;
+  IngestionStatus status = 2;
+  string message = 3;
+}
+
+message BuildIdentity {
+  string project_id = 1;
+  string repository_url = 2;
+  string branch_name = 3;
+  string commit_hash = 4;
+  string build_id = 5;
+  string scan_timestamp = 6;
+}
+
+message ModuleIdentity {
+  string module_name = 1;
+  string module_path = 2;
+}
+
+message PluginIdentity {
+  string plugin_name = 1;
+  string plugin_version = 2;
+}
+
+message AnalysisPayloadDescriptor {
+  string payload_id = 1;
+  AnalysisPayloadKind kind = 2;
+  string content_type = 3;
+  map<string, string> attributes = 4;
+}
+
+enum AnalysisPayloadKind {
+  ANALYSIS_PAYLOAD_KIND_UNSPECIFIED = 0;
+  ANALYSIS_PAYLOAD_KIND_SOURCE_FACTS = 1;
+  ANALYSIS_PAYLOAD_KIND_SEMANTIC_ARTIFACTS = 2;
+  ANALYSIS_PAYLOAD_KIND_RULE_ARTIFACTS = 3;
+  ANALYSIS_PAYLOAD_KIND_RUNTIME_TRACE = 4;
+  ANALYSIS_PAYLOAD_KIND_DIAGNOSTIC_REPORT = 5;
+}
+
+enum IngestionStatus {
+  INGESTION_STATUS_UNSPECIFIED = 0;
+  INGESTION_STATUS_ACCEPTED = 1;
+  INGESTION_STATUS_COMPLETED = 2;
+  INGESTION_STATUS_ABORTED = 3;
+  INGESTION_STATUS_REJECTED = 4;
+}

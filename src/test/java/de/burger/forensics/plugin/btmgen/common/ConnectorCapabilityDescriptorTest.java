@@ -79,4 +79,13 @@ class ConnectorCapabilityDescriptorTest {
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("notes");
     }
+
+    @Test
+    void catalogReportsParityForAllDeclaredCapabilities() {
+        assertThat(ConnectorCapabilityCatalog.descriptors())
+                .hasSize(ConnectorCapability.values().length)
+                .extracting(ConnectorCapabilityDescriptor::hasParity)
+                .containsOnly(true);
+        assertThat(ConnectorCapabilityCatalog.parityGaps()).isEmpty();
+    }
 }

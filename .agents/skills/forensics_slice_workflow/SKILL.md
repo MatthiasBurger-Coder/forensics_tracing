@@ -1,17 +1,15 @@
 # Skill: Forensics Slice Workflow
 
 ## Description
-Creates implementation slices for Forensics Tracing features such as BTM generation, JavaParser scanning, Joern enrichment, Analysis Store persistence, Gradle/Maven connectors, runtime tracing, and reporting.
+Creates implementation slices for the thin Forensics Tracing Gradle and Maven gRPC plugins.
 
 ## Instructions
 1. Read AGENTS.md and QUALITY.md.
-2. Identify the affected forensic capability.
-3. Identify the build-tool-neutral core behavior.
-4. Identify Gradle adapter impact.
-5. Identify Maven adapter impact.
-6. Identify Analysis Store, manifest, checksum, and generated artifact impact.
-7. Identify required JUnit 5 and ArchUnit tests.
-8. Produce small implementation slices with verification commands.
+2. Identify the affected Gradle extension, task, Maven Mojo, gRPC client, proto, test, or documentation surface.
+3. Verify the exact current contract before planning edits.
+4. Confirm whether the requested behavior belongs in this plugin or in the server project.
+5. Identify required JUnit 5, gRPC, and ArchUnit tests.
+6. Produce small implementation slices with verification commands.
 
 ## Expected Inputs
 - user task
@@ -22,7 +20,7 @@ Creates implementation slices for Forensics Tracing features such as BTM generat
 - current workflow file
 
 ## Expected Outputs
-- capability impact map
+- boundary impact map
 - ordered slice plan
 - affected files per slice
 - test plan
@@ -31,7 +29,7 @@ Creates implementation slices for Forensics Tracing features such as BTM generat
 
 ## Stop Conditions
 Stop if:
-- capability ownership is unclear
-- Gradle/Maven parity cannot be preserved
-- domain/application boundary would be violated
-- generated artifact behavior cannot be verified
+- ownership between plugin and server is unclear
+- the requested change requires local analysis behavior in this plugin
+- the proto, Gradle task, or Maven Mojo contract cannot be verified
+- verification commands cannot be identified

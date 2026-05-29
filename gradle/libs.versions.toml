@@ -1,76 +1,62 @@
 [versions]
-junit    = "5.13.4"
+junit = "5.13.4"
 archunit = "1.4.1"
-junit-platform = "1.11.3"
-assertj  = "3.27.7"
-javaparser = "3.27.1"
-aspectj  = "1.9.24"
+assertj = "3.27.7"
+aspectj = "1.9.24"
 bytebuddy = "1.18.2"
-slf4j    = "2.0.17"
-mockito = "5.13.0"
 byteman = "4.0.26"
-jakarta-annotation = "2.1.1"
-sonar_cloud = "6.3.1.5724"
-jacoco = "0.8.13"
-lombok = "1.18.42"
 freefair-lombok = "9.1.0"
+grpc = "1.80.0"
 h2 = "2.2.224"
+jakarta-annotation = "2.1.1"
+javaparser = "3.27.1"
+protobuf = "4.34.1"
+protobuf-plugin = "0.10.0"
+javax-annotation = "1.3.2"
+junit-platform = "1.11.3"
+lombok = "1.18.42"
 maven = "3.9.15"
 maven-plugin-development = "1.0.3"
 maven-plugin-tools = "3.15.2"
-
-# Gradle plugins
-#gradle-plugin-publish = "2.0.0"
-#nexus-publish         = "2.0.0"
+mockito = "5.13.0"
+sonar-cloud = "6.3.1.5724"
+jacoco = "0.8.13"
+slf4j = "2.0.17"
 
 [plugins]
-#gradle-plugin-publish   = { id = "com.gradle.plugin-publish", version.ref = "gradle-plugin-publish" }
-#nexus-publish           = { id = "io.github.gradle-nexus.publish-plugin", version.ref = "nexus-publish" }
-sonar_qube_gradle_plugin = { id = "org.sonarqube", version.ref ="sonar_cloud"}
-freefair_lombok_plugin   = { id = "io.freefair.lombok", version.ref = "freefair-lombok" }
-maven_plugin_development = { id = "org.gradlex.maven-plugin-development", version.ref = "maven-plugin-development" }
+freefair-lombok-plugin = { id = "io.freefair.lombok", version.ref = "freefair-lombok" }
+protobuf = { id = "com.google.protobuf", version.ref = "protobuf-plugin" }
+maven-plugin-development = { id = "org.gradlex.maven-plugin-development", version.ref = "maven-plugin-development" }
+sonar-qube-gradle-plugin = { id = "org.sonarqube", version.ref = "sonar-cloud" }
 
 [libraries]
-
-# JavaParser
-javaparser-symbol-solver-core = { module = "com.github.javaparser:javaparser-symbol-solver-core", version.ref = "javaparser" }
-
-# AspectJ
-aspectj-rt     = { module = "org.aspectj:aspectjrt",     version.ref = "aspectj" }
-aspectj-weaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj" }
-
-# Logging
-slf4j-api       = { module = "org.slf4j:slf4j-api",        version.ref = "slf4j" }
-#slf4j-simple    = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
-#jul-to-slf4j    = { module = "org.slf4j:jul-to-slf4j",     version.ref = "slf4j" }
-#jcl-over-slf4j  = { module = "org.slf4j:jcl-over-slf4j",   version.ref = "slf4j" }
-
-# Testing (JUnit 5 via BOM + Jupiter)
-# BOM
-junit-bom               = { module = "org.junit:junit-bom", version.ref = "junit" }
-junit-jupiter           = { module = "org.junit.jupiter:junit-jupiter" }
-junit-jupiter-api       = { module = "org.junit.jupiter:junit-jupiter-api" }
-junit-jupiter-engine    = { module = "org.junit.jupiter:junit-jupiter-engine" }
-junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
-archunit-junit          = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit"}
-
-# BOM liefert die Versionen für alle Mockito-Module
-mockito-bom           = { module = "org.mockito:mockito-bom", version.ref = "mockito" }
-mockito-core          = { module = "org.mockito:mockito-core" }
-mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter" }
-#mockito-inline       = { module = "org.mockito:mockito-inline" }
-
-# ByteBuddy agent
-byte-buddy-agent = { module = "net.bytebuddy:byte-buddy-agent", version.ref = "bytebuddy" }
-
-# Assertions
+archunit-junit = { module = "com.tngtech.archunit:archunit-junit5", version.ref = "archunit" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+aspectj-rt = { module = "org.aspectj:aspectjrt", version.ref = "aspectj" }
+aspectj-weaver = { module = "org.aspectj:aspectjweaver", version.ref = "aspectj" }
+byte-buddy-agent = { module = "net.bytebuddy:byte-buddy-agent", version.ref = "bytebuddy" }
 byteman = { module = "org.jboss.byteman:byteman", version.ref = "byteman" }
-jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api", version.ref = "jakarta-annotation" }
+grpc-inprocess = { module = "io.grpc:grpc-inprocess", version.ref = "grpc" }
+grpc-netty-shaded = { module = "io.grpc:grpc-netty-shaded", version.ref = "grpc" }
+grpc-protobuf = { module = "io.grpc:grpc-protobuf", version.ref = "grpc" }
+grpc-stub = { module = "io.grpc:grpc-stub", version.ref = "grpc" }
 h2 = { module = "com.h2database:h2", version.ref = "h2" }
+jakarta-annotation-api = { module = "jakarta.annotation:jakarta.annotation-api", version.ref = "jakarta-annotation" }
+javaparser-symbol-solver-core = { module = "com.github.javaparser:javaparser-symbol-solver-core", version.ref = "javaparser" }
+javax-annotation-api = { module = "javax.annotation:javax.annotation-api", version.ref = "javax-annotation" }
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+maven-core = { module = "org.apache.maven:maven-core", version.ref = "maven" }
 maven-plugin-api = { module = "org.apache.maven:maven-plugin-api", version.ref = "maven" }
 maven-plugin-annotations = { module = "org.apache.maven.plugin-tools:maven-plugin-annotations", version.ref = "maven-plugin-tools" }
-maven-core = { module = "org.apache.maven:maven-core", version.ref = "maven" }
-
-# Boilerplade Code
-lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+mockito-bom = { module = "org.mockito:mockito-bom", version.ref = "mockito" }
+mockito-core = { module = "org.mockito:mockito-core" }
+mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter" }
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
+protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
+protoc-gen-grpc-java = { module = "io.grpc:protoc-gen-grpc-java", version.ref = "grpc" }
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
